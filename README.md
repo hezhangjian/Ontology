@@ -10,3 +10,4 @@ This template provides a simple, structured starting point for building new idea
 
 - git-org-name: the Git organization name
 - git-repo-name: the Git repository name
+- pypi-package-name: the PyPI package name
