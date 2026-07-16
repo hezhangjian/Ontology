@@ -6,3 +6,11 @@
 .vscode/**
 !.vscode/extensions.json
 **.iml
+
+# AI Agent
+
+## Claude Code
+.claude
+
+## OpenCode
+.opencode
