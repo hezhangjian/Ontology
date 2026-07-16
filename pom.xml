@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.hezhangjian</groupId>
+    <artifactId>ontology</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+
+    <name>Ontology</name>
+
+    <properties>
+        <java.version>21</java.version>
+        <!-- This application is not published as a Maven library. -->
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+
+    <organization>
+        <name>hezhangjian</name>
+        <url>https://github.com/hezhangjian</url>
+    </organization>
+
+    <developers>
+        <developer>
+            <name>hezhangjian</name>
+            <email>hezhangjian97@gmail.com</email>
+        </developer>
+    </developers>
+</project>
