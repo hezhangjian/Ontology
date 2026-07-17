@@ -4,6 +4,13 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.3</version>
+        <relativePath/>
+    </parent>
+
     <groupId>com.hezhangjian</groupId>
     <artifactId>ontology</artifactId>
     <version>0.0.1-SNAPSHOT</version>
@@ -16,6 +23,22 @@
         <maven.deploy.skip>true</maven.deploy.skip>
     </properties>
 
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
     <organization>
         <name>hezhangjian</name>
         <url>https://github.com/hezhangjian</url>
@@ -27,4 +50,11 @@
             <email>hezhangjian97@gmail.com</email>
         </developer>
     </developers>
+
+    <scm>
+        <connection>scm:git:git@github.com:hezhangjian/Ontology.git</connection>
+        <developerConnection>scm:git:git@github.com:hezhangjian/Ontology.git</developerConnection>
+        <url>git@github.com:hezhangjian/Ontology.git</url>
+        <tag>HEAD</tag>
+    </scm>
 </project>
