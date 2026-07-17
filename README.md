@@ -24,4 +24,4 @@ See `docs/README.md` for project documentation.
 
 ## API Contracts
 
-See `openapi/README.md` for REST API contracts and authoring guidance.
+See `docs/openapi/` for REST API contracts and authoring guidance.

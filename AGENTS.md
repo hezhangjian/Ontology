@@ -4,13 +4,13 @@
 
 This repository is organized as:
 
-- `src/` - Java application source code.
-- `portal/` - Frontend application workspace.
-- `openapi/` - HTTP API contracts and related OpenAPI authoring documentation.
 - `docker/` - Local infrastructure and service configuration.
 - `docs/` - Project documentation.
+- `docs/openapi/` - HTTP API contracts and related OpenAPI documentation.
+- `portal/` - Frontend application workspace.
+- `src/` - Java application source code.
 
-When adding or updating REST API contracts, use `openapi/`.
+When adding or updating REST API contracts, use `docs/openapi/`.
 
 ## Package Manager
 
@@ -29,5 +29,5 @@ When adding or updating REST API contracts, use `openapi/`.
 
 ## Documentation
 
-- Keep HTTP API contracts and related OpenAPI authoring documentation under `openapi/`.
-- Treat `openapi/ontology.yaml` as the source of truth for REST API definitions.
+- Keep HTTP API contracts and related OpenAPI documentation under `docs/openapi/`.
+- Treat `docs/openapi/openapi.yaml` as the source of truth for REST API definitions.
