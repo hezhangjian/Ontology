@@ -1,6 +1,25 @@
 name: ontology
 
 services:
+  flink-jobmanager:
+    image: flink:2.3.0-scala_2.12-java17
+    command: jobmanager
+    ports:
+      - "8081:8081"
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+
+  flink-taskmanager:
+    image: flink:2.3.0-scala_2.12-java17
+    command: taskmanager
+    depends_on:
+      - flink-jobmanager
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.numberOfTaskSlots: 4
+
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
