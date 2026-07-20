@@ -1,0 +1,10 @@
+.git
+.github
+.idea
+.vscode
+**/.DS_Store
+**/node_modules
+backend/*/target
+portal/dist
+portal/test-results
+portal/playwright-report

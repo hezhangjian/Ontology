@@ -1,0 +1,19 @@
+apisix:
+  enable_admin: false
+  node_listen: 9080
+  ssl:
+    enable: false
+
+deployment:
+  role: data_plane
+  role_data_plane:
+    config_provider: yaml
+
+nginx_config:
+  http:
+    enable_access_log: true
+
+plugins:
+  - openid-connect
+  - proxy-rewrite
+  - serverless-pre-function

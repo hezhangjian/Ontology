@@ -26,6 +26,56 @@ textarea {
   min-height: 100vh;
 }
 
+.insecure-banner {
+  padding: 7px 16px;
+  color: #7a4b00;
+  background: #fff1c2;
+  border-bottom: 1px solid #f0d485;
+  text-align: center;
+  font-size: 13px;
+}
+
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 32px;
+  background: radial-gradient(circle at top, #edf2ff 0, #f4f6fa 42%, #eef1f6 100%);
+}
+
+.login-card {
+  width: 420px;
+  padding: 16px;
+  border: 1px solid #e0e5f0;
+  box-shadow: 0 22px 60px rgb(36 49 75 / 12%);
+  text-align: center;
+}
+
+.login-mark {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 18px;
+  border-radius: 17px;
+  color: #fff;
+  background: linear-gradient(145deg, #3157d5, #6381ee);
+  box-shadow: 0 10px 25px rgb(49 87 213 / 28%);
+  font-size: 27px;
+}
+
+.login-card h2.ant-typography {
+  margin: 14px 0 8px;
+}
+
+.login-card p.ant-typography {
+  margin-bottom: 24px;
+  color: #687185;
+}
+
 .app-sider {
   position: sticky !important;
   top: 0;

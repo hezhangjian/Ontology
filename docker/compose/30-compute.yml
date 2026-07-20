@@ -1,0 +1,58 @@
+x-flink-build: &flink-build
+  context: ../..
+  dockerfile: docker/images/flink/Dockerfile
+  args:
+    FLINK_BASE_IMAGE: ${FLINK_BASE_IMAGE}
+    FLINK_CONNECTOR_JDBC_SHA256: ${FLINK_CONNECTOR_JDBC_SHA256}
+    FLINK_CONNECTOR_JDBC_VERSION: ${FLINK_CONNECTOR_JDBC_VERSION}
+    FLINK_CONNECTOR_KAFKA_SHA256: ${FLINK_CONNECTOR_KAFKA_SHA256}
+    FLINK_CONNECTOR_KAFKA_VERSION: ${FLINK_CONNECTOR_KAFKA_VERSION}
+    FLINK_CONNECTOR_PULSAR_SHA256: ${FLINK_CONNECTOR_PULSAR_SHA256}
+    FLINK_CONNECTOR_PULSAR_VERSION: ${FLINK_CONNECTOR_PULSAR_VERSION}
+    FLINK_S3_HADOOP_SHA256: ${FLINK_S3_HADOOP_SHA256}
+    FLINK_S3_HADOOP_VERSION: ${FLINK_S3_HADOOP_VERSION}
+    MYSQL_DRIVER_SHA256: ${MYSQL_DRIVER_SHA256}
+    MYSQL_DRIVER_VERSION: ${MYSQL_DRIVER_VERSION}
+    POSTGRES_DRIVER_SHA256: ${POSTGRES_DRIVER_SHA256}
+    POSTGRES_DRIVER_VERSION: ${POSTGRES_DRIVER_VERSION}
+
+x-flink-common: &flink-common
+  image: ${FLINK_IMAGE}
+  build: *flink-build
+  profiles: [compute]
+  depends_on:
+    minio-bootstrap:
+      condition: service_completed_successfully
+  secrets:
+    - minio_root_password
+    - minio_root_user
+  volumes:
+    - ../config/flink/flink-conf.yaml:/opt/flink/conf/flink-conf.yaml:ro
+    - flink-checkpoints-cache:/opt/flink/checkpoints-cache
+  restart: unless-stopped
+
+services:
+  flink-jobmanager:
+    <<: *flink-common
+    command: jobmanager
+    healthcheck:
+      test: [CMD-SHELL, curl -fsS http://localhost:8081/overview >/dev/null]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  flink-taskmanager:
+    <<: *flink-common
+    command: taskmanager
+    depends_on:
+      flink-jobmanager:
+        condition: service_healthy
+      minio-bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD-SHELL, test -n "$$(curl -fsS http://flink-jobmanager:8081/taskmanagers | grep taskmanagers)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s

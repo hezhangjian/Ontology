@@ -1,0 +1,85 @@
+x-app-java-build: &app-java-build
+  context: ../..
+  dockerfile: docker/images/java-service/Dockerfile
+
+services:
+  agent-runtime:
+    image: ${AGENT_RUNTIME_IMAGE}
+    profiles: [apps]
+    build:
+      <<: *app-java-build
+      args:
+        JAVA_IMAGE: ${JAVA_IMAGE}
+        MAVEN_IMAGE: ${MAVEN_IMAGE}
+        MODULE: agent-runtime
+        SKYWALKING_JAVA_AGENT_SHA512: ${SKYWALKING_JAVA_AGENT_SHA512}
+        SKYWALKING_JAVA_AGENT_VERSION: ${SKYWALKING_JAVA_AGENT_VERSION}
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      ontology-core:
+        condition: service_healthy
+    environment:
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8083}/realms/ontology
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/realms/ontology/protocol/openid-connect/certs
+      SW_AGENT_COLLECTOR_BACKEND_SERVICES: skywalking-oap:11800
+      SW_AGENT_NAME: agent-runtime
+    healthcheck:
+      test: [CMD-SHELL, curl -fsS http://localhost:8002/actuator/health/readiness | grep -q '"status":"UP"']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+    restart: unless-stopped
+
+  bff:
+    image: ${BFF_IMAGE}
+    profiles: [apps]
+    build:
+      <<: *app-java-build
+      args:
+        JAVA_IMAGE: ${JAVA_IMAGE}
+        MAVEN_IMAGE: ${MAVEN_IMAGE}
+        MODULE: bff
+        SKYWALKING_JAVA_AGENT_SHA512: ${SKYWALKING_JAVA_AGENT_SHA512}
+        SKYWALKING_JAVA_AGENT_VERSION: ${SKYWALKING_JAVA_AGENT_VERSION}
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      ontology-core:
+        condition: service_healthy
+    environment:
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8083}/realms/ontology
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/realms/ontology/protocol/openid-connect/certs
+      SW_AGENT_COLLECTOR_BACKEND_SERVICES: skywalking-oap:11800
+      SW_AGENT_NAME: bff
+    healthcheck:
+      test: [CMD-SHELL, curl -fsS http://localhost:8001/actuator/health/readiness | grep -q '"status":"UP"']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+    restart: unless-stopped
+
+  frontend:
+    image: ${WEB_IMAGE}
+    profiles: [apps]
+    build:
+      context: ../..
+      dockerfile: portal/Dockerfile
+      args:
+        NGINX_IMAGE: ${NGINX_IMAGE}
+        NODE_IMAGE: ${NODE_IMAGE}
+        VITE_OIDC_AUTHORITY: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8083}/realms/ontology
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    ports:
+      - 127.0.0.1:3000:80
+    healthcheck:
+      test: [CMD-SHELL, wget -qO- http://127.0.0.1/healthz | grep -q ok]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped

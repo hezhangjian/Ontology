@@ -49,6 +49,11 @@ const { Paragraph, Text, Title } = Typography;
 
 type DrawerName = 'assistant' | 'notifications' | null;
 
+interface AppProps {
+  displayName: string;
+  onLogout: () => Promise<void>;
+}
+
 const navigation: MenuProps['items'] = [
   {
     key: 'data-group',
@@ -93,13 +98,13 @@ const navigation: MenuProps['items'] = [
 ];
 
 const phaseCards = [
-  { label: '实施阶段', value: 'P00 / P17', detail: '项目基线正在就绪', icon: <CodeSandboxOutlined /> },
+  { label: '实施阶段', value: 'P01 / P17', detail: '认证平台基座已启用', icon: <CodeSandboxOutlined /> },
   { label: '后端模块', value: '8', detail: 'Java 21 Maven 多模块', icon: <CloudServerOutlined /> },
   { label: '产品页面', value: '13', detail: '按 vertical slice 交付', icon: <AppstoreOutlined /> },
-  { label: '认证基线', value: 'OIDC', detail: 'P01 启用 Keycloak PKCE', icon: <SafetyCertificateOutlined /> },
+  { label: '认证基线', value: 'OIDC', detail: 'Keycloak + Authorization Code PKCE', icon: <SafetyCertificateOutlined /> },
 ];
 
-function App() {
+function App({ displayName, onLogout }: AppProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [drawer, setDrawer] = useState<DrawerName>(null);
   const [selectedKey, setSelectedKey] = useState('/data/connections');
@@ -109,9 +114,9 @@ function App() {
       { key: 'profile', label: '个人资料', icon: <UserOutlined /> },
       { key: 'settings', label: '偏好设置', icon: <SettingOutlined /> },
       { type: 'divider' },
-      { key: 'logout', label: '退出登录' },
+      { key: 'logout', label: '退出登录', onClick: () => void onLogout() },
     ],
-    [],
+    [onLogout],
   );
 
   const selectNavigation: MenuProps['onClick'] = ({ key }) => {
@@ -193,7 +198,7 @@ function App() {
             <Dropdown menu={{ items: userItems }} placement="bottomRight" trigger={['click']}>
               <Button aria-label="用户菜单" className="user-button" type="text">
                 <Avatar size={32}>管</Avatar>
-                <span className="header-button-label">平台管理员</span>
+                <span className="header-button-label">{displayName}</span>
               </Button>
             </Dropdown>
           </Space>
@@ -204,7 +209,7 @@ function App() {
             <div>
               <Space size={10}>
                 <Title level={2}>数据连接</Title>
-                <Tag color="blue">P00 基线</Tag>
+                <Tag color="blue">P01 认证基座</Tag>
               </Space>
               <Paragraph>
                 连接、发现并管理平台的数据源。完整数据连接能力将在 P03 vertical slice 中交付。
@@ -238,9 +243,9 @@ function App() {
                 <CheckCircleFilled />
               </div>
               <div>
-                <Title level={4}>平台工程基线</Title>
+                <Title level={4}>认证 Compose 基座</Title>
                 <Paragraph>
-                  Maven 聚合、React 外壳、OpenAPI 唯一契约、Compose 配置与持续集成门禁已纳入同一交付流程。
+                  默认入口已由 Keycloak PKCE 保护；平台组件使用固定镜像、私有网络、健康依赖和幂等 bootstrap。
                 </Paragraph>
               </div>
             </Flex>

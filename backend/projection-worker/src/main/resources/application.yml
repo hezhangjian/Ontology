@@ -2,4 +2,5 @@ spring:
   application:
     name: projection-worker
   main:
+    keep-alive: true
     web-application-type: none

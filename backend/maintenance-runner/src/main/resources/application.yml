@@ -2,4 +2,5 @@ spring:
   application:
     name: maintenance-runner
   main:
+    keep-alive: true
     web-application-type: none

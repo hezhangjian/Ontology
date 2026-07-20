@@ -29,6 +29,9 @@ dist/
 # Environment overrides
 *.local
 docker/env/.env
+docker/secrets/*
+!docker/secrets/examples/
+!docker/secrets/examples/**
 
 # Test output
 coverage/

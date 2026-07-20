@@ -1,89 +1,43 @@
 name: ontology-platform
 
-services:
-  flink-jobmanager:
-    image: flink:2.3.0-scala_2.12-java17
-    command: jobmanager
-    ports:
-      - "8081:8081"
-    environment:
-      FLINK_PROPERTIES: |
-        jobmanager.rpc.address: flink-jobmanager
-
-  flink-taskmanager:
-    image: flink:2.3.0-scala_2.12-java17
-    command: taskmanager
-    depends_on:
-      - flink-jobmanager
-    environment:
-      FLINK_PROPERTIES: |
-        jobmanager.rpc.address: flink-jobmanager
-        taskmanager.numberOfTaskSlots: 4
-
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - ./data/minio:/data
-
-  opensearch:
-    image: opensearchproject/opensearch:2.19.3
-    environment:
-      discovery.type: single-node
-      bootstrap.memory_lock: "true"
-      DISABLE_SECURITY_PLUGIN: "true"
-      OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
-    ports:
-      - "9200:9200"
-      - "9600:9600"
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-      nofile:
-        soft: 65536
-        hard: 65536
-    volumes:
-      - ./data/opensearch:/usr/share/opensearch/data
-
-  opensearch-dashboards:
-    image: opensearchproject/opensearch-dashboards:2.19.3
-    depends_on:
-      - opensearch
-    environment:
-      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
-      OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
-    ports:
-      - "5601:5601"
-
-  skywalking-oap:
-    image: apache/skywalking-oap-server:10.4.0
-    depends_on:
-      - opensearch
-    environment:
-      JAVA_OPTS: -Xms256m -Xmx384m
-      SW_CORE_RECORD_DATA_TTL: "7"
-      SW_CORE_METRICS_DATA_TTL: "7"
-      SW_NAMESPACE: skywalking
-      SW_STORAGE: elasticsearch
-      SW_STORAGE_ES_CLUSTER_NODES: opensearch:9200
-      SW_TELEMETRY: prometheus
-    ports:
-      - "11800:11800"
-      - "12800:12800"
-
-  skywalking-ui:
-    image: apache/skywalking-ui:10.4.0
-    depends_on:
-      - skywalking-oap
-    environment:
-      SW_OAP_ADDRESS: http://skywalking-oap:12800
-    ports:
-      - "8082:8080"
+include:
+  - compose/05-gateway.yml
+  - compose/10-control-store.yml
+  - compose/15-object-storage.yml
+  - compose/20-event-bus.yml
+  - compose/30-compute.yml
+  - compose/40-ontology-storage.yml
+  - compose/50-security.yml
+  - compose/60-platform.yml
+  - compose/70-apps.yml
+  - compose/90-observability.yml
 
 networks:
   default:
     name: ontology-platform
+
+secrets:
+  demo_admin_password:
+    file: ${SECRET_DIR:-./secrets/examples}/demo_admin_password
+  demo_builder_password:
+    file: ${SECRET_DIR:-./secrets/examples}/demo_builder_password
+  demo_viewer_password:
+    file: ${SECRET_DIR:-./secrets/examples}/demo_viewer_password
+  keycloak_admin_password:
+    file: ${SECRET_DIR:-./secrets/examples}/keycloak_admin_password
+  minio_root_password:
+    file: ${SECRET_DIR:-./secrets/examples}/minio_root_password
+  minio_root_user:
+    file: ${SECRET_DIR:-./secrets/examples}/minio_root_user
+  postgres_password:
+    file: ${SECRET_DIR:-./secrets/examples}/postgres_password
+
+volumes:
+  flink-checkpoints-cache:
+  hugegraph-data:
+  keycloak-data:
+  minio-data:
+  opensearch-data:
+  postgres17-data:
+  pulsar-conf:
+  pulsar-data:

@@ -2,13 +2,14 @@
 
 Ontology Platform 是一个以“数据—本体—应用—AIP”为闭环的通用本体平台，面向单台 Linux 服务器上的 Docker Compose 部署。完整产品、架构和实施范围以 [plan.md](plan.md) 为准。
 
-## 工程基线
+## 平台基线
 
 - Java 21 + Spring Boot 多模块后端
 - React 18 + TypeScript + Vite + Ant Design 前端
 - `docs/openapi/openapi.yaml` 作为公共 HTTP API 唯一契约
 - Docker Compose 单机部署，不使用 Kubernetes
-- Keycloak OIDC、APISIX、Flink、Pulsar、HugeGraph、OpenSearch、MinIO 与 SkyWalking 按 Phase 逐步接入
+- Keycloak OIDC + PKCE 默认登录
+- APISIX、Flink、Pulsar、HugeGraph、OpenSearch、MinIO 与 SkyWalking Compose 基础设施
 
 ## 本地验证
 
@@ -19,13 +20,15 @@ pnpm --dir portal install --frozen-lockfile
 make verify-fast
 ```
 
-启动 P00 前端外壳：
+启动默认认证的平台：
 
 ```bash
-pnpm --dir portal dev
+make compose-build
+make compose-up
+make e2e-platform-foundation
 ```
 
-浏览器访问 `http://localhost:3000/data/connections`。P01 完成后，默认产品入口将切换为启用 Keycloak PKCE 的 APISIX 地址。
+浏览器访问 `http://localhost:9080/data/connections`，通过 Keycloak 完成 PKCE 登录。仓库内示例密码仅用于本机验证；部署前必须按 [P01 运行手册](docs/runbooks/p01-compose-foundation.md) 替换全部 secret。
 
 ## 目录
 
