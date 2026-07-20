@@ -1,0 +1,3 @@
+import { Alert, Card, Descriptions, Typography } from 'antd';
+const { Paragraph, Title } = Typography;
+export default function OntologySettingsPage({ isAdmin }: { isAdmin: boolean }) { return <div><Title level={2}>本体设置</Title><Paragraph>共享本体的发布、预览和兼容性策略。</Paragraph>{!isAdmin && <Alert message="只有 Admin 可以修改平台级设置。" showIcon type="warning" />}<Card><Descriptions column={1} items={[{ key: 'single', label: '本体模式', children: '单一共享本体 / 全局递增 revision' }, { key: 'preview', label: 'Action Preview Token', children: '10 分钟' }, { key: 'batch', label: 'Mutation Batch 上限', children: '100 个对象/关系编辑' }, { key: 'rollback', label: '回滚策略', children: '通过新 Proposal 重新校验发布' }, { key: 'code', label: '用户代码', children: '禁止任意 JavaScript / Python / Java / SQL / Gremlin' }]} /></Card></div>; }

@@ -1,0 +1,61 @@
+package com.hezhangjian.ontology.core.modeling;
+
+import static com.hezhangjian.ontology.core.modeling.ModelingModels.PropertyDraft;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hezhangjian.ontology.core.connections.ConnectionProblem;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import org.springframework.stereotype.Component;
+
+@Component
+public class ModelingPolicy {
+    private static final List<String> VALUE_TYPES = List.of("STRING", "INTEGER", "LONG", "DECIMAL", "BOOLEAN", "DATE", "DATETIME", "ENUM", "STRING_ARRAY", "INTEGER_ARRAY", "JSON");
+    private final ObjectMapper json;
+
+    public ModelingPolicy(ObjectMapper json) {
+        this.json = json;
+    }
+
+    public void validateProperties(List<PropertyDraft> properties) {
+        if (properties == null || properties.isEmpty()) throw problem("PROPERTIES_REQUIRED", "对象类型至少需要一个属性");
+        if (properties.stream().filter(PropertyDraft::primaryKey).count() != 1) throw problem("PRIMARY_KEY_REQUIRED", "对象类型必须恰好有一个主键");
+        if (properties.stream().filter(PropertyDraft::titleProperty).count() > 1) throw problem("TITLE_PROPERTY_INVALID", "对象类型最多有一个标题属性");
+        HashSet<String> names = new HashSet<>();
+        for (PropertyDraft property : properties) {
+            if (property.apiName() == null || !property.apiName().matches("[A-Za-z][A-Za-z0-9_]{0,159}")) throw problem("API_NAME_INVALID", "属性 API 名称无效");
+            if (!names.add(property.apiName().toLowerCase(Locale.ROOT))) throw problem("PROPERTY_NAME_CONFLICT", "属性 API 名称重复");
+            String type = upper(property.valueType());
+            if (!VALUE_TYPES.contains(type)) throw problem("PROPERTY_TYPE_INVALID", property.apiName() + " 的属性类型无效");
+            if (property.primaryKey() && (!property.required() || !List.of("STRING", "INTEGER", "LONG").contains(type))) throw problem("PRIMARY_KEY_TYPE_INVALID", "主键必须必填且类型为 string/integer/long");
+            if ("JSON".equals(type) && (property.primaryKey() || property.sortable())) throw problem("JSON_PROPERTY_RESTRICTED", "JSON 属性不能作为主键或排序字段");
+            if (type.endsWith("_ARRAY") && property.primaryKey()) throw problem("ARRAY_PROPERTY_RESTRICTED", "数组属性不能作为主键");
+        }
+    }
+
+    public void validateActionRules(List<Map<String, Object>> rules) {
+        HashSet<String> writes = new HashSet<>();
+        for (Map<String, Object> rule : rules == null ? List.<Map<String, Object>>of() : rules) {
+            String target = Objects.toString(rule.get("targetPropertyId"), "");
+            if (!target.isBlank() && !writes.add(target)) throw problem("ACTION_RULE_CONFLICT", "Action 规则不能对同一属性产生冲突写入");
+        }
+    }
+
+    public void validateFunctionDsl(Map<String, Object> dsl) {
+        try {
+            String value = json.writeValueAsString(dsl == null ? Map.of() : dsl).toLowerCase(Locale.ROOT);
+            for (String forbidden : List.of("mutation", "update", "delete", "create", "script", "gremlin", "opensearch", "sql", "webhook")) {
+                if (value.contains(forbidden)) throw problem("FUNCTION_DSL_WRITE_FORBIDDEN", "Function 只允许受限只读 DSL");
+            }
+        } catch (JsonProcessingException failure) {
+            throw problem("FUNCTION_DSL_INVALID", "Function DSL 无法解析");
+        }
+    }
+
+    private String upper(String value) { return value == null ? "" : value.trim().toUpperCase(Locale.ROOT); }
+    private ConnectionProblem problem(String code, String message) { return new ConnectionProblem(code, message); }
+}

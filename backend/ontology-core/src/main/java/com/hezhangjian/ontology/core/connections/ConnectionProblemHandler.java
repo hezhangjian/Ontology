@@ -26,7 +26,9 @@ public class ConnectionProblemHandler {
             case "NAME_CONFLICT", "VERSION_CONFLICT", "CONNECTION_DISABLED", "CONNECTION_REFERENCED",
                  "DELETE_REQUIRES_DISABLED", "PIPELINE_NAME_CONFLICT", "PIPELINE_RUN_ACTIVE",
                  "PIPELINE_STREAM_ACTIVE", "PIPELINE_VERSION_CONFLICT", "PROPOSAL_CLOSED",
-                 "SAVEPOINT_REQUIRED" -> HttpStatus.CONFLICT;
+                 "SAVEPOINT_REQUIRED", "ONTOLOGY_VERSION_CONFLICT", "PUBLISHED_API_NAME_IMMUTABLE",
+                 "PRIMARY_KEY_IMMUTABLE", "PROPOSAL_BASELINE_CONFLICT", "PROPOSAL_STATE_INVALID",
+                 "RESOURCE_NOT_DRAFT" -> HttpStatus.CONFLICT;
             default -> HttpStatus.UNPROCESSABLE_ENTITY;
         };
         return response(status, problem.code(), problem.getMessage());

@@ -1,0 +1,211 @@
+package com.hezhangjian.ontology.core.modeling;
+
+import static com.hezhangjian.ontology.core.modeling.ModelingModels.*;
+
+import java.net.URI;
+import java.util.List;
+import java.util.UUID;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/v1/modeling")
+@PreAuthorize("hasAnyRole('Viewer','Builder','Admin')")
+public class ModelingController {
+    private final ModelingService service;
+
+    public ModelingController(ModelingService service) {
+        this.service = service;
+    }
+
+    @GetMapping("/summary")
+    ModelingSummary summary() { return service.summary(); }
+
+    @GetMapping("/search")
+    List<SearchResult> search(@RequestParam(defaultValue = "") String query) { return service.search(query); }
+
+    @GetMapping("/object-types")
+    List<ResourceView> objectTypes(@RequestParam(required = false) String search) { return service.list(ResourceKind.OBJECT_TYPE, search); }
+
+    @PostMapping("/object-types")
+    @PreAuthorize("hasAnyRole('Builder','Admin')")
+    ResponseEntity<ResourceView> createObjectType(@RequestBody ResourceDraftRequest request, Authentication authentication) {
+        return created(service.create(ResourceKind.OBJECT_TYPE, request, actor(authentication)));
+    }
+
+    @GetMapping("/object-types/{id}")
+    ResourceView objectType(@PathVariable UUID id) { return requireKind(id, ResourceKind.OBJECT_TYPE); }
+
+    @PostMapping("/object-types/{id}/drafts")
+    @PreAuthorize("hasAnyRole('Builder','Admin')")
+    ResponseEntity<ResourceView> createObjectDraft(@PathVariable UUID id, @RequestHeader("If-Match") String ifMatch,
+                                                    @RequestBody ResourceDraftRequest request, Authentication authentication) {
+        ResourceView resource = service.createObjectDraft(id, request, parseEtag(ifMatch), actor(authentication));
+        return ResponseEntity.ok().eTag(Long.toString(resource.etag())).body(resource);
+    }
+
+    @GetMapping("/properties")
+    List<PropertyView> properties(@RequestParam(required = false) UUID objectTypeId) { return service.properties(objectTypeId); }
+
+    @GetMapping("/properties/{id}")
+    PropertyView property(@PathVariable UUID id) {
+        return service.properties(null).stream().filter(property -> property.id().equals(id)).findFirst()
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "属性不存在"));
+    }
+
+    @GetMapping("/link-types")
+    List<ResourceView> linkTypes(@RequestParam(required = false) String search) { return service.list(ResourceKind.LINK_TYPE, search); }
+
+    @PostMapping("/link-types")
+    @PreAuthorize("hasAnyRole('Builder','Admin')")
+    ResponseEntity<ResourceView> createLinkType(@RequestBody ResourceDraftRequest request, Authentication authentication) {
+        return created(service.create(ResourceKind.LINK_TYPE, request, actor(authentication)));
+    }
+
+    @GetMapping("/link-types/{id}")
+    ResourceView linkType(@PathVariable UUID id) { return requireKind(id, ResourceKind.LINK_TYPE); }
+
+    @GetMapping("/interfaces")
+    List<ResourceView> interfaces(@RequestParam(required = false) String search) { return service.list(ResourceKind.INTERFACE, search); }
+
+    @PostMapping("/interfaces")
+    @PreAuthorize("hasAnyRole('Builder','Admin')")
+    ResponseEntity<ResourceView> createInterface(@RequestBody ResourceDraftRequest request, Authentication authentication) {
+        return created(service.create(ResourceKind.INTERFACE, request, actor(authentication)));
+    }
+
+    @GetMapping("/interfaces/{id}")
+    ResourceView interfaceType(@PathVariable UUID id) { return requireKind(id, ResourceKind.INTERFACE); }
+
+    @GetMapping("/actions")
+    List<ResourceView> actions(@RequestParam(required = false) String search) { return service.list(ResourceKind.ACTION, search); }
+
+    @PostMapping("/actions")
+    @PreAuthorize("hasAnyRole('Builder','Admin')")
+    ResponseEntity<ResourceView> createAction(@RequestBody ResourceDraftRequest request, Authentication authentication) {
+        return created(service.create(ResourceKind.ACTION, request, actor(authentication)));
+    }
+
+    @GetMapping("/actions/{id}")
+    ResourceView action(@PathVariable UUID id) { return requireKind(id, ResourceKind.ACTION); }
+
+    @PostMapping("/actions/{id}/preview")
+    @PreAuthorize("hasAnyRole('Builder','Admin')")
+    ActionPreview previewAction(@PathVariable UUID id, @RequestBody(required = false) ActionPreviewRequest request,
+                                Authentication authentication) {
+        return service.previewAction(id, request, actor(authentication));
+    }
+
+    @GetMapping("/functions")
+    List<ResourceView> functions(@RequestParam(required = false) String search) { return service.list(ResourceKind.FUNCTION, search); }
+
+    @PostMapping("/functions")
+    @PreAuthorize("hasAnyRole('Builder','Admin')")
+    ResponseEntity<ResourceView> createFunction(@RequestBody ResourceDraftRequest request, Authentication authentication) {
+        return created(service.create(ResourceKind.FUNCTION, request, actor(authentication)));
+    }
+
+    @GetMapping("/functions/{id}")
+    ResourceView function(@PathVariable UUID id) { return requireKind(id, ResourceKind.FUNCTION); }
+
+    @PostMapping("/functions/{id}/test")
+    @PreAuthorize("hasAnyRole('Builder','Admin')")
+    FunctionTestResult testFunction(@PathVariable UUID id, @RequestBody(required = false) FunctionTestRequest request) {
+        return service.testFunction(id, request);
+    }
+
+    @GetMapping("/proposals")
+    List<ProposalView> proposals() { return service.proposals(); }
+
+    @PostMapping("/proposals")
+    @PreAuthorize("hasAnyRole('Builder','Admin')")
+    ResponseEntity<ProposalView> createProposal(@RequestBody ProposalRequest request, Authentication authentication) {
+        ProposalView proposal = service.createProposal(request, actor(authentication));
+        return ResponseEntity.created(URI.create("/v1/modeling/proposals/" + proposal.id())).body(proposal);
+    }
+
+    @GetMapping("/proposals/{id}")
+    ProposalView proposal(@PathVariable UUID id) { return service.proposal(id); }
+
+    @PostMapping("/proposals/{id}/validate")
+    @PreAuthorize("hasAnyRole('Builder','Admin')")
+    ProposalView validate(@PathVariable UUID id, Authentication authentication) { return service.validate(id, actor(authentication)); }
+
+    @PostMapping("/proposals/{id}/submit")
+    @PreAuthorize("hasAnyRole('Builder','Admin')")
+    ProposalView submit(@PathVariable UUID id, Authentication authentication) { return service.submit(id, actor(authentication)); }
+
+    @PostMapping("/proposals/{id}/reviews")
+    @PreAuthorize("hasRole('Admin')")
+    ProposalView review(@PathVariable UUID id, @RequestBody ReviewRequest request, Authentication authentication) {
+        return service.review(id, request, actor(authentication));
+    }
+
+    @PostMapping("/proposals/{id}/publish")
+    @PreAuthorize("hasRole('Admin')")
+    ResponseEntity<DeploymentView> publish(@PathVariable UUID id, Authentication authentication) {
+        return ResponseEntity.accepted().body(service.publish(id, actor(authentication)));
+    }
+
+    @PostMapping("/proposals/{id}/retry")
+    @PreAuthorize("hasRole('Admin')")
+    ResponseEntity<DeploymentView> retry(@PathVariable UUID id, Authentication authentication) {
+        return ResponseEntity.accepted().body(service.retry(id, actor(authentication)));
+    }
+
+    @PostMapping("/proposals/{id}/close")
+    @PreAuthorize("hasAnyRole('Builder','Admin')")
+    ProposalView close(@PathVariable UUID id, Authentication authentication) { return service.close(id, actor(authentication)); }
+
+    @GetMapping("/health")
+    List<HealthIssue> health() { return service.health(); }
+
+    @GetMapping("/history")
+    List<HistoryEntry> history() { return service.history(); }
+
+    @GetMapping("/deployments/{id}")
+    DeploymentView deployment(@PathVariable UUID id) { return service.deployment(id); }
+
+    private ResourceView requireKind(UUID id, ResourceKind kind) {
+        ResourceView resource = service.get(id);
+        if (resource.kind() != kind) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "本体资源不存在");
+        return resource;
+    }
+
+    private ResponseEntity<ResourceView> created(ResourceView resource) {
+        return ResponseEntity.created(URI.create("/v1/modeling/" + resource.kind().name().toLowerCase() + "/" + resource.id()))
+                .eTag(Long.toString(resource.etag())).body(resource);
+    }
+
+    private long parseEtag(String value) {
+        try { return Long.parseLong(value.replace("\"", "")); }
+        catch (NumberFormatException failure) { throw new com.hezhangjian.ontology.core.connections.ConnectionProblem("ONTOLOGY_VERSION_CONFLICT", "If-Match 必须是当前资源版本"); }
+    }
+
+    private Actor actor(Authentication authentication) {
+        Jwt jwt = (Jwt) authentication.getPrincipal();
+        String id = first(jwt.getSubject(), jwt.getClaimAsString("preferred_username"), jwt.getClaimAsString("client_id"), authentication.getName());
+        String given = jwt.getClaimAsString("given_name");
+        String family = jwt.getClaimAsString("family_name");
+        String name = (given == null ? "" : given) + (family == null ? "" : family);
+        if (name.isBlank()) name = first(jwt.getClaimAsString("name"), jwt.getClaimAsString("preferred_username"), id);
+        boolean admin = authentication.getAuthorities().stream().anyMatch(authority -> authority.getAuthority().equals("ROLE_Admin"));
+        return new Actor(id, name, admin);
+    }
+
+    private String first(String... values) {
+        for (String value : values) if (value != null && !value.isBlank()) return value;
+        return "unknown";
+    }
+}

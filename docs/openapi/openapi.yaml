@@ -602,6 +602,195 @@ paths:
       summary: Cancel a bounded Flink preview
       responses:
         '202': {description: Cancellation requested}
+  /ontology/v1/modeling/summary:
+    get:
+      operationId: getModelingSummary
+      summary: Get the active shared ontology revision and control-plane health summary
+      responses:
+        '200': {description: Modeling summary, content: {application/json: {schema: {$ref: '#/components/schemas/ModelingSummary'}}}}
+  /ontology/v1/modeling/search:
+    get:
+      operationId: searchModelingResources
+      summary: Search permission-trimmed ontology resources and properties
+      parameters: [{name: query, in: query, schema: {type: string, maxLength: 240}}]
+      responses:
+        '200': {description: Search results, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ModelingSearchResult'}}}}}
+  /ontology/v1/modeling/object-types:
+    get:
+      operationId: listObjectTypes
+      summary: List object type resources and their latest visible versions
+      parameters: [{name: search, in: query, schema: {type: string, maxLength: 160}}]
+      responses: {'200': {description: Object types, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/OntologyResource'}}}}}}
+    post:
+      operationId: createObjectTypeDraft
+      summary: Create an object type draft without deploying storage schema
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ModelingResourceDraft'}}}}
+      responses:
+        '201': {description: Object type draft, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyResource'}}}}
+        '422': {$ref: '#/components/responses/InvalidRequest'}
+  /ontology/v1/modeling/object-types/{modelingResourceId}:
+    parameters: [{$ref: '#/components/parameters/ModelingResourceId'}]
+    get:
+      operationId: getObjectType
+      summary: Get object identity, properties, mappings, projection and immutable version metadata
+      responses:
+        '200': {description: Object type, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyResource'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /ontology/v1/modeling/object-types/{modelingResourceId}/drafts:
+    parameters: [{$ref: '#/components/parameters/ModelingResourceId'}]
+    post:
+      operationId: createObjectTypeVersionDraft
+      summary: Create a new draft with optimistic locking; published API names remain stable
+      parameters: [{name: If-Match, in: header, required: true, schema: {type: string}}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ModelingResourceDraft'}}}}
+      responses:
+        '200': {description: New draft, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyResource'}}}}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/InvalidRequest'}
+  /ontology/v1/modeling/properties:
+    get:
+      operationId: listOntologyProperties
+      summary: List stable properties from latest resource versions
+      parameters: [{name: objectTypeId, in: query, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Properties, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/OntologyProperty'}}}}}}
+  /ontology/v1/modeling/properties/{modelingResourceId}:
+    parameters: [{$ref: '#/components/parameters/ModelingResourceId'}]
+    get:
+      operationId: getOntologyProperty
+      summary: Get one stable property and its latest typed version
+      responses: {'200': {description: Property, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyProperty'}}}}, '404': {$ref: '#/components/responses/NotFound'}}
+  /ontology/v1/modeling/link-types:
+    get:
+      operationId: listLinkTypes
+      summary: List bidirectionally traversable link type resources
+      responses: {'200': {description: Link types, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/OntologyResource'}}}}}}
+    post:
+      operationId: createLinkTypeDraft
+      summary: Create a link type draft with stable endpoint identities
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ModelingResourceDraft'}}}}
+      responses: {'201': {description: Link draft, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyResource'}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}}
+  /ontology/v1/modeling/link-types/{modelingResourceId}:
+    parameters: [{$ref: '#/components/parameters/ModelingResourceId'}]
+    get:
+      operationId: getLinkType
+      summary: Get one link type and its endpoint, cardinality and source contract
+      responses: {'200': {description: Link type, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyResource'}}}}, '404': {$ref: '#/components/responses/NotFound'}}
+  /ontology/v1/modeling/interfaces:
+    get:
+      operationId: listOntologyInterfaces
+      summary: List lightweight interfaces without independent object storage
+      responses: {'200': {description: Interfaces, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/OntologyResource'}}}}}}
+    post:
+      operationId: createOntologyInterfaceDraft
+      summary: Create a typed interface slot and explicit implementation mapping draft
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ModelingResourceDraft'}}}}
+      responses: {'201': {description: Interface draft, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyResource'}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}}
+  /ontology/v1/modeling/interfaces/{modelingResourceId}:
+    parameters: [{$ref: '#/components/parameters/ModelingResourceId'}]
+    get:
+      operationId: getOntologyInterface
+      summary: Get one lightweight interface and explicit property mappings
+      responses: {'200': {description: Interface, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyResource'}}}}, '404': {$ref: '#/components/responses/NotFound'}}
+  /ontology/v1/modeling/actions:
+    get:
+      operationId: listOntologyActions
+      summary: List declarative mutation action definitions
+      responses: {'200': {description: Actions, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/OntologyResource'}}}}}}
+    post:
+      operationId: createOntologyActionDraft
+      summary: Create a typed declarative action draft without arbitrary code
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ModelingResourceDraft'}}}}
+      responses: {'201': {description: Action draft, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyResource'}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}}
+  /ontology/v1/modeling/actions/{modelingResourceId}:
+    parameters: [{$ref: '#/components/parameters/ModelingResourceId'}]
+    get:
+      operationId: getOntologyAction
+      summary: Get action parameters, ordered rules, conditions and approval policy
+      responses: {'200': {description: Action, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyResource'}}}}, '404': {$ref: '#/components/responses/NotFound'}}
+  /ontology/v1/modeling/actions/{modelingResourceId}/preview:
+    parameters: [{$ref: '#/components/parameters/ModelingResourceId'}]
+    post:
+      operationId: previewOntologyAction
+      summary: Compile an action edit plan and short-lived preview token without writing objects
+      requestBody: {content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+      responses: {'200': {description: Action preview and diff, content: {application/json: {schema: {type: object, additionalProperties: true}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}}
+  /ontology/v1/modeling/functions:
+    get:
+      operationId: listOntologyFunctions
+      summary: List typed read-only function definitions
+      responses: {'200': {description: Functions, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/OntologyResource'}}}}}}
+    post:
+      operationId: createOntologyFunctionDraft
+      summary: Create a restricted read-only DSL function draft
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ModelingResourceDraft'}}}}
+      responses: {'201': {description: Function draft, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyResource'}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}}
+  /ontology/v1/modeling/functions/{modelingResourceId}:
+    parameters: [{$ref: '#/components/parameters/ModelingResourceId'}]
+    get:
+      operationId: getOntologyFunction
+      summary: Get function types, exact dependencies and restricted DSL
+      responses: {'200': {description: Function, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyResource'}}}}, '404': {$ref: '#/components/responses/NotFound'}}
+  /ontology/v1/modeling/functions/{modelingResourceId}/test:
+    parameters: [{$ref: '#/components/parameters/ModelingResourceId'}]
+    post:
+      operationId: testOntologyFunction
+      summary: Test a read-only function with caller permissions and exact version binding
+      requestBody: {content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+      responses: {'200': {description: Permission-scoped function result, content: {application/json: {schema: {type: object, additionalProperties: true}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}}
+  /ontology/v1/modeling/proposals:
+    get:
+      operationId: listOntologyProposals
+      summary: List multi-resource ontology proposals
+      responses: {'200': {description: Proposals, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/OntologyProposal'}}}}}}
+    post:
+      operationId: createOntologyProposal
+      summary: Create a proposal pinned to the active baseline revision
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyProposalRequest'}}}}
+      responses: {'201': {description: Proposal, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyProposal'}}}}, '409': {$ref: '#/components/responses/Conflict'}}
+  /ontology/v1/modeling/proposals/{proposalId}:
+    parameters: [{$ref: '#/components/parameters/ProposalId'}]
+    get:
+      operationId: getOntologyProposal
+      summary: Get proposal tasks, impact, validation, review and publish record
+      responses: {'200': {description: Proposal, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyProposal'}}}}, '404': {$ref: '#/components/responses/NotFound'}}
+  /ontology/v1/modeling/proposals/{proposalId}/validate:
+    parameters: [{$ref: '#/components/parameters/ProposalId'}]
+    post: {operationId: validateOntologyProposal, summary: Validate exact resource drafts and downstream impact, responses: {'200': {description: Validated proposal, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyProposal'}}}}}}
+  /ontology/v1/modeling/proposals/{proposalId}/submit:
+    parameters: [{$ref: '#/components/parameters/ProposalId'}]
+    post: {operationId: submitOntologyProposal, summary: Submit a valid proposal for required review, responses: {'200': {description: Submitted proposal, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyProposal'}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}}}
+  /ontology/v1/modeling/proposals/{proposalId}/reviews:
+    parameters: [{$ref: '#/components/parameters/ProposalId'}]
+    post:
+      operationId: reviewOntologyProposal
+      summary: Record an Admin or Resource Owner review decision
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [decision], properties: {decision: {type: string, enum: [APPROVED, CHANGES_REQUESTED, REJECTED]}, comment: {type: string, maxLength: 2000}}}}}}
+      responses: {'200': {description: Reviewed proposal, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyProposal'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /ontology/v1/modeling/proposals/{proposalId}/publish:
+    parameters: [{$ref: '#/components/parameters/ProposalId'}]
+    post: {operationId: publishOntologyProposal, summary: Start the persisted multi-store deployment Saga, responses: {'202': {description: Deployment accepted, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyDeployment'}}}}, '409': {$ref: '#/components/responses/Conflict'}}}
+  /ontology/v1/modeling/proposals/{proposalId}/retry:
+    parameters: [{$ref: '#/components/parameters/ProposalId'}]
+    post: {operationId: retryOntologyProposalDeployment, summary: Retry a failed deployment while the old revision remains active, responses: {'202': {description: Retry deployment, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyDeployment'}}}}, '409': {$ref: '#/components/responses/Conflict'}}}
+  /ontology/v1/modeling/proposals/{proposalId}/close:
+    parameters: [{$ref: '#/components/parameters/ProposalId'}]
+    post: {operationId: closeOntologyProposal, summary: Close a non-publishing proposal while retaining audit history, responses: {'200': {description: Closed proposal, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyProposal'}}}}, '409': {$ref: '#/components/responses/Conflict'}}}
+  /ontology/v1/modeling/health:
+    get:
+      operationId: listOntologyHealthIssues
+      summary: List aggregated ontology, deployment and projection health issues
+      responses: {'200': {description: Health issues, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/OntologyHealthIssue'}}}}}}
+  /ontology/v1/modeling/history:
+    get:
+      operationId: listOntologyHistory
+      summary: List immutable revisions and proposal publication history
+      responses: {'200': {description: Revision history, content: {application/json: {schema: {type: array, items: {type: object, additionalProperties: true}}}}}}
+  /ontology/v1/modeling/deployments/{deploymentId}:
+    parameters: [{$ref: '#/components/parameters/DeploymentId'}]
+    get:
+      operationId: getOntologyDeployment
+      summary: Poll durable Saga steps; disconnecting does not cancel deployment
+      responses: {'200': {description: Deployment, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyDeployment'}}}}, '404': {$ref: '#/components/responses/NotFound'}}
 components:
   securitySchemes:
     bearerAuth:
@@ -611,6 +800,8 @@ components:
   parameters:
     AssetId: {name: assetId, in: path, required: true, schema: {type: string, format: uuid}}
     DataSourceId: {name: dataSourceId, in: path, required: true, schema: {type: string, format: uuid}}
+    DeploymentId: {name: deploymentId, in: path, required: true, schema: {type: string, format: uuid}}
+    ModelingResourceId: {name: modelingResourceId, in: path, required: true, schema: {type: string, format: uuid}}
     Page: {name: page, in: query, schema: {type: integer, default: 0, minimum: 0}}
     PipelineId: {name: pipelineId, in: path, required: true, schema: {type: string, format: uuid}}
     PreviewId: {name: previewId, in: path, required: true, schema: {type: string, format: uuid}}
@@ -1175,3 +1366,173 @@ components:
         actorName: {type: string}
         occurredAt: {type: string, format: date-time}
         summary: {type: string}
+    ModelingResourceKind:
+      type: string
+      enum: [OBJECT_TYPE, LINK_TYPE, INTERFACE, ACTION, FUNCTION]
+    ModelingResourceDraft:
+      type: object
+      required: [displayName, apiName]
+      properties:
+        displayName: {type: string, minLength: 1, maxLength: 240}
+        apiName: {type: string, pattern: '^[A-Za-z][A-Za-z0-9_]{0,159}$'}
+        description: {type: string, maxLength: 2000}
+        maturity: {type: string, enum: [EXPERIMENTAL, ACTIVE, DEPRECATED], default: EXPERIMENTAL}
+        ownerId: {type: string, maxLength: 240}
+        ownerName: {type: string, maxLength: 240}
+        tags: {type: array, maxItems: 40, items: {type: string, maxLength: 80}}
+        promoted: {type: boolean, default: false}
+        sourceMode: {type: string, enum: [PIPELINE, ACTION, FOREIGN_KEY]}
+        primaryPipelineId: {type: string, format: uuid}
+        properties: {type: array, items: {$ref: '#/components/schemas/OntologyPropertyDraft'}}
+        leftObjectTypeId: {type: string, format: uuid}
+        rightObjectTypeId: {type: string, format: uuid}
+        targetObjectTypeId: {type: string, format: uuid}
+        cardinality: {type: string, enum: ['1:1', '1:N', 'N:1', 'N:M']}
+        leftDisplayName: {type: string, maxLength: 240}
+        rightDisplayName: {type: string, maxLength: 240}
+        sourcePropertyId: {type: string, format: uuid}
+        operation: {type: string, enum: [CREATE, UPDATE, RETIRE, LINK, UNLINK]}
+        approvalPolicy: {type: string, enum: [NONE, ALWAYS, CONDITIONAL]}
+        parameters: {type: array, items: {type: object, additionalProperties: true}}
+        rules: {type: array, items: {type: object, additionalProperties: true}}
+        submitCondition: {type: object, additionalProperties: true}
+        slots: {type: array, items: {type: object, additionalProperties: true}}
+        implementations: {type: array, items: {type: object, additionalProperties: true}}
+        outputType: {type: string, enum: [SCALAR, OBJECT, OBJECT_SET, TABLE, BOOLEAN, STRUCT]}
+        queryDsl: {type: object, additionalProperties: true, description: 'Restricted read-only platform DSL; native SQL, Gremlin and OpenSearch DSL are rejected.'}
+        dependencyIds: {type: array, items: {type: string, format: uuid}}
+        timeoutMs: {type: integer, minimum: 100, maximum: 30000}
+        maxResults: {type: integer, minimum: 1, maximum: 10000}
+        cacheSeconds: {type: integer, minimum: 0, maximum: 86400}
+    OntologyPropertyDraft:
+      type: object
+      required: [apiName, displayName, valueType, required, primaryKey, titleProperty, searchable, filterable, sortable, sensitive]
+      properties:
+        apiName: {type: string, pattern: '^[A-Za-z][A-Za-z0-9_]{0,159}$'}
+        displayName: {type: string, minLength: 1, maxLength: 240}
+        description: {type: string, maxLength: 2000}
+        valueType: {type: string, enum: [STRING, INTEGER, LONG, DECIMAL, BOOLEAN, DATE, DATETIME, ENUM, STRING_ARRAY, INTEGER_ARRAY, JSON]}
+        required: {type: boolean}
+        primaryKey: {type: boolean}
+        titleProperty: {type: boolean}
+        searchable: {type: boolean}
+        filterable: {type: boolean}
+        sortable: {type: boolean}
+        sensitive: {type: boolean}
+        maskingPolicy: {type: string, maxLength: 80}
+        analyzer: {type: string, maxLength: 80}
+        sourceField: {type: string, maxLength: 240}
+        enumValues: {type: array, items: {type: string}}
+    OntologyProperty:
+      allOf:
+        - {$ref: '#/components/schemas/OntologyPropertyDraft'}
+        - type: object
+          required: [id, physicalKey]
+          properties:
+            id: {type: string, format: uuid}
+            physicalKey: {type: string, pattern: '^p_[A-Za-z0-9_]+$'}
+    OntologyResource:
+      type: object
+      required: [id, kind, apiName, displayName, description, physicalKey, ownerId, ownerName, maturity, promoted, tags, lifecycle, version, etag, definition, properties, createdAt, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {$ref: '#/components/schemas/ModelingResourceKind'}
+        apiName: {type: string}
+        displayName: {type: string}
+        description: {type: string}
+        physicalKey: {type: string, description: Stable internal projection key independent of display and API names.}
+        ownerId: {type: string}
+        ownerName: {type: string}
+        maturity: {type: string, enum: [EXPERIMENTAL, ACTIVE, DEPRECATED]}
+        promoted: {type: boolean}
+        tags: {type: array, items: {type: string}}
+        lifecycle: {type: string, enum: [DRAFT, IN_REVIEW, APPROVED, PUBLISHED, REJECTED, RETIRED]}
+        version: {type: integer, minimum: 1}
+        activeVersion: {type: integer, minimum: 1}
+        publishedRevision: {type: integer, format: int64, minimum: 1}
+        etag: {type: integer, format: int64, minimum: 1}
+        definition: {type: object, additionalProperties: true}
+        properties: {type: array, items: {$ref: '#/components/schemas/OntologyProperty'}}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    ModelingSummary:
+      type: object
+      required: [ontologyRevision, publishHealth, unpublishedProposals, criticalIssues, projectionFailures, pendingReviews, resourceCounts, recentResources]
+      properties:
+        ontologyRevision: {type: integer, format: int64, minimum: 1}
+        lastPublishedAt: {type: string, format: date-time}
+        publishHealth: {type: string, enum: [HEALTHY, DEGRADED]}
+        unpublishedProposals: {type: integer, format: int64, minimum: 0}
+        criticalIssues: {type: integer, format: int64, minimum: 0}
+        projectionFailures: {type: integer, format: int64, minimum: 0}
+        pendingReviews: {type: integer, format: int64, minimum: 0}
+        resourceCounts: {type: object, additionalProperties: {type: integer, format: int64, minimum: 0}}
+        recentResources: {type: array, items: {$ref: '#/components/schemas/OntologyResource'}}
+    ModelingSearchResult:
+      type: object
+      required: [id, kind, apiName, displayName, description, ownerName, tags, lifecycle]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {$ref: '#/components/schemas/ModelingResourceKind'}
+        apiName: {type: string}
+        displayName: {type: string}
+        description: {type: string}
+        ownerName: {type: string}
+        tags: {type: array, items: {type: string}}
+        lifecycle: {type: string}
+    OntologyProposalRequest:
+      type: object
+      required: [title, resourceIds]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 240}
+        description: {type: string, maxLength: 2000}
+        resourceIds: {type: array, minItems: 1, uniqueItems: true, items: {type: string, format: uuid}}
+    OntologyProposal:
+      type: object
+      required: [id, title, description, status, baselineRevision, riskLevel, validation, impact, resources, createdByName, createdAt, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string}
+        description: {type: string}
+        status: {type: string, enum: [DRAFT, VALIDATING, IN_REVIEW, APPROVED, PUBLISHING, PUBLISHED, CHANGES_REQUESTED, REJECTED, FAILED, CLOSED]}
+        baselineRevision: {type: integer, format: int64, minimum: 1}
+        riskLevel: {type: string, enum: [LOW, MEDIUM, HIGH, BLOCKED]}
+        validation: {type: array, items: {type: object, additionalProperties: true}}
+        impact: {type: object, additionalProperties: true}
+        resources: {type: array, items: {$ref: '#/components/schemas/OntologyResource'}}
+        createdByName: {type: string}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        submittedAt: {type: string, format: date-time}
+        publishedRevision: {type: integer, format: int64, minimum: 1}
+    OntologyDeployment:
+      type: object
+      required: [id, proposalId, targetRevision, status, currentStep, attempt, createdAt, steps]
+      properties:
+        id: {type: string, format: uuid}
+        proposalId: {type: string, format: uuid}
+        targetRevision: {type: integer, format: int64, minimum: 1}
+        status: {type: string, enum: [PENDING, RUNNING, SUCCEEDED, FAILED]}
+        currentStep: {type: string}
+        attempt: {type: integer, minimum: 1}
+        safeError: {type: string}
+        createdAt: {type: string, format: date-time}
+        startedAt: {type: string, format: date-time}
+        completedAt: {type: string, format: date-time}
+        steps: {type: array, items: {type: object, additionalProperties: true}}
+    OntologyHealthIssue:
+      type: object
+      required: [id, severity, category, title, evidence, recommendation, status, firstSeenAt, lastSeenAt]
+      properties:
+        id: {type: string, format: uuid}
+        severity: {type: string, enum: [INFO, WARNING, ERROR, CRITICAL]}
+        category: {type: string}
+        resourceId: {type: string, format: uuid}
+        resourceName: {type: string}
+        title: {type: string}
+        evidence: {type: string}
+        recommendation: {type: string}
+        ownerName: {type: string}
+        status: {type: string, enum: [OPEN, ACCEPTED, RESOLVED]}
+        firstSeenAt: {type: string, format: date-time}
+        lastSeenAt: {type: string, format: date-time}

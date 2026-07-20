@@ -205,6 +205,39 @@
   - PostgreSQL 只保存 DAG/版本/运行/审计等控制面，业务对象正文仍只进入 HugeGraph，OpenSearch 仍是可重建投影。
 - 下一恢复点：P04 commit 后按用户指令跳过 P05 数据质量和 P06 数据血缘，从干净工作树开始 P07 本体管理；本轮做到 P09 后停止，不得继续 P10。
 
+## P07 — 本体管理完整纵切
+
+- 完成时间：2026-07-20 22:27 CST
+- Commit：`feat(modeling): deliver ontology management page`
+- 范围：
+  - 在唯一 OpenAPI 中交付本体概览/搜索、对象类型、稳定属性、关系类型、Interface、Action、Function、多资源 Proposal、发布部署、健康问题和不可变历史契约。
+  - 以 Flyway V6 建立稳定资源身份与不可变版本、共享全局 revision、对象/属性/关系/Interface/Action/Function 类型表，以及 Proposal、审核、评论、发布 Saga、步骤和健康控制面；对象正文仍不进入 PostgreSQL。
+  - 规范资源使用稳定逻辑 ID、API 名和不可变物理键；属性键跨 revision 稳定，主键/标题/敏感/可搜索约束由后端统一校验。
+  - Interface 仅表达可复用的属性/关系槽位与实现绑定，不建立独立对象存储；关系快照在对象类型后发布并保留双向遍历元数据。
+  - Action 使用声明式写入规则、参数和提交/审批条件，Preview 返回安全 diff 与短期 token；Function 使用类型化只读 DSL、调用者权限作用域和精确不可变版本绑定。
+  - 发布采用持久化 Saga：锁定 Proposal、生成契约、真实探测 HugeGraph schema、真实探测 OpenSearch alias、原子激活全局 revision、写审计；失败保留旧 ACTIVE revision 和可诊断步骤，重试创建新 deployment。
+  - 交付共享本体概览、搜索、完整内部导航、资源列表、四步对象向导、资源详情/多 Tab、属性目录、Proposal 审核/发布、健康和历史页面；Viewer 可读，Builder 可起草/提交，Admin 批准/发布。
+- 自动验证：
+  - `make verify-fast`：通过；9 个 Maven reactor project、22 个 Java tests、frontend lint/typecheck/build、OpenAPI recommended lint 和全 profile Compose config 全部通过。
+  - `make e2e-modeling`：通过；真实验证五类规范资源、多资源审核、Viewer/Builder/Admin、主键与敏感字段规则、Action Preview、Function 权限/版本绑定、OpenSearch 故障下 Saga 保旧 revision、恢复重试、精确 revision Pulsar 投影、敏感字段过滤和审计。
+  - Ontology Core/Portal 镜像重建成功，Flyway V6 已应用且完整依赖服务健康；`git diff --check` 与 `docker/scripts/e2e-modeling.sh` 语法检查通过。
+- 内置浏览器手测：
+  - 使用 Builder OIDC 从全局侧栏进入“本体管理”，核对 Revision 4 概览、资源统计、最近资源、模型关系图和完整内部导航。
+  - 点击“新建对象类型”，逐步填写 `BrowserAcceptanceAsset`、来源、主键/标题属性并在复核页确认所有跨步骤字段，保存为 DRAFT 后检查稳定 API 名、物理键、属性、数据映射、索引投影和不可变版本。
+  - 从对象详情创建变更提议，点击校验并确认 LOW 风险和目标 revision 5，提交审核后确认 Builder 不显示批准按钮。
+  - 逐项点击属性目录、关系类型、Interface、Action、Function、健康问题和变更历史；Action Preview 返回声明式 UPDATE diff 与审批要求，Function 测试返回 v1 精确绑定、只读 DSL 和调用者权限生效。
+  - 退出 Builder 并以 Admin 登录，打开同一提议，点击批准和“发布 Revision”，确认六个 Saga 步骤全部 SUCCEEDED；历史页显示 Revision 5 ACTIVE、Revision 4 RETIRED，浏览器日志为空。
+- 浏览器/E2E 发现并修复：
+  - 四步向导复核页最初只读取当前挂载字段，导致先前步骤显示为空；改用保留字段的完整表单值，并在最终 Portal 镜像重建后从头点击复测。
+  - SQL 可选列表过滤直接推断 nullable 参数类型失败；改为显式 `varchar` 判空。
+  - 多资源快照按字母顺序先写关系再写新对象，触发契约外键失败；改为对象类型优先、其余资源第二遍写入，故障部署与健康证据仍按设计保留。
+  - Frontend Proposal 资源选择器移除间接组件 shim，直接使用 Ant Design `Select`，生产构建与浏览器交互通过。
+- 兼容/安全证据：
+  - 真实停止 OpenSearch 后，deployment 固定失败在 `MIGRATE_OPENSEARCH`，旧 revision 保持 ACTIVE；恢复后 retry 生成新 deployment 并完成原子激活，失败候选 revision 不被篡改或复用。
+  - Projection Worker 只接受事件中的精确 ACTIVE revision 合同；OpenSearch 只投影 searchable 且非 sensitive 属性，HugeGraph 继续保存对象正文。
+  - 公开 API、审计、发布步骤和浏览器响应均不返回凭据；浏览器仍只经 APISIX 平台 API 访问，不直连 HugeGraph、OpenSearch 或模型提供商。
+- 下一恢复点：P07 commit 后从干净工作树开始 P08，只实现“对象探索”完整 vertical slice；P05/P06 继续按用户指令跳过，本轮 P09 完成后停止，不得继续 P10。
+
 ## 后续记录模板
 
 每完成一个 Phase，在同一 Phase commit 中追加：完成时间、Commit subject、范围、自动门禁、内置浏览器点击步骤（若涉及前端）、发现并修复的问题、依赖/兼容证据、下一恢复点。

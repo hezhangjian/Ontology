@@ -26,6 +26,10 @@ pipelines:
   platform-topic: persistent://platform/ingestion
   workload-token: ${flink_workload_token}
 
+modeling:
+  hugegraph-url: ${MODELING_HUGEGRAPH_URL:http://hugegraph:8080}
+  opensearch-url: ${MODELING_OPENSEARCH_URL:http://opensearch:9200}
+
 server:
   port: 8000
 
