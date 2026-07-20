@@ -43,6 +43,12 @@ import ResourceDetailPage from '../features/ontology/modeling/ResourceDetailPage
 import ResourceEditorPage from '../features/ontology/modeling/ResourceEditorPage';
 import ResourceListPage from '../features/ontology/modeling/ResourceListPage';
 import type { ResourceKind } from '../features/ontology/modeling/ontology.types';
+import ExplorerHomePage from '../features/ontology/explorer/ExplorerHomePage';
+import ExplorerLayout from '../features/ontology/explorer/ExplorerLayout';
+import GlobalObjectSearchPage from '../features/ontology/explorer/GlobalObjectSearchPage';
+import ObjectDetailPage from '../features/ontology/explorer/ObjectDetailPage';
+import ObjectExplorationPage from '../features/ontology/explorer/ObjectExplorationPage';
+import SavedResourcesPage from '../features/ontology/explorer/SavedResourcesPage';
 
 const { Content, Header, Sider } = Layout;
 const { Paragraph, Title } = Typography;
@@ -85,7 +91,7 @@ function App({ accessToken, displayName, roles, userId, onLogout }: AppProps) {
         { key: '/data/lineage', icon: <PartitionOutlined />, label: '数据血缘', disabled: true },
       ],
     },
-    { key: 'ontology-group', type: 'group', label: '本体', children: [{ key: '/ontology', icon: <DeploymentUnitOutlined />, label: '本体管理' }, { key: '/ontology/explorer', icon: <SearchOutlined />, label: '对象探索', disabled: true }] },
+    { key: 'ontology-group', type: 'group', label: '本体', children: [{ key: '/ontology', icon: <DeploymentUnitOutlined />, label: '本体管理' }, { key: '/ontology/explorer', icon: <SearchOutlined />, label: '对象探索' }] },
     { key: 'applications-group', type: 'group', label: '应用', children: [{ key: '/applications/dashboards', icon: <FundOutlined />, label: '分析看板', disabled: true }, { key: '/applications/business', icon: <AppstoreOutlined />, label: '业务应用', disabled: true }, { key: '/applications/automations', icon: <ThunderboltOutlined />, label: '自动化', disabled: true }, { key: '/applications/approvals', icon: <CheckCircleFilled />, label: '审批中心', disabled: true }] },
     { key: 'aip-group', type: 'group', label: 'AIP', children: [{ key: '/aip/agents', icon: <RobotOutlined />, label: '智能体工作室', disabled: true }, { key: '/aip/conversations', icon: <CommentOutlined />, label: '对话中心', disabled: true }] },
   ], [canBuild]);
@@ -98,7 +104,9 @@ function App({ accessToken, displayName, roles, userId, onLogout }: AppProps) {
   ], [onLogout]);
 
   const path = window.location.pathname;
-  const crumbs = path.startsWith('/ontology')
+  const crumbs = path.startsWith('/ontology/explorer')
+    ? ['本体', '对象探索', explorerCrumb(path)]
+    : path.startsWith('/ontology')
     ? ['本体', '本体管理', ontologyCrumb(path)]
     : path.startsWith('/data/pipelines')
     ? path.includes('/runs/') ? ['数据', '管道构建', '运行详情'] : path.endsWith('/new') ? ['数据', '管道构建', '新建管道'] : path.includes('/edit') ? ['数据', '管道构建', 'DAG 编辑器'] : ['数据', '管道构建']
@@ -108,7 +116,7 @@ function App({ accessToken, displayName, roles, userId, onLogout }: AppProps) {
     <Layout className="app-shell">
       <Sider className="app-sider" collapsed={collapsed} collapsedWidth={72} trigger={null} width={238}>
         <div className="brand" aria-label="Ontology Platform"><div className="brand-mark">O</div>{!collapsed && <div><div className="brand-name">Ontology</div><div className="brand-caption">Platform</div></div>}</div>
-        <Menu className="product-menu" mode="inline" items={navigation} selectedKeys={[path.startsWith('/ontology') ? '/ontology' : path.startsWith('/data/connections') ? '/data/connections' : path.startsWith('/data/pipelines') ? '/data/pipelines' : path]} onClick={({ key }) => navigate(key)} />
+        <Menu className="product-menu" mode="inline" items={navigation} selectedKeys={[path.startsWith('/ontology/explorer') ? '/ontology/explorer' : path.startsWith('/ontology') ? '/ontology' : path.startsWith('/data/connections') ? '/data/connections' : path.startsWith('/data/pipelines') ? '/data/pipelines' : path]} onClick={({ key }) => navigate(key)} />
         <div className="sider-footer"><Divider /><Button aria-label="控制面板" className="control-button" disabled={!isAdmin} icon={<ControlOutlined />} type="text">{!collapsed && '控制面板'}</Button><Button aria-label={collapsed ? '展开导航' : '折叠导航'} className="collapse-button" icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setCollapsed((current) => !current)} type="text">{!collapsed && '收起导航'}</Button></div>
       </Sider>
       <Layout>
@@ -123,6 +131,10 @@ function App({ accessToken, displayName, roles, userId, onLogout }: AppProps) {
 
 function RouteContent({ accessToken, canBuild, displayName, isAdmin, location, navigate, userId }: { accessToken: string; canBuild: boolean; displayName: string; isAdmin: boolean; location: string; navigate: (path: string) => void; userId: string }) {
   const path = location.split('?')[0];
+  if (path.startsWith('/ontology/explorer')) {
+    const page = explorerRoute({ accessToken, canBuild, location, navigate, path });
+    return <ExplorerLayout navigate={navigate} path={path}>{page}</ExplorerLayout>;
+  }
   if (path.startsWith('/ontology')) {
     const page = ontologyRoute({ accessToken, canBuild, displayName, isAdmin, navigate, path, userId });
     return <OntologyResourceLayout navigate={navigate} path={path}>{page}</OntologyResourceLayout>;
@@ -144,6 +156,25 @@ function RouteContent({ accessToken, canBuild, displayName, isAdmin, location, n
   if (detail) return <DataConnectionDetailPage accessToken={accessToken} id={detail[1]} isAdmin={isAdmin} navigate={navigate} />;
   if (path === '/data/connections' || path === '/') return <DataConnectionListPage accessToken={accessToken} isAdmin={isAdmin} navigate={navigate} />;
   return <Result extra={<Button onClick={() => navigate('/data/connections')}>返回数据连接</Button>} status="404" title="页面尚未交付" />;
+}
+
+function explorerRoute({ accessToken, canBuild, location, navigate, path }: { accessToken: string; canBuild: boolean; location: string; navigate: (path: string) => void; path: string }) {
+  if (path === '/ontology/explorer/search') return <GlobalObjectSearchPage accessToken={accessToken} navigate={navigate} />;
+  if (path === '/ontology/explorer') {
+    const section = new URLSearchParams(location.split('?')[1] ?? '').get('section');
+    if (section === 'explorations') return <SavedResourcesPage accessToken={accessToken} kind="explorations" navigate={navigate} />;
+    if (section === 'lists') return <SavedResourcesPage accessToken={accessToken} kind="lists" navigate={navigate} />;
+    return <ExplorerHomePage accessToken={accessToken} navigate={navigate} />;
+  }
+  const exploration = path.match(/^\/ontology\/explorer\/explorations\/([^/]+)$/);
+  if (exploration) return <ObjectExplorationPage accessToken={accessToken} explorationId={exploration[1]} navigate={navigate} />;
+  const list = path.match(/^\/ontology\/explorer\/lists\/([^/]+)$/);
+  if (list) return <SavedResourcesPage accessToken={accessToken} kind="lists" navigate={navigate} />;
+  const object = path.match(/^\/ontology\/explorer\/([^/]+)\/([^/]+)$/);
+  if (object) return <ObjectDetailPage accessToken={accessToken} canBuild={canBuild} navigate={navigate} objectId={decodeURIComponent(object[2])} objectTypeId={object[1]} />;
+  const type = path.match(/^\/ontology\/explorer\/([^/]+)$/);
+  if (type) return <ObjectExplorationPage accessToken={accessToken} navigate={navigate} objectTypeId={type[1]} />;
+  return <Result extra={<Button onClick={() => navigate('/ontology/explorer')}>返回对象探索</Button>} status="404" title="探索页面不存在" />;
 }
 
 function ontologyRoute({ accessToken, canBuild, displayName, isAdmin, navigate, path, userId }: { accessToken: string; canBuild: boolean; displayName: string; isAdmin: boolean; navigate: (path: string) => void; path: string; userId: string }) {
@@ -177,6 +208,13 @@ function ontologyCrumb(path: string) {
   if (path.includes('/health')) return '健康问题';
   if (path.includes('/history')) return '变更历史';
   return '概览';
+}
+
+function explorerCrumb(path: string) {
+  if (path.includes('/search')) return '全局搜索';
+  if (path.includes('/explorations/')) return '已保存探索';
+  if (path.includes('/lists/')) return '对象清单';
+  return path === '/ontology/explorer' ? '首页' : '对象视图';
 }
 
 export default App;

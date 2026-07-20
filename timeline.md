@@ -238,6 +238,40 @@
   - 公开 API、审计、发布步骤和浏览器响应均不返回凭据；浏览器仍只经 APISIX 平台 API 访问，不直连 HugeGraph、OpenSearch 或模型提供商。
 - 下一恢复点：P07 commit 后从干净工作树开始 P08，只实现“对象探索”完整 vertical slice；P05/P06 继续按用户指令跳过，本轮 P09 完成后停止，不得继续 P10。
 
+## P08 — 对象探索完整纵切
+
+- 完成时间：2026-07-20 23:24 CST
+- Commit：`feat(explorer): deliver object exploration page`
+- 范围：
+  - 在唯一 OpenAPI 中交付 Object Set 查询、全局搜索、Facet、稳定 Cursor、对象详情/关系、能力、活动、来源、比较、保存探索/清单、选择令牌、导出和 Action 门禁契约。
+  - 以 Flyway V7 建立保存探索、仅引用对象清单、短期选择令牌账本、导出和 Action job 控制面；PostgreSQL 不保存业务对象正文。
+  - 实现有界 Object Set AST 校验，所有搜索/排序/Facet/分页由 OpenSearch 执行并在存储查询中注入 visibility token；Cursor 绑定调用者、规范查询、排序与过期时间并进行 HMAC 签名。
+  - HugeGraph 权威读取对象详情和一跳关系，服务端二次执行敏感字段遮蔽；OpenSearch 故障时搜索显式 503，但详情和关系仍可用。
+  - 选择令牌绑定 owner/query/purpose/TTL 并由可撤销账本支撑；安全导出写入私有 MinIO 对象并记录 SHA-256、所有者和 24 小时过期；Action 使用声明式 Preview token 与选择令牌双门禁创建审计 job，不提供任意 CRUD。
+  - 交付探索首页、全局搜索、最近/收藏/保存探索/对象清单、对象类型工作区、筛选器、Table/Card/快速分析/关系图/比较、Panel 与 Full 两类详情及属性/关系/Action/Function/活动/来源 Tab。
+- 自动验证：
+  - `make verify-fast`：通过；Maven reactor、Java tests、frontend lint/typecheck/build、OpenAPI recommended lint 和全 profile Compose config 全部通过。
+  - `make e2e-explorer`：通过；真实验证 storage-authorized search/Facet/cursor、HugeGraph detail/relation/degradation、redaction、compare、saved references、signed selection、MinIO export、Action gate、RBAC 和审计。
+  - Ontology Core/Portal 最终镜像重建成功，Flyway V7 已应用且完整依赖服务健康；`git diff --check` 与 `docker/scripts/e2e-explorer.sh` 语法检查通过。
+- 内置浏览器手测：
+  - 使用 Viewer OIDC 从全局侧栏进入“对象探索”，核对 5 个对象类型和 HEALTHY 能力；全局搜索精确找到 E2E Employee 且 email 未泄露。
+  - 打开 Full 详情，逐项点击属性、关系、Action、Function、活动和来源，确认 Viewer 不显示可执行 Action、投影活动和 revision 5 字段血缘可见。
+  - 返回 Employee 工作区，逐项点击 Card、Panel、快速分析和关系图；Panel 可关闭，Facet 显示 Research/Operations 各 25，关系图展示 12/200 节点。
+  - 在 Table 全选 50 个对象，创建动态“P08 浏览器手测探索”和静态“P08 浏览器手测清单”，再提交 CSV 私有安全导出，确认 50 行与 24 小时过期提示。
+  - 最终 Portal 镜像下所有上述请求均通过 APISIX `/api/ontology/v1`，console warning/error 为 0。
+- 浏览器/E2E 发现并修复：
+  - Explorer frontend 最初遗漏平台 `/api` 前缀，导致经 APISIX 请求返回 HTML 并触发 JSON 解析错误；统一 service 与 Action preview 路径后重建镜像并复测。
+  - OpenSearch `_score` 排序请求形态无效；改为原生 `_score` 加稳定 `object_id` tie-breaker。
+  - Cursor 查询指纹最初包含 Cursor 本身导致下一页永远不匹配；改为规范化无 Cursor 的查询身份并增加回归测试。
+  - PostgreSQL provenance 字段名、`Instant` 绑定、UUID 数组 cast 分别导致运行时错误；修正为真实列名、`Timestamp` 和显式 `uuid[]` cast。
+  - Spring 未映射错误 HTTP method，安全问题响应误为 500；补齐 405 映射且记录意外异常。
+  - E2E fixture 改为带时间戳对象和确定性已发布 Employee Action，并按 JWT subject 校验审计，避免重复运行污染断言。
+- 兼容/安全证据：
+  - 搜索、Facet、数量和 Cursor 均在 visibility predicate 之后计算；浏览器不能提交 native OpenSearch DSL、Gremlin、SQL 或任意 ID 批量操作。
+  - 保存清单只保存稳定对象引用，导出正文只进入 MinIO；对象与关系正文继续只由 HugeGraph 权威保存，OpenSearch 仍可重建。
+  - Cursor、选择和 Action preview token 均签名、限时且绑定调用者/查询；敏感字段在 OpenSearch contract 和 HugeGraph 响应两层收紧。
+- 下一恢复点：P08 commit 后从干净工作树开始 P09，只实现“分析看板”完整 vertical slice；P05/P06 继续按用户指令跳过，P09 完成后停止，不得继续 P10。
+
 ## 后续记录模板
 
 每完成一个 Phase，在同一 Phase commit 中追加：完成时间、Commit subject、范围、自动门禁、内置浏览器点击步骤（若涉及前端）、发现并修复的问题、依赖/兼容证据、下一恢复点。

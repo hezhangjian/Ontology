@@ -6,3 +6,5 @@ Deployment, upgrade, backup, restore, and failure-recovery runbooks are added by
 - [P02 projection and storage recovery](p02-projection-storage.md)
 - [P03 data connections operations](p03-data-connections.md)
 - [P04 pipeline runtime operations](p04-pipeline-runtime.md)
+- [P07 ontology modeling operations](p07-ontology-modeling.md)
+- [P08 object explorer operations](p08-object-explorer.md)

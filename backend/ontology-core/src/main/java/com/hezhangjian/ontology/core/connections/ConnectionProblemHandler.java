@@ -5,16 +5,21 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
 public class ConnectionProblemHandler {
+    private static final Logger LOG = LoggerFactory.getLogger(ConnectionProblemHandler.class);
+
     @ExceptionHandler(AuthorizationDeniedException.class)
     ResponseEntity<Map<String, Object>> forbidden(AuthorizationDeniedException problem) {
         return response(HttpStatus.FORBIDDEN, "FORBIDDEN", "当前角色无权执行此操作");
@@ -40,8 +45,14 @@ public class ConnectionProblemHandler {
         return response(status, "REQUEST_REJECTED", problem.getReason() == null ? status.getReasonPhrase() : problem.getReason());
     }
 
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    ResponseEntity<Map<String, Object>> methodNotAllowed(HttpRequestMethodNotSupportedException problem) {
+        return response(HttpStatus.METHOD_NOT_ALLOWED, "METHOD_NOT_ALLOWED", "该资源不支持此操作");
+    }
+
     @ExceptionHandler(Exception.class)
     ResponseEntity<Map<String, Object>> unexpected(Exception problem) {
+        LOG.error("Unhandled ontology-core request failure", problem);
         return response(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "请求未能完成，请使用请求编号联系管理员");
     }
 

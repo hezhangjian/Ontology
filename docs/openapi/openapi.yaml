@@ -791,6 +791,118 @@ paths:
       operationId: getOntologyDeployment
       summary: Poll durable Saga steps; disconnecting does not cancel deployment
       responses: {'200': {description: Deployment, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyDeployment'}}}}, '404': {$ref: '#/components/responses/NotFound'}}
+  /ontology/v1/explorer/home:
+    get: {operationId: getExplorerHome, summary: Get permission-trimmed object types and recent saved resources, responses: {'200': {description: Explorer home, content: {application/json: {schema: {$ref: '#/components/schemas/ExplorerHome'}}}}, '503': {$ref: '#/components/responses/Unavailable'}}}
+  /ontology/v1/search/objects:
+    post:
+      operationId: searchObjects
+      summary: Search authorized objects, object types, explorations and lists through restricted Search AST
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ObjectSearchRequest'}}}}
+      responses: {'200': {description: Permission-trimmed results, content: {application/json: {schema: {$ref: '#/components/schemas/ObjectSearchResponse'}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}, '503': {$ref: '#/components/responses/Unavailable'}}
+  /ontology/v1/object-sets/query:
+    post:
+      operationId: queryObjectSet
+      summary: Execute a typed Object Set AST with storage-level authorization and stable search_after cursor
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ObjectSetRequest'}}}}
+      responses: {'200': {description: Authorized object page, content: {application/json: {schema: {$ref: '#/components/schemas/ObjectSetPage'}}}}, '410': {$ref: '#/components/responses/Gone'}, '422': {$ref: '#/components/responses/InvalidRequest'}, '503': {$ref: '#/components/responses/Unavailable'}}
+  /ontology/v1/object-sets/facets:
+    post: {operationId: facetObjectSet, summary: Calculate up to ten permission-filtered facets, requestBody: {required: true, content: {application/json: {schema: {type: object, required: [query, propertyIds], properties: {query: {$ref: '#/components/schemas/ObjectSetRequest'}, propertyIds: {type: array, maxItems: 10, items: {type: string, format: uuid}}}}}}}, responses: {'200': {description: Facets, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ObjectFacet'}}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}}}
+  /ontology/v1/object-sets/search-around:
+    post: {operationId: searchAroundObject, summary: Expand one authorized HugeGraph relationship hop, requestBody: {required: true, content: {application/json: {schema: {type: object, required: [objectTypeId, objectId], properties: {objectTypeId: {type: string, format: uuid}, objectId: {type: string}, linkTypeIds: {type: array, items: {type: string, format: uuid}}, pageSize: {type: integer, minimum: 1, maximum: 100}}}}}}, responses: {'200': {description: Authorized links, content: {application/json: {schema: {$ref: '#/components/schemas/ObjectLinkPage'}}}}, '404': {$ref: '#/components/responses/NotFound'}}}
+  /ontology/v1/object-sets/compare:
+    post:
+      operationId: compareObjects
+      summary: Compare two to five same-type objects without revealing redacted differences
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [objectTypeId, objectIds], properties: {objectTypeId: {type: string, format: uuid}, objectIds: {type: array, minItems: 2, maxItems: 5, items: {type: string}}}}}}}
+      responses: {'200': {description: Comparison, content: {application/json: {schema: {type: object, additionalProperties: true}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}}
+  /ontology/v1/object-sets/selection-tokens:
+    post: {operationId: createObjectSelectionToken, summary: Freeze up to one thousand authorized object references in a signed short-lived token, requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SelectionRequest'}}}}, responses: {'201': {description: Selection token, content: {application/json: {schema: {$ref: '#/components/schemas/SelectionToken'}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}}}
+  /ontology/v1/objects/{objectTypeId}/{objectId}:
+    parameters: [{$ref: '#/components/parameters/ObjectTypeId'}, {$ref: '#/components/parameters/ObjectId'}]
+    get: {operationId: getObject, summary: Get the latest authorized HugeGraph object and server-redacted properties, responses: {'200': {description: Standard Full or Panel object view, content: {application/json: {schema: {$ref: '#/components/schemas/ObjectDetail'}}}}, '404': {$ref: '#/components/responses/NotFound'}, '503': {$ref: '#/components/responses/Unavailable'}}}
+  /ontology/v1/objects/{objectTypeId}/{objectId}/capabilities:
+    parameters: [{$ref: '#/components/parameters/ObjectTypeId'}, {$ref: '#/components/parameters/ObjectId'}]
+    get: {operationId: getObjectCapabilities, summary: Get executable published Action and read-only Function capabilities, responses: {'200': {description: Capabilities, content: {application/json: {schema: {type: object, additionalProperties: true}}}}, '404': {$ref: '#/components/responses/NotFound'}}}
+  /ontology/v1/objects/{objectTypeId}/{objectId}/links:
+    parameters: [{$ref: '#/components/parameters/ObjectTypeId'}, {$ref: '#/components/parameters/ObjectId'}]
+    post: {operationId: listObjectLinks, summary: Cursor through permission-trimmed one-hop HugeGraph links, requestBody: {content: {application/json: {schema: {type: object, additionalProperties: true}}}}, responses: {'200': {description: Links, content: {application/json: {schema: {$ref: '#/components/schemas/ObjectLinkPage'}}}}, '404': {$ref: '#/components/responses/NotFound'}}}
+  /ontology/v1/objects/{objectTypeId}/{objectId}/activity:
+    parameters: [{$ref: '#/components/parameters/ObjectTypeId'}, {$ref: '#/components/parameters/ObjectId'}]
+    get: {operationId: listObjectActivity, summary: List safe operation and projection evidence without before or after bodies, responses: {'200': {description: Activity, content: {application/json: {schema: {type: array, items: {type: object, additionalProperties: true}}}}}, '404': {$ref: '#/components/responses/NotFound'}}}
+  /ontology/v1/objects/{objectTypeId}/{objectId}/provenance:
+    parameters: [{$ref: '#/components/parameters/ObjectTypeId'}, {$ref: '#/components/parameters/ObjectId'}]
+    get: {operationId: getObjectProvenance, summary: 'Get pipeline, projection, ontology and field lineage references', responses: {'200': {description: Provenance, content: {application/json: {schema: {type: object, additionalProperties: true}}}}, '404': {$ref: '#/components/responses/NotFound'}}}
+  /ontology/v1/explorations:
+    get:
+      operationId: listExplorations
+      summary: List owned and shared dynamic explorations without granting object access
+      responses: {'200': {description: Explorations, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/SavedExploration'}}}}}}
+    post:
+      operationId: createExploration
+      summary: Save a versioned dynamic Object Set definition
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ExplorationRequest'}}}}
+      responses: {'201': {description: Exploration, content: {application/json: {schema: {$ref: '#/components/schemas/SavedExploration'}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}}
+  /ontology/v1/explorations/{explorationId}:
+    parameters: [{$ref: '#/components/parameters/ExplorationId'}]
+    get:
+      operationId: getExploration
+      summary: Get and revalidate a saved exploration against current ontology and policy
+      responses: {'200': {description: Exploration, content: {application/json: {schema: {$ref: '#/components/schemas/SavedExploration'}}}}, '404': {$ref: '#/components/responses/NotFound'}}
+    put:
+      operationId: updateExploration
+      summary: Append an immutable exploration definition version
+      parameters: [{name: If-Match, in: header, required: true, schema: {type: integer, format: int64}}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ExplorationRequest'}}}}
+      responses: {'200': {description: Updated exploration, content: {application/json: {schema: {$ref: '#/components/schemas/SavedExploration'}}}}, '409': {$ref: '#/components/responses/Conflict'}}
+    delete:
+      operationId: deleteExploration
+      summary: Delete an owned saved exploration while retaining audit evidence
+      responses: {'204': {description: Deleted}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /ontology/v1/explorations/{explorationId}/share:
+    parameters: [{$ref: '#/components/parameters/ExplorationId'}]
+    post:
+      operationId: shareExploration
+      summary: Share a definition without granting underlying object permissions
+      responses: {'200': {description: Shared exploration, content: {application/json: {schema: {$ref: '#/components/schemas/SavedExploration'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /ontology/v1/object-lists:
+    get:
+      operationId: listObjectLists
+      summary: List owned and shared static reference lists
+      responses: {'200': {description: Lists, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ObjectList'}}}}}}
+    post:
+      operationId: createObjectList
+      summary: Save up to ten thousand same-type object references without bodies
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ObjectListRequest'}}}}
+      responses: {'201': {description: List, content: {application/json: {schema: {$ref: '#/components/schemas/ObjectList'}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}}
+  /ontology/v1/object-lists/{listId}:
+    parameters: [{$ref: '#/components/parameters/ListId'}]
+    get: {operationId: getObjectList, summary: Get list metadata and currently visible reference count, responses: {'200': {description: Object list, content: {application/json: {schema: {$ref: '#/components/schemas/ObjectList'}}}}, '404': {$ref: '#/components/responses/NotFound'}}}
+  /ontology/v1/object-lists/{listId}/items:
+    parameters: [{$ref: '#/components/parameters/ListId'}]
+    post: {operationId: addObjectListItems, summary: Add authorized stable references to a static list, requestBody: {required: true, content: {application/json: {schema: {type: object, required: [objectIds], properties: {objectIds: {type: array, maxItems: 10000, uniqueItems: true, items: {type: string}}}}}}}, responses: {'200': {description: Updated list, content: {application/json: {schema: {$ref: '#/components/schemas/ObjectList'}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}}}
+    delete: {operationId: removeObjectListItems, summary: Remove stable references from an owned list, requestBody: {required: true, content: {application/json: {schema: {type: object, required: [objectIds], properties: {objectIds: {type: array, items: {type: string}}}}}}}, responses: {'200': {description: Updated list, content: {application/json: {schema: {$ref: '#/components/schemas/ObjectList'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}}
+  /ontology/v1/export-jobs:
+    post: {operationId: createObjectExport, summary: Create a durable permission-rechecked MinIO export, requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ExportRequest'}}}}, responses: {'202': {description: Export job, content: {application/json: {schema: {$ref: '#/components/schemas/ExportJob'}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}, '503': {$ref: '#/components/responses/Unavailable'}}}
+  /ontology/v1/export-jobs/{exportJobId}:
+    parameters: [{$ref: '#/components/parameters/ExportJobId'}]
+    get: {operationId: getObjectExport, summary: Poll an export job without cancelling it on disconnect, responses: {'200': {description: Export job, content: {application/json: {schema: {$ref: '#/components/schemas/ExportJob'}}}}, '404': {$ref: '#/components/responses/NotFound'}}}
+  /ontology/v1/export-jobs/{exportJobId}/cancel:
+    parameters: [{$ref: '#/components/parameters/ExportJobId'}]
+    post: {operationId: cancelObjectExport, summary: Cancel an unfinished export and remove its downloadable reference, responses: {'200': {description: Cancelled job, content: {application/json: {schema: {$ref: '#/components/schemas/ExportJob'}}}}, '409': {$ref: '#/components/responses/Conflict'}}}
+  /ontology/v1/export-jobs/{exportJobId}/download:
+    parameters: [{$ref: '#/components/parameters/ExportJobId'}]
+    get: {operationId: downloadObjectExport, summary: Download an owned unexpired export after hash verification, responses: {'200': {description: CSV export, content: {text/csv: {schema: {type: string, format: binary}}}}, '410': {$ref: '#/components/responses/Gone'}}}
+  /ontology/v1/bulk-action-jobs:
+    post: {operationId: createBulkActionJob, summary: Execute a published Action over up to one thousand frozen references in batches of one hundred, requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/BulkActionRequest'}}}}, responses: {'202': {description: Bulk job, content: {application/json: {schema: {$ref: '#/components/schemas/BulkActionJob'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '422': {$ref: '#/components/responses/InvalidRequest'}}}
+  /ontology/v1/bulk-action-jobs/{bulkJobId}:
+    parameters: [{$ref: '#/components/parameters/BulkJobId'}]
+    get: {operationId: getBulkActionJob, summary: 'Poll per-job success, failure and skipped counters', responses: {'200': {description: Bulk job, content: {application/json: {schema: {$ref: '#/components/schemas/BulkActionJob'}}}}, '404': {$ref: '#/components/responses/NotFound'}}}
+  /ontology/v1/bulk-action-jobs/{bulkJobId}/retry-failed:
+    parameters: [{$ref: '#/components/parameters/BulkJobId'}]
+    post: {operationId: retryFailedBulkActionItems, summary: 'Recheck policy, condition and ETag then retry failed items only', responses: {'200': {description: Bulk job, content: {application/json: {schema: {$ref: '#/components/schemas/BulkActionJob'}}}}, '409': {$ref: '#/components/responses/Conflict'}}}
+  /ontology/v1/bulk-action-jobs/{bulkJobId}/cancel:
+    parameters: [{$ref: '#/components/parameters/BulkJobId'}]
+    post: {operationId: cancelBulkActionJob, summary: Cancel future batches without reverting successful object effects, responses: {'200': {description: Bulk job, content: {application/json: {schema: {$ref: '#/components/schemas/BulkActionJob'}}}}, '409': {$ref: '#/components/responses/Conflict'}}}
 components:
   securitySchemes:
     bearerAuth:
@@ -801,7 +913,13 @@ components:
     AssetId: {name: assetId, in: path, required: true, schema: {type: string, format: uuid}}
     DataSourceId: {name: dataSourceId, in: path, required: true, schema: {type: string, format: uuid}}
     DeploymentId: {name: deploymentId, in: path, required: true, schema: {type: string, format: uuid}}
+    BulkJobId: {name: bulkJobId, in: path, required: true, schema: {type: string, format: uuid}}
+    ExplorationId: {name: explorationId, in: path, required: true, schema: {type: string, format: uuid}}
+    ExportJobId: {name: exportJobId, in: path, required: true, schema: {type: string, format: uuid}}
+    ListId: {name: listId, in: path, required: true, schema: {type: string, format: uuid}}
     ModelingResourceId: {name: modelingResourceId, in: path, required: true, schema: {type: string, format: uuid}}
+    ObjectId: {name: objectId, in: path, required: true, schema: {type: string, maxLength: 512}}
+    ObjectTypeId: {name: objectTypeId, in: path, required: true, schema: {type: string, format: uuid}}
     Page: {name: page, in: query, schema: {type: integer, default: 0, minimum: 0}}
     PipelineId: {name: pipelineId, in: path, required: true, schema: {type: string, format: uuid}}
     PreviewId: {name: previewId, in: path, required: true, schema: {type: string, format: uuid}}
@@ -815,6 +933,9 @@ components:
     Forbidden:
       description: Caller lacks a Builder or Admin role
       content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+    Gone:
+      description: Signed cursor, selection or export has expired
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
     InvalidRequest:
       description: Validation or connection policy failure
       content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
@@ -823,6 +944,9 @@ components:
       content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
     TooManyRequests:
       description: User and target rate limit exceeded
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+    Unavailable:
+      description: Required object search, graph or export storage is unavailable
       content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
   schemas:
     AssetField:
@@ -1536,3 +1660,229 @@ components:
         status: {type: string, enum: [OPEN, ACCEPTED, RESOLVED]}
         firstSeenAt: {type: string, format: date-time}
         lastSeenAt: {type: string, format: date-time}
+    ExplorerProperty:
+      type: object
+      required: [id, apiName, displayName, valueType, primaryKey, titleProperty, searchable, filterable, sortable, sensitive]
+      properties:
+        id: {type: string, format: uuid}
+        apiName: {type: string}
+        displayName: {type: string}
+        valueType: {type: string}
+        primaryKey: {type: boolean}
+        titleProperty: {type: boolean}
+        searchable: {type: boolean}
+        filterable: {type: boolean}
+        sortable: {type: boolean}
+        sensitive: {type: boolean}
+    ExplorerObjectType:
+      type: object
+      required: [id, apiName, displayName, maturity, ontologyRevision, properties]
+      properties:
+        id: {type: string, format: uuid}
+        apiName: {type: string}
+        displayName: {type: string}
+        maturity: {type: string}
+        ontologyRevision: {type: integer, format: int64}
+        properties: {type: array, items: {$ref: '#/components/schemas/ExplorerProperty'}}
+    ObjectSetRequest:
+      type: object
+      required: [objectTypeId, where, sort, pageSize, columns]
+      properties:
+        objectTypeId: {type: string, format: uuid, description: 'Stable ontology resource ID, never an API name or physical key.'}
+        where: {type: object, additionalProperties: true, description: 'Typed platform AST limited to fifty leaves, three logical levels and three one-hop relations.'}
+        sort: {type: array, maxItems: 5, items: {type: object, required: [propertyId, direction], properties: {propertyId: {type: string, format: uuid}, direction: {type: string, enum: [asc, desc]}}}}
+        pageSize: {type: integer, enum: [25, 50, 100], default: 50}
+        cursor: {type: string, description: 'Signed opaque search_after cursor bound to user, query, ontology and policy revision.'}
+        columns: {type: array, items: {type: string, format: uuid}}
+    ObjectSummary:
+      type: object
+      required: [objectId, title, objectTypeApiName, objectTypeId, version, ontologyRevision, properties, redactedFields, quality, updatedAt]
+      properties:
+        objectId: {type: string}
+        title: {type: string}
+        objectTypeApiName: {type: string}
+        objectTypeId: {type: string, format: uuid}
+        version: {type: integer, format: int64}
+        ontologyRevision: {type: integer, format: int64}
+        properties: {type: object, additionalProperties: true, description: Contains authorized non-sensitive properties only.}
+        redactedFields: {type: array, items: {type: string, format: uuid}}
+        quality: {type: string}
+        updatedAt: {type: string, format: date-time}
+    ObjectSetPage:
+      type: object
+      required: [objectTypeId, objectTypeName, ontologyRevision, visibleCount, countLowerBound, items, queryFingerprint, indexUpdatedAt, properties]
+      properties:
+        objectTypeId: {type: string, format: uuid}
+        objectTypeName: {type: string}
+        ontologyRevision: {type: integer, format: int64}
+        visibleCount: {type: integer, format: int64}
+        countLowerBound: {type: boolean}
+        items: {type: array, items: {$ref: '#/components/schemas/ObjectSummary'}}
+        nextCursor: {type: string}
+        queryFingerprint: {type: string, pattern: '^[a-f0-9]{64}$'}
+        indexUpdatedAt: {type: string, format: date-time}
+        properties: {type: array, items: {$ref: '#/components/schemas/ExplorerProperty'}}
+    ObjectFacet:
+      type: object
+      required: [propertyId, displayName, buckets]
+      properties:
+        propertyId: {type: string, format: uuid}
+        displayName: {type: string}
+        buckets: {type: array, maxItems: 100, items: {type: object, required: [value, count], properties: {value: {}, count: {type: integer, format: int64}}}}
+    ObjectSearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query: {type: string, maxLength: 500, description: 'Restricted words, phrases, trailing term wildcard and platform boolean syntax; no native Lucene or regex.'}
+        mode: {type: string, enum: [ALL, ANY, ADVANCED]}
+        tab: {type: string, enum: [ALL, OBJECTS, OBJECT_TYPES, EXPLORATIONS, LISTS]}
+        size: {type: integer, minimum: 1, maximum: 100}
+    ObjectSearchResponse:
+      type: object
+      required: [objects, objectTypes, explorations, lists, visibleObjectCount, indexUpdatedAt]
+      properties:
+        objects: {type: array, items: {$ref: '#/components/schemas/ObjectSummary'}}
+        objectTypes: {type: array, items: {$ref: '#/components/schemas/ExplorerObjectType'}}
+        explorations: {type: array, items: {$ref: '#/components/schemas/SavedExploration'}}
+        lists: {type: array, items: {$ref: '#/components/schemas/ObjectList'}}
+        visibleObjectCount: {type: integer, format: int64}
+        indexUpdatedAt: {type: string, format: date-time}
+    ExplorerHome:
+      type: object
+      required: [objectTypes, recentObjects, explorations, lists, searchStatus, indexUpdatedAt]
+      properties:
+        objectTypes: {type: array, items: {$ref: '#/components/schemas/ExplorerObjectType'}}
+        recentObjects: {type: array, items: {$ref: '#/components/schemas/ObjectSummary'}}
+        explorations: {type: array, items: {$ref: '#/components/schemas/SavedExploration'}}
+        lists: {type: array, items: {$ref: '#/components/schemas/ObjectList'}}
+        searchStatus: {type: string, enum: [HEALTHY, DEGRADED]}
+        indexUpdatedAt: {type: string, format: date-time}
+    ObjectDetail:
+      type: object
+      required: [objectId, title, objectType, version, etag, ontologyRevision, properties, redactedFields, quality, updatedAt]
+      properties:
+        objectId: {type: string}
+        title: {type: string}
+        objectType: {$ref: '#/components/schemas/ExplorerObjectType'}
+        version: {type: integer, format: int64}
+        etag: {type: string}
+        ontologyRevision: {type: integer, format: int64}
+        properties: {type: object, additionalProperties: true}
+        redactedFields: {type: array, items: {type: string, format: uuid}}
+        quality: {type: string}
+        updatedAt: {type: string, format: date-time}
+    ObjectLinkPage:
+      type: object
+      required: [items, visibleCount]
+      properties:
+        items: {type: array, items: {type: object, additionalProperties: true}}
+        nextCursor: {type: string}
+        visibleCount: {type: integer, format: int64}
+    ExplorationRequest:
+      type: object
+      required: [name, objectTypeId, query, columns, perspective, visibility]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 240}
+        description: {type: string, maxLength: 2000}
+        objectTypeId: {type: string, format: uuid}
+        query: {$ref: '#/components/schemas/ObjectSetRequest'}
+        columns: {type: array, items: {type: string, format: uuid}}
+        perspective: {type: string, enum: [TABLE, CARDS, ANALYSIS, GRAPH, COMPARE]}
+        viewConfig: {type: object, additionalProperties: true}
+        visibility: {type: string, enum: [PRIVATE, SHARED]}
+    SavedExploration:
+      allOf:
+        - {$ref: '#/components/schemas/ExplorationRequest'}
+        - type: object
+          required: [id, objectTypeName, ownerName, version, etag, ontologyRevision, updatedAt, warnings]
+          properties:
+            id: {type: string, format: uuid}
+            objectTypeName: {type: string}
+            ownerName: {type: string}
+            version: {type: integer, minimum: 1}
+            etag: {type: integer, format: int64}
+            ontologyRevision: {type: integer, format: int64}
+            updatedAt: {type: string, format: date-time}
+            warnings: {type: array, items: {type: string}}
+    ObjectListRequest:
+      type: object
+      required: [name, objectTypeId, visibility, objectIds]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 240}
+        description: {type: string, maxLength: 2000}
+        objectTypeId: {type: string, format: uuid}
+        sourceExplorationId: {type: string, format: uuid}
+        visibility: {type: string, enum: [PRIVATE, SHARED]}
+        objectIds: {type: array, maxItems: 10000, uniqueItems: true, items: {type: string}}
+    ObjectList:
+      type: object
+      required: [id, name, description, objectTypeId, objectTypeName, ownerName, visibility, etag, itemCount, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        objectTypeId: {type: string, format: uuid}
+        objectTypeName: {type: string}
+        sourceExplorationId: {type: string, format: uuid}
+        ownerName: {type: string}
+        visibility: {type: string, enum: [PRIVATE, SHARED]}
+        etag: {type: integer, format: int64}
+        itemCount: {type: integer, format: int64}
+        updatedAt: {type: string, format: date-time}
+    SelectionRequest:
+      type: object
+      required: [query]
+      properties:
+        query: {$ref: '#/components/schemas/ObjectSetRequest'}
+        objectIds: {type: array, maxItems: 1000, uniqueItems: true, items: {type: string}}
+    SelectionToken:
+      type: object
+      required: [token, objectTypeId, objectCount, queryFingerprint, expiresAt]
+      properties:
+        token: {type: string}
+        objectTypeId: {type: string, format: uuid}
+        objectCount: {type: integer, maximum: 1000}
+        queryFingerprint: {type: string}
+        expiresAt: {type: string, format: date-time}
+    ExportRequest:
+      type: object
+      required: [query, columns, format]
+      properties:
+        query: {$ref: '#/components/schemas/ObjectSetRequest'}
+        objectIds: {type: array, items: {type: string}}
+        columns: {type: array, items: {type: string, format: uuid}}
+        format: {type: string, enum: [CSV, IDS]}
+    ExportJob:
+      type: object
+      required: [id, status, format, rowCount, createdAt, expiresAt]
+      properties:
+        id: {type: string, format: uuid}
+        status: {type: string, enum: [PENDING, RUNNING, SUCCEEDED, FAILED, CANCELLED, EXPIRED]}
+        format: {type: string, enum: [CSV, IDS]}
+        rowCount: {type: integer, format: int64}
+        contentHash: {type: string}
+        safeError: {type: string}
+        createdAt: {type: string, format: date-time}
+        completedAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time}
+        downloadPath: {type: string}
+    BulkActionRequest:
+      type: object
+      required: [actionId, selectionToken, parameters]
+      properties:
+        actionId: {type: string, format: uuid}
+        selectionToken: {type: string}
+        parameters: {type: object, additionalProperties: true}
+    BulkActionJob:
+      type: object
+      required: [id, actionId, status, totalCount, succeededCount, failedCount, skippedCount, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        actionId: {type: string, format: uuid}
+        status: {type: string, enum: [PENDING, RUNNING, SUCCEEDED, PARTIAL, FAILED, CANCELLED]}
+        totalCount: {type: integer, maximum: 1000}
+        succeededCount: {type: integer}
+        failedCount: {type: integer}
+        skippedCount: {type: integer}
+        createdAt: {type: string, format: date-time}
+        completedAt: {type: string, format: date-time}

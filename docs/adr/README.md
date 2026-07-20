@@ -9,3 +9,5 @@ This directory records implementation-level decisions derived from the frozen de
 | [0003](0003-authentication.md) | Enable Keycloak OIDC by default |
 | [0004](0004-repository-layout.md) | Use the backend, docker, docs, and portal layout |
 | [0005](0005-pipeline-runtime.md) | Use one versioned Pipeline IR and Flink runtime |
+| [0006](0006-shared-ontology-revisions.md) | Publish one shared ontology through immutable revisions |
+| [0007](0007-server-side-object-sets.md) | Evaluate object sets and authorization on the server |

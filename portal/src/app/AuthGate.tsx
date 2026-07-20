@@ -50,7 +50,9 @@ function AuthGate({ children }: AuthGateProps) {
         if (window.location.pathname === '/auth/callback') {
           const callbackUser = await manager.signinRedirectCallback();
           setUser(callbackUser);
-          window.history.replaceState({}, '', '/data/connections');
+          const realmAccess = decodeAccessToken(callbackUser.access_token).realm_access as { roles?: string[] } | undefined;
+          const canBuild = realmAccess?.roles?.some((role) => role === 'Builder' || role === 'Admin');
+          window.history.replaceState({}, '', canBuild ? '/data/connections' : '/ontology/explorer');
         } else {
           const storedUser = await manager.getUser();
           setUser(storedUser?.expired ? await manager.signinSilent() : storedUser);
