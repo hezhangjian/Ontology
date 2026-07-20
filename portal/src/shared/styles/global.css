@@ -368,7 +368,9 @@ textarea {
 
 .connections-page,
 .connection-detail-page,
-.edit-page {
+.edit-page,
+.pipelines-page,
+.pipeline-run-page {
   max-width: 1500px;
   margin: 0 auto;
 }
@@ -432,6 +434,10 @@ textarea {
   border: 1px solid #e7eaf1;
   border-radius: 10px;
   background: #fff;
+}
+
+.pipeline-filter-bar {
+  grid-template-columns: minmax(220px, 1fr) 130px 150px 140px 160px auto;
 }
 
 .connections-page > .ant-table-wrapper,
@@ -668,6 +674,337 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 14px;
+}
+
+.new-pipeline-page {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.new-pipeline-heading {
+  margin: 18px 0 24px;
+}
+
+.new-pipeline-heading h2.ant-typography {
+  margin-bottom: 4px;
+}
+
+.pipeline-create-section {
+  padding: 20px;
+  margin-bottom: 16px;
+  border: 1px solid #e3e7ef;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.pipeline-create-section h4.ant-typography {
+  margin-top: 0;
+}
+
+.pipeline-template-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.pipeline-template-grid .ant-radio-button-wrapper {
+  height: auto;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 10px !important;
+}
+
+.pipeline-template-grid .ant-radio-button-wrapper::before {
+  display: none;
+}
+
+.pipeline-template-card {
+  height: 144px;
+  border: 1px solid #dfe4ed;
+}
+
+.pipeline-template-grid .ant-radio-button-wrapper-checked .pipeline-template-card {
+  border-color: #3157d5;
+  background: #f6f8ff;
+  box-shadow: 0 0 0 2px rgb(49 87 213 / 12%);
+}
+
+.pipeline-template-card p.ant-typography {
+  margin: 6px 0 0;
+  color: #687185;
+  white-space: normal;
+}
+
+.template-icon {
+  margin-bottom: 8px;
+  color: #3157d5;
+  font-size: 21px;
+}
+
+.pipeline-create-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 18px;
+}
+
+.pipeline-create-grid .wide-field {
+  grid-column: 1 / -1;
+}
+
+.pipeline-create-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.app-content:has(.pipeline-editor-page) {
+  padding: 0;
+  overflow: hidden;
+}
+
+.pipeline-editor-page {
+  height: calc(100vh - 68px);
+  display: flex;
+  flex-direction: column;
+  background: #f4f6fa;
+}
+
+.pipeline-editor-header {
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 18px;
+  border-bottom: 1px solid #e3e7ef;
+  background: #fff;
+}
+
+.pipeline-editor-header h4.ant-typography {
+  margin: 0;
+}
+
+.save-state {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+}
+
+.save-state-saved { color: #26845b; }
+.save-state-saving { color: #3157d5; }
+.save-state-dirty { color: #8c6b15; }
+.save-state-conflict { color: #cf3f4f; }
+
+.pipeline-resource-tabs {
+  min-height: 45px;
+  padding: 0 18px;
+  margin: 0 !important;
+  border-bottom: 1px solid #e3e7ef;
+  background: #fff;
+}
+
+.pipeline-resource-tabs .ant-tabs-nav {
+  margin: 0;
+}
+
+.pipeline-editor-workspace {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 210px minmax(520px, 1fr) 300px;
+}
+
+.pipeline-node-library,
+.pipeline-config-panel {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+  background: #fff;
+}
+
+.pipeline-node-library {
+  border-right: 1px solid #e3e7ef;
+}
+
+.pipeline-config-panel {
+  border-left: 1px solid #e3e7ef;
+}
+
+.editor-panel-title {
+  margin-bottom: 12px;
+  color: #25304a;
+  font-weight: 700;
+}
+
+.pipeline-node-library section {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.library-node {
+  min-height: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 7px 10px;
+  border: 1px solid #dfe4ed;
+  border-left: 3px solid #6580de;
+  border-radius: 8px;
+  color: #26324b;
+  background: #fff;
+  text-align: left;
+  cursor: grab;
+}
+
+.library-node:hover {
+  border-color: #6580de;
+  background: #f7f9ff;
+}
+
+.library-node small {
+  color: #8b94a5;
+  font-size: 10px;
+}
+
+.library-node-输出 { border-left-color: #39a675; }
+.library-node-治理 { border-left-color: #d4932e; }
+
+.pipeline-canvas-column {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(320px, 1fr) 280px;
+}
+
+.pipeline-canvas {
+  min-height: 0;
+  background: #f7f8fb;
+}
+
+.pipeline-canvas-toolbar {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 4;
+  padding: 5px;
+  border: 1px solid #dfe4ed;
+  border-radius: 9px;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 6px 20px rgb(36 49 75 / 10%);
+  transform: translateX(-50%);
+}
+
+.pipeline-node-label {
+  display: grid;
+  min-width: 130px;
+  gap: 2px;
+  text-align: left;
+}
+
+.pipeline-node-label small {
+  color: #8a93a5;
+  font-size: 9px;
+}
+
+.pipeline-node-label span {
+  color: #cf3f4f;
+  font-size: 10px;
+}
+
+.pipeline-config-field {
+  display: grid;
+  gap: 5px;
+  margin-top: 14px;
+}
+
+.pipeline-config-field > span:first-child {
+  color: #596275;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pipeline-config-field .ant-select,
+.pipeline-config-field .ant-input-number {
+  width: 100%;
+}
+
+.pipeline-bottom-panel {
+  min-height: 0;
+  border-top: 1px solid #e3e7ef;
+  background: #fff;
+}
+
+.bottom-panel-header {
+  min-height: 43px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  border-bottom: 1px solid #e9ecf2;
+}
+
+.bottom-panel-body {
+  height: 236px;
+  overflow: auto;
+  padding: 12px;
+}
+
+.validation-list {
+  display: grid;
+  gap: 8px;
+}
+
+.pipeline-resource-content {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  gap: 12px;
+  overflow: auto;
+  padding: 20px;
+}
+
+.pipeline-history-grid {
+  grid-template-columns: 1fr 1.5fr;
+}
+
+.pipeline-history-grid > section {
+  padding: 18px;
+  border: 1px solid #e3e7ef;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.center-loading {
+  min-height: 400px;
+  display: grid;
+  place-items: center;
+}
+
+.pipeline-run-page {
+  display: grid;
+  gap: 16px;
+}
+
+.pipeline-run-page .page-title-row {
+  margin-bottom: 0;
+}
+
+.pipeline-run-page h2.ant-typography {
+  margin-bottom: 0;
+}
+
+.pipeline-run-page .ant-card {
+  border: 1px solid #e3e7ef;
+  box-shadow: 0 5px 18px rgb(36 49 75 / 4%);
+}
+
+.pipeline-run-grid {
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr;
+  gap: 16px;
 }
 
 .ant-alert + .ant-table-wrapper,

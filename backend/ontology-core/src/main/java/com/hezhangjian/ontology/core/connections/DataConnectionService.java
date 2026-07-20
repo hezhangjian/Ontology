@@ -296,6 +296,16 @@ public class DataConnectionService {
                 """ + where + " ORDER BY c.created_at DESC", this::mapCredential, args);
     }
 
+    public RuntimeMaterial runtimeMaterial(UUID sourceId) {
+        DataSource source = get(sourceId);
+        if (source.status() != ConnectionStatus.HEALTHY && source.status() != ConnectionStatus.HEALTHY_RESTRICTED) {
+            throw new ConnectionProblem("CONNECTION_NOT_RUNNABLE", "连接未处于可运行状态");
+        }
+        return new RuntimeMaterial(source.type(), source.config(),
+                credentialValues(source.credential().id(), new Actor("pipeline-runtime", "Pipeline Runtime", true), true),
+                source.status());
+    }
+
     public AssetPage assets(UUID sourceId, int page, int size, String search) {
         get(sourceId);
         int safePage = Math.max(0, page), safeSize = Math.max(1, Math.min(100, size));

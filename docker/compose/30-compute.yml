@@ -24,6 +24,7 @@ x-flink-common: &flink-common
     minio-bootstrap:
       condition: service_completed_successfully
   secrets:
+    - flink_workload_token
     - minio_root_password
     - minio_root_user
   volumes:

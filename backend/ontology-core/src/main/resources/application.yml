@@ -18,6 +18,14 @@ connections:
   allowed-private-hosts: ${CONNECTIONS_ALLOWED_PRIVATE_HOSTS:minio,postgres,pulsar}
   production-mode: ${CONNECTIONS_PRODUCTION_MODE:false}
 
+pipelines:
+  flink-url: ${PIPELINES_FLINK_URL:http://flink-jobmanager:8081}
+  grant-ttl: 15m
+  internal-core-url: ${PIPELINES_INTERNAL_CORE_URL:http://ontology-core:8000}
+  job-jar: ${PIPELINES_JOB_JAR:/app/flink-job.jar}
+  platform-topic: persistent://platform/ingestion
+  workload-token: ${flink_workload_token}
+
 server:
   port: 8000
 

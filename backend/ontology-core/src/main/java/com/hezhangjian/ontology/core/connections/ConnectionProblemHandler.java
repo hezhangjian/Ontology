@@ -24,7 +24,9 @@ public class ConnectionProblemHandler {
     ResponseEntity<Map<String, Object>> connectionProblem(ConnectionProblem problem) {
         HttpStatus status = switch (problem.code()) {
             case "NAME_CONFLICT", "VERSION_CONFLICT", "CONNECTION_DISABLED", "CONNECTION_REFERENCED",
-                 "DELETE_REQUIRES_DISABLED", "SAVEPOINT_REQUIRED" -> HttpStatus.CONFLICT;
+                 "DELETE_REQUIRES_DISABLED", "PIPELINE_NAME_CONFLICT", "PIPELINE_RUN_ACTIVE",
+                 "PIPELINE_STREAM_ACTIVE", "PIPELINE_VERSION_CONFLICT", "PROPOSAL_CLOSED",
+                 "SAVEPOINT_REQUIRED" -> HttpStatus.CONFLICT;
             default -> HttpStatus.UNPROCESSABLE_ENTITY;
         };
         return response(status, problem.code(), problem.getMessage());

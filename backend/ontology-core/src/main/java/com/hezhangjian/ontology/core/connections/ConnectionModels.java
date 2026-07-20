@@ -116,6 +116,10 @@ public final class ConnectionModels {
     public record AssetUsage(List<PipelineSummary> pipelines, int restrictedReferences) {
     }
 
+    public record RuntimeMaterial(DataSourceType type, Map<String, Object> config,
+                                  Map<String, String> credential, ConnectionStatus status) {
+    }
+
     public record Actor(String id, String name, boolean admin) {
     }
 }

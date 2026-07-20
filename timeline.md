@@ -4,9 +4,9 @@
 
 ## 恢复点
 
-- 当前状态：P03 已完成并准备提交。
-- 下一阶段：P04 `feat(pipelines): deliver pipeline builder page`。
-- 继续规则：确认 P03 提交存在且工作树干净，再只领取 P04；P04 涉及前端，完成自动门禁后必须使用内置浏览器真实点击测试。
+- 当前状态：P04 已完成并准备提交。
+- 下一阶段：按用户指令跳过 P05、P06，从 P07 `feat(modeling): deliver ontology management page` 继续。
+- 继续规则：确认 P04 提交存在且工作树干净，再只领取 P07；P07 涉及前端，完成自动门禁后必须使用内置浏览器真实点击测试。P05、P06 仍未实施，除非用户以后明确恢复，不得在本轮补做。
 
 ## Phase 状态
 
@@ -16,9 +16,9 @@
 | P01 | 已完成 | `feat(platform): add authenticated compose foundation`（本记录与 Phase 同一提交） | J/F/O/C + `E:platform-foundation` + 内置浏览器 PKCE 点击通过 |
 | P02 | 已完成 | `feat(storage): add ontology projection foundation`（本记录与 Phase 同一提交） | J/O/C + `E:storage-e2e`；无前端变更 |
 | P03 | 已完成 | `feat(connections): deliver data connections page`（本记录与 Phase 同一提交） | J/F/O + `E:connections-page` + 内置浏览器全流程点击通过 |
-| P04 | 待实施 | `feat(pipelines): deliver pipeline builder page` | `E:pipelines-page` |
-| P05 | 待实施 | `feat(quality): deliver data quality page` | `E:quality-page` |
-| P06 | 待实施 | `feat(lineage): deliver data lineage page` | `E:lineage-page` |
+| P04 | 已完成 | `feat(pipelines): deliver pipeline builder page`（本记录与 Phase 同一提交） | J/F/O/C + `E:pipelines-page` + 内置浏览器全流程点击通过 |
+| P05 | 本轮跳过 | `feat(quality): deliver data quality page` | 按用户指令未实施、未提交 |
+| P06 | 本轮跳过 | `feat(lineage): deliver data lineage page` | 按用户指令未实施、未提交 |
 | P07 | 待实施 | `feat(modeling): deliver ontology management page` | `E:modeling-page` |
 | P08 | 待实施 | `feat(explorer): deliver object exploration page` | `E:explorer-page` |
 | P09 | 待实施 | `feat(dashboards): deliver analytics dashboard page` | `E:dashboards-page` |
@@ -166,6 +166,44 @@
   - E2E 对 API、审计、config、数据库密文和近期服务日志执行明文凭据检查；浏览器和 API 均不返回 Password、Token、Access Key、Secret Key 或可逆密文。
   - 外部 Pulsar 的 URL/tenant 策略与平台内部事件总线隔离；Kafka/Pulsar 预览不提交 offset 或创建持久订阅。
 - 下一恢复点：P03 commit 后从干净工作树开始 P04，只实现 Flink 唯一计算引擎的管道列表、新建、DAG 编辑、配置/发布/运行/调度、运行详情、权限、审计、测试和浏览器手测；不得提前实施 P05。
+
+## P04 — Flink 管道构建完整纵切
+
+- 完成时间：2026-07-20 21:43 CST
+- Commit：`feat(pipelines): deliver pipeline builder page`
+- 范围：
+  - 在唯一 OpenAPI 中交付管道列表、草稿、校验、预览、不可变版本、变更提议、发布/回滚、批流运行、savepoint、offset reset、调度、事件流、Projection ack 和内部工作负载凭据契约。
+  - 以 Flyway V3—V5 建立 pipeline draft/version/dependency/proposal/run/stage/event/checkpoint/schedule/preview/grant/projection batch 控制面；发布版本不可修改，运行固定引用精确版本。
+  - 实现完整 DAG 模型、循环/端口/模式/Schema/输出校验、字段传播、下游失效提示、ETag 乐观锁、自动保存、变更影响和版本化 Pipeline IR/Job Spec。
+  - 构建受控 Flink 通用作业，支持 MinIO/S3 CSV、MySQL、PostgreSQL、Kafka 和外部 Pulsar 源；批流共用 IR 与转换路径，checkpoint 提交消费位置，正式输出只写平台 Pulsar。
+  - 预览使用同一 Flink 作业有界执行，限制行数与 1 MiB、短期缓存、可取消并根据源字段与本体敏感属性脱敏，不写 Pulsar/HugeGraph/OpenSearch。
+  - 运行凭据通过内网 Broker 按 service token、run、签名、状态、scope 和 TTL 交换；IR、program args、API、审计和日志不含明文凭据。
+  - 批任务异步提交并同步 Flink 状态，Flink 结束后进入 PROJECTING，只有 correlation-scoped Projection ledger 全部回执才完成；支持 SSE durable replay、取消、重试、DLQ 重放和流任务 stop-with-savepoint。
+  - 交付紧凑管道表格、URL 筛选、全屏模板向导、React Flow DAG 编辑器、节点库/配置/底部面板、审核/历史和九阶段运行详情。
+- 自动验证：
+  - `make verify-fast`：通过；9 个 Maven reactor project、18 个 Java tests、frontend lint/typecheck/build、OpenAPI recommended lint 和全 profile Compose config 全部通过。
+  - `make e2e-pipelines`：通过；真实验证 MinIO CSV → 有界 Flink preview → 不可变发布 → 正式 Flink → Pulsar → Projection ack，并覆盖 masking、ETag 409、提议审批、v2、回滚、SSE 重放、Viewer 403、审计和 secret hygiene。
+  - Ontology Core/Flink Job/Portal 镜像构建成功，完整依赖服务健康；`git diff --check` 与脚本语法检查通过。
+- 内置浏览器手测：
+  - 从 `http://localhost:9080` 使用 Builder OIDC 登录，点击侧栏“管道构建”，确认 7 条 E2E 管道、生命周期/运行状态分列、模式、调度和负责人均正确；直接访问 frontend 调试端口不作为平台入口。
+  - 点击“新建管道”，填写名称与说明，依次选择真实 MinIO 连接和 `p04-e2e/employees.csv`，点击“创建并打开编辑器”，确认草稿与 DAG 编辑器恢复。
+  - 点击“校验”，确认未配置字段和对象输出被两条 Error 阻止发布；节点库、React Flow 控件、Schema/预览/校验/日志面板、运行与调度设置可见。
+  - 点击“历史”核对空草稿历史；再打开已发布 E2E 管道，确认 v1/v2 不可变版本和 v1 完成运行。
+  - 打开运行详情并点击“刷新”，确认 SUBMITTED 至 COMPLETED 九阶段、读/写 2、拒绝 0、Projection 100%、Flink Job ID、correlation ID、事件时间线和脱敏日志；console warning/error 为 0。
+  - 手测创建并保留本地“浏览器验收草稿”作为可追溯证据；Keycloak 首次登录要求补齐 demo Builder email，已填写 realm 预期的 `builder@ontology.local`。
+- 发现并修复：
+  - Flink 容器挂载配置覆盖镜像默认 Java 17 module opens，导致 `ExecutionContextEnvironment` 初始化失败；补齐官方 `env.java.opts.all` 后预览和正式作业均通过。
+  - 内部回调 POST 被 CSRF 拒绝；只对 `/internal/v1/**` 忽略 CSRF，同时保留 service token 校验。
+  - workload grant 查询中 `g.status` 与 `r.status` 同名，运行状态错误解析为 `ACTIVE` 并拒绝凭据；显式使用 `run_status` alias 后正式运行通过。
+  - proposal insert 仅为 `impact` cast JSONB，`validation` 导致 PostgreSQL 500；两列均显式 cast 后提议/审批/v2 发布通过。
+  - 预览只依据源推断敏感字段，未遮蔽本体 contract 中的 email；合并源敏感标记和对象属性敏感定义后复测为 `••••••`。
+  - stale draft ETag 原映射为 422；统一 pipeline conflict 为 409，并由 E2E 固定回归。
+  - 本机旧 Pulsar BookKeeper 数据卷已损坏且无法恢复启动；明确只删除 `ontology-platform_pulsar-data` 并由幂等 bootstrap 重建，未触碰其他卷。
+- 兼容/安全证据：
+  - Flink Job 模块以 Java 17 bytecode 构建并运行在 Flink 1.20，平台服务仍由 Java 21 Enforcer 管理；通用 Job JAR 在镜像构建期产生并由 Core 按哈希上传。
+  - E2E 检查 Pipeline IR、Job Spec、Core/JobManager/TaskManager 日志均无 MinIO 明文密码；grant 终态撤销且凭据只在 Flink 内存使用。
+  - PostgreSQL 只保存 DAG/版本/运行/审计等控制面，业务对象正文仍只进入 HugeGraph，OpenSearch 仍是可重建投影。
+- 下一恢复点：P04 commit 后按用户指令跳过 P05 数据质量和 P06 数据血缘，从干净工作树开始 P07 本体管理；本轮做到 P09 后停止，不得继续 P10。
 
 ## 后续记录模板
 

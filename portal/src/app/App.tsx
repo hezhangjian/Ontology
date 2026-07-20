@@ -27,6 +27,10 @@ import DataConnectionDetailPage from '../pages/data-connections/DataConnectionDe
 import DataConnectionListPage from '../pages/data-connections/DataConnectionListPage';
 import EditConnectionPage from '../pages/data-connections/EditConnectionPage';
 import NewConnectionPage from '../pages/data-connections/NewConnectionPage';
+import NewPipelinePage from '../pages/pipelines/NewPipelinePage';
+import PipelineEditorPage from '../pages/pipelines/PipelineEditorPage';
+import PipelineListPage from '../pages/pipelines/PipelineListPage';
+import PipelineRunPage from '../pages/pipelines/PipelineRunPage';
 
 const { Content, Header, Sider } = Layout;
 const { Paragraph, Title } = Typography;
@@ -64,7 +68,7 @@ function App({ accessToken, displayName, roles, userId, onLogout }: AppProps) {
     {
       key: 'data-group', type: 'group', label: '数据', children: [
         ...(canBuild ? [{ key: '/data/connections', icon: <DatabaseOutlined />, label: '数据连接' }] : []),
-        { key: '/data/pipelines', icon: <BranchesOutlined />, label: '管道构建', disabled: true },
+        ...(canBuild ? [{ key: '/data/pipelines', icon: <BranchesOutlined />, label: '管道构建' }] : []),
         { key: '/data/quality', icon: <SafetyCertificateOutlined />, label: '数据质量', disabled: true },
         { key: '/data/lineage', icon: <PartitionOutlined />, label: '数据血缘', disabled: true },
       ],
@@ -82,13 +86,15 @@ function App({ accessToken, displayName, roles, userId, onLogout }: AppProps) {
   ], [onLogout]);
 
   const path = window.location.pathname;
-  const crumbs = path.includes('/new') ? ['数据', '数据连接', '新建连接'] : path.includes('/edit') ? ['数据', '数据连接', '编辑配置'] : path.match(/^\/data\/connections\/[^/]+/) ? ['数据', '数据连接', '连接详情'] : ['数据', '数据连接'];
+  const crumbs = path.startsWith('/data/pipelines')
+    ? path.includes('/runs/') ? ['数据', '管道构建', '运行详情'] : path.endsWith('/new') ? ['数据', '管道构建', '新建管道'] : path.includes('/edit') ? ['数据', '管道构建', 'DAG 编辑器'] : ['数据', '管道构建']
+    : path.includes('/new') ? ['数据', '数据连接', '新建连接'] : path.includes('/edit') ? ['数据', '数据连接', '编辑配置'] : path.match(/^\/data\/connections\/[^/]+/) ? ['数据', '数据连接', '连接详情'] : ['数据', '数据连接'];
 
   return (
     <Layout className="app-shell">
       <Sider className="app-sider" collapsed={collapsed} collapsedWidth={72} trigger={null} width={238}>
         <div className="brand" aria-label="Ontology Platform"><div className="brand-mark">O</div>{!collapsed && <div><div className="brand-name">Ontology</div><div className="brand-caption">Platform</div></div>}</div>
-        <Menu className="product-menu" mode="inline" items={navigation} selectedKeys={[path.startsWith('/data/connections') ? '/data/connections' : path]} onClick={({ key }) => navigate(key)} />
+        <Menu className="product-menu" mode="inline" items={navigation} selectedKeys={[path.startsWith('/data/connections') ? '/data/connections' : path.startsWith('/data/pipelines') ? '/data/pipelines' : path]} onClick={({ key }) => navigate(key)} />
         <div className="sider-footer"><Divider /><Button aria-label="控制面板" className="control-button" disabled={!isAdmin} icon={<ControlOutlined />} type="text">{!collapsed && '控制面板'}</Button><Button aria-label={collapsed ? '展开导航' : '折叠导航'} className="collapse-button" icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setCollapsed((current) => !current)} type="text">{!collapsed && '收起导航'}</Button></div>
       </Sider>
       <Layout>
@@ -103,6 +109,14 @@ function App({ accessToken, displayName, roles, userId, onLogout }: AppProps) {
 
 function RouteContent({ accessToken, displayName, isAdmin, location, navigate, userId }: { accessToken: string; displayName: string; isAdmin: boolean; location: string; navigate: (path: string) => void; userId: string }) {
   const path = location.split('?')[0];
+  if (path === '/data/pipelines/new') return <NewPipelinePage accessToken={accessToken} displayName={displayName} navigate={navigate} userId={userId} />;
+  const pipelineRun = path.match(/^\/data\/pipelines\/([^/]+)\/runs\/([^/]+)$/);
+  if (pipelineRun) return <PipelineRunPage accessToken={accessToken} isAdmin={isAdmin} navigate={navigate} pipelineId={pipelineRun[1]} runId={pipelineRun[2]} />;
+  const pipelineProposal = path.match(/^\/data\/pipelines\/([^/]+)\/proposals\/([^/]+)$/);
+  if (pipelineProposal) return <PipelineEditorPage accessToken={accessToken} id={pipelineProposal[1]} initialTab="proposals" isAdmin={isAdmin} navigate={navigate} />;
+  const pipelineEditor = path.match(/^\/data\/pipelines\/([^/]+)(?:\/edit)?$/);
+  if (pipelineEditor) return <PipelineEditorPage accessToken={accessToken} id={pipelineEditor[1]} isAdmin={isAdmin} navigate={navigate} />;
+  if (path === '/data/pipelines') return <PipelineListPage accessToken={accessToken} isAdmin={isAdmin} navigate={navigate} />;
   if (path === '/data/connections/new') return <NewConnectionPage accessToken={accessToken} displayName={displayName} isAdmin={isAdmin} navigate={navigate} userId={userId} />;
   const asset = path.match(/^\/data\/connections\/([^/]+)\/assets\/([^/]+)$/);
   if (asset) return <DataConnectionDetailPage accessToken={accessToken} assetId={asset[2]} id={asset[1]} isAdmin={isAdmin} navigate={navigate} />;

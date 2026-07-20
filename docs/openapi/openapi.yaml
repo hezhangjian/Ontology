@@ -311,6 +311,297 @@ paths:
             application/json:
               schema: {type: array, items: {$ref: '#/components/schemas/CredentialSummary'}}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /ontology/v1/pipelines:
+    get:
+      operationId: listPipelines
+      summary: List authorized pipelines with independent lifecycle and run health
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - {name: search, in: query, schema: {type: string, maxLength: 240}}
+        - {name: mode, in: query, schema: {$ref: '#/components/schemas/PipelineMode'}}
+        - {name: lifecycle, in: query, schema: {$ref: '#/components/schemas/PipelineLifecycle'}}
+        - {name: runStatus, in: query, schema: {$ref: '#/components/schemas/PipelineRunStatus'}}
+        - {name: owner, in: query, schema: {type: string, maxLength: 160}}
+        - {name: sort, in: query, schema: {type: string, enum: [name, lastRun, updatedAt]}}
+      responses:
+        '200': {description: Pipeline page, content: {application/json: {schema: {$ref: '#/components/schemas/PipelinePage'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      operationId: createPipeline
+      summary: Create a typed pipeline draft from a controlled source asset
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CreatePipelineRequest'}}}}
+      responses:
+        '201': {description: Created pipeline draft, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Pipeline'}}}}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/InvalidRequest'}
+  /ontology/v1/pipelines/{pipelineId}:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}]
+    get:
+      operationId: getPipeline
+      summary: Get a pipeline and its recoverable team draft
+      responses:
+        '200': {description: Pipeline, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Pipeline'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      operationId: deletePipelineDraft
+      summary: Permanently delete an unpublished pipeline without runs
+      responses:
+        '204': {description: Deleted}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /ontology/v1/pipelines/{pipelineId}/draft:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}]
+    patch:
+      operationId: updatePipelineDraft
+      summary: Autosave a typed DAG using optimistic locking
+      parameters: [{name: If-Match, in: header, required: true, schema: {type: string}}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/UpdatePipelineDraftRequest'}}}}
+      responses:
+        '200': {description: Saved draft, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Pipeline'}}}}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /ontology/v1/pipelines/{pipelineId}/duplicate:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}]
+    post:
+      operationId: duplicatePipeline
+      summary: Duplicate a pipeline into a new draft
+      responses:
+        '201': {description: Duplicate, content: {application/json: {schema: {$ref: '#/components/schemas/Pipeline'}}}}
+  /ontology/v1/pipelines/{pipelineId}/validate:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}]
+    post:
+      operationId: validatePipelineDraft
+      summary: Validate graph, schema, source, output, batch-stream semantics, runtime and security
+      responses:
+        '200': {description: Validation result, content: {application/json: {schema: {$ref: '#/components/schemas/PipelineValidation'}}}}
+  /ontology/v1/pipelines/{pipelineId}/preview:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}]
+    post:
+      operationId: previewPipelineNode
+      summary: Submit a bounded Flink preview compiled from the same Pipeline IR operators
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PipelinePreviewRequest'}}}}
+      responses:
+        '202': {description: Submitted preview, content: {application/json: {schema: {$ref: '#/components/schemas/PipelinePreview'}}}}
+  /ontology/v1/pipelines/{pipelineId}/versions:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}]
+    get:
+      operationId: listPipelineVersions
+      summary: List immutable published versions
+      responses:
+        '200': {description: Versions, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/PipelineVersion'}}}}}
+  /ontology/v1/pipelines/{pipelineId}/versions/{version}:
+    parameters:
+      - $ref: '#/components/parameters/PipelineId'
+      - {name: version, in: path, required: true, schema: {type: integer, minimum: 1}}
+    get:
+      operationId: getPipelineVersion
+      summary: Get immutable Pipeline IR and signed Flink job specification
+      responses:
+        '200': {description: Version, content: {application/json: {schema: {$ref: '#/components/schemas/PipelineVersion'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /ontology/v1/pipelines/{pipelineId}/diff:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}]
+    get:
+      operationId: diffPipelineDraft
+      summary: Compare active immutable version with the team draft and downstream impact
+      responses:
+        '200': {description: Diff and impact, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+  /ontology/v1/pipelines/{pipelineId}/proposals:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}]
+    get:
+      operationId: listPipelineProposals
+      summary: List change proposals and decisions
+      responses:
+        '200': {description: Proposals, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/PipelineProposal'}}}}}
+    post:
+      operationId: createPipelineProposal
+      summary: Freeze draft evidence and submit a change proposal
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PipelineProposalRequest'}}}}
+      responses:
+        '202': {description: Submitted proposal, content: {application/json: {schema: {$ref: '#/components/schemas/PipelineProposal'}}}}
+  /ontology/v1/pipelines/{pipelineId}/proposals/{proposalId}/approve:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}, {$ref: '#/components/parameters/ProposalId'}]
+    post:
+      operationId: approvePipelineProposal
+      summary: Approve a proposal; high-risk proposals require Admin
+      requestBody: {content: {application/json: {schema: {$ref: '#/components/schemas/PipelineDecisionRequest'}}}}
+      responses:
+        '200': {description: Approved proposal, content: {application/json: {schema: {$ref: '#/components/schemas/PipelineProposal'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /ontology/v1/pipelines/{pipelineId}/proposals/{proposalId}/reject:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}, {$ref: '#/components/parameters/ProposalId'}]
+    post:
+      operationId: rejectPipelineProposal
+      summary: Reject a pipeline proposal with an audit comment
+      requestBody: {content: {application/json: {schema: {$ref: '#/components/schemas/PipelineDecisionRequest'}}}}
+      responses:
+        '200': {description: Rejected proposal, content: {application/json: {schema: {$ref: '#/components/schemas/PipelineProposal'}}}}
+  /ontology/v1/pipelines/{pipelineId}/publish:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}]
+    post:
+      operationId: publishPipeline
+      summary: Transactionally compile and activate an immutable Pipeline IR version
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PublishPipelineRequest'}}}}
+      responses:
+        '200': {description: Published immutable version, content: {application/json: {schema: {$ref: '#/components/schemas/PipelineVersion'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/InvalidRequest'}
+  /ontology/v1/pipelines/{pipelineId}/rollback:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}]
+    post:
+      operationId: rollbackPipeline
+      summary: Activate a historical version for future runs without reverting business data
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/RollbackPipelineRequest'}}}}
+      responses:
+        '200': {description: Updated pipeline, content: {application/json: {schema: {$ref: '#/components/schemas/Pipeline'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /ontology/v1/pipelines/{pipelineId}/run:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}]
+    post:
+      operationId: runBatchPipeline
+      summary: Asynchronously run the active immutable batch version
+      responses:
+        '202': {description: Submitted run, content: {application/json: {schema: {$ref: '#/components/schemas/PipelineRun'}}}}
+  /ontology/v1/pipelines/{pipelineId}/start:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}]
+    post:
+      operationId: startStreamingPipeline
+      summary: Start the active immutable stream version, restoring a compatible savepoint when present
+      responses:
+        '202': {description: Submitted stream run, content: {application/json: {schema: {$ref: '#/components/schemas/PipelineRun'}}}}
+  /ontology/v1/pipelines/{pipelineId}/stop:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}]
+    post:
+      operationId: stopStreamingPipeline
+      summary: Stop a stream with a savepoint by default
+      requestBody: {content: {application/json: {schema: {type: object, properties: {drain: {type: boolean, default: true}}}}}}
+      responses:
+        '202': {description: Stop requested, content: {application/json: {schema: {$ref: '#/components/schemas/PipelineRun'}}}}
+  /ontology/v1/pipelines/{pipelineId}/savepoint:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}]
+    post:
+      operationId: savepointStreamingPipeline
+      summary: Trigger a diagnostic Flink savepoint
+      responses:
+        '202': {description: Savepoint requested, content: {application/json: {schema: {$ref: '#/components/schemas/PipelineRun'}}}}
+  /ontology/v1/pipelines/{pipelineId}/reset-offsets:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}]
+    post:
+      operationId: resetPipelineOffsets
+      summary: Register an Admin-only high-risk offset reset after stop-with-savepoint
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/OffsetResetRequest'}}}}
+      responses:
+        '200': {description: Updated high-risk draft, content: {application/json: {schema: {$ref: '#/components/schemas/Pipeline'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /ontology/v1/pipelines/{pipelineId}/pause:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}]
+    post:
+      operationId: pausePipeline
+      summary: Pause new runs and stop an active stream
+      responses:
+        '200': {description: Paused pipeline, content: {application/json: {schema: {$ref: '#/components/schemas/Pipeline'}}}}
+  /ontology/v1/pipelines/{pipelineId}/resume:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}]
+    post:
+      operationId: resumePipeline
+      summary: Restore eligibility for new runs
+      responses:
+        '200': {description: Resumed pipeline, content: {application/json: {schema: {$ref: '#/components/schemas/Pipeline'}}}}
+  /ontology/v1/pipelines/{pipelineId}/archive:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}]
+    post:
+      operationId: archivePipeline
+      summary: Archive a stopped pipeline while retaining versions, runs and lineage
+      responses:
+        '200': {description: Archived pipeline, content: {application/json: {schema: {$ref: '#/components/schemas/Pipeline'}}}}
+  /ontology/v1/pipelines/{pipelineId}/runs:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}]
+    get:
+      operationId: listPipelineRuns
+      summary: List runs pinned to exact immutable versions
+      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/Size'}]
+      responses:
+        '200': {description: Run page, content: {application/json: {schema: {$ref: '#/components/schemas/PipelineRunPage'}}}}
+  /ontology/v1/pipeline-runs/{runId}:
+    parameters: [{$ref: '#/components/parameters/RunId'}]
+    get:
+      operationId: getPipelineRun
+      summary: Get authoritative stages, events, metrics and safe logs
+      responses:
+        '200': {description: Run detail, content: {application/json: {schema: {$ref: '#/components/schemas/PipelineRunDetail'}}}}
+  /ontology/v1/pipeline-runs/{runId}/events:
+    parameters: [{$ref: '#/components/parameters/RunId'}]
+    get:
+      operationId: listPipelineRunEvents
+      summary: List durable run events
+      responses:
+        '200': {description: Events, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/PipelineRunEvent'}}}}}
+  /ontology/v1/pipeline-runs/{runId}/events/stream:
+    parameters:
+      - {$ref: '#/components/parameters/RunId'}
+      - {in: query, name: afterSequence, schema: {type: integer, format: int64, minimum: 0, default: 0}, description: Resume strictly after this durable event sequence}
+    get:
+      operationId: streamPipelineRunEvents
+      summary: Stream durable run events without submitting or mutating the Flink job
+      responses:
+        '200': {description: Server-sent run events, content: {text/event-stream: {schema: {type: string}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /ontology/v1/pipeline-runs/{runId}/logs:
+    parameters: [{$ref: '#/components/parameters/RunId'}]
+    get:
+      operationId: listPipelineRunLogs
+      summary: List safe control-plane logs without credential material
+      responses:
+        '200': {description: Safe logs, content: {application/json: {schema: {type: array, items: {type: object, additionalProperties: true}}}}}
+  /ontology/v1/pipeline-runs/{runId}/metrics:
+    parameters: [{$ref: '#/components/parameters/RunId'}]
+    get:
+      operationId: getPipelineRunMetrics
+      summary: Get durable run and projection counters
+      responses:
+        '200': {description: Metrics, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+  /ontology/v1/pipeline-runs/{runId}/cancel:
+    parameters: [{$ref: '#/components/parameters/RunId'}]
+    post:
+      operationId: cancelPipelineRun
+      summary: Cancel Flink execution without reverting projected business data
+      responses:
+        '202': {description: Cancellation requested, content: {application/json: {schema: {$ref: '#/components/schemas/PipelineRun'}}}}
+  /ontology/v1/pipeline-runs/{runId}/retry:
+    parameters: [{$ref: '#/components/parameters/RunId'}]
+    post:
+      operationId: retryPipelineRun
+      summary: Create a new run pinned to the original version and retry_of
+      responses:
+        '202': {description: Retry run, content: {application/json: {schema: {$ref: '#/components/schemas/PipelineRun'}}}}
+  /ontology/v1/pipeline-runs/{runId}/replay-dlq:
+    parameters: [{$ref: '#/components/parameters/RunId'}]
+    post:
+      operationId: replayPipelineDlq
+      summary: Admin-only Projection DLQ replay without rereading the source
+      responses:
+        '202': {description: Replay run, content: {application/json: {schema: {$ref: '#/components/schemas/PipelineRun'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /ontology/v1/pipeline-node-types:
+    get:
+      operationId: listPipelineNodeTypes
+      summary: List supported typed DAG nodes and mode constraints
+      responses:
+        '200': {description: Node types, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/PipelineNodeType'}}}}}
+  /ontology/v1/pipeline-previews/{previewId}:
+    parameters: [{$ref: '#/components/parameters/PreviewId'}]
+    get:
+      operationId: getPipelinePreview
+      summary: Get bounded asynchronous Flink preview status and masked rows
+      responses:
+        '200': {description: Preview, content: {application/json: {schema: {$ref: '#/components/schemas/PipelinePreview'}}}}
+  /ontology/v1/pipeline-previews/{previewId}/cancel:
+    parameters: [{$ref: '#/components/parameters/PreviewId'}]
+    post:
+      operationId: cancelPipelinePreview
+      summary: Cancel a bounded Flink preview
+      responses:
+        '202': {description: Cancellation requested}
 components:
   securitySchemes:
     bearerAuth:
@@ -321,6 +612,10 @@ components:
     AssetId: {name: assetId, in: path, required: true, schema: {type: string, format: uuid}}
     DataSourceId: {name: dataSourceId, in: path, required: true, schema: {type: string, format: uuid}}
     Page: {name: page, in: query, schema: {type: integer, default: 0, minimum: 0}}
+    PipelineId: {name: pipelineId, in: path, required: true, schema: {type: string, format: uuid}}
+    PreviewId: {name: previewId, in: path, required: true, schema: {type: string, format: uuid}}
+    ProposalId: {name: proposalId, in: path, required: true, schema: {type: string, format: uuid}}
+    RunId: {name: runId, in: path, required: true, schema: {type: string, format: uuid}}
     Size: {name: size, in: query, schema: {type: integer, default: 20, minimum: 1, maximum: 100}}
   responses:
     Conflict:
@@ -505,6 +800,233 @@ components:
         startedAt: {type: string, format: date-time}
         completedAt: {type: string, format: date-time}
         diagnostic: {$ref: '#/components/schemas/Diagnostic'}
+    CreatePipelineRequest:
+      type: object
+      required: [name, template, mode, dataSourceId, sourceAssetId]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 240}
+        description: {type: string, maxLength: 1000}
+        template: {type: string, enum: [BLANK, DATABASE_BATCH, FILE_BATCH, KAFKA_STREAM, OBJECT_RELATION, PULSAR_STREAM]}
+        mode: {$ref: '#/components/schemas/PipelineMode'}
+        dataSourceId: {type: string, format: uuid}
+        sourceAssetId: {type: string, format: uuid}
+        ownerId: {type: string, maxLength: 160}
+        ownerName: {type: string, maxLength: 240}
+    OffsetResetRequest:
+      type: object
+      required: [position, acknowledgeDuplicateOrLossRisk]
+      properties:
+        position: {type: string, enum: [EARLIEST, LATEST, SPECIFIC_OFFSETS, TIMESTAMP]}
+        timestamp: {type: string, format: date-time}
+        specificOffsets: {type: object, additionalProperties: {type: integer, format: int64, minimum: 0}}
+        acknowledgeDuplicateOrLossRisk: {type: boolean, const: true}
+    Pipeline:
+      type: object
+      required: [id, name, template, mode, lifecycle, runStatus, dataSourceId, dataSourceName, sourceAssetId, sourceAssetName, targetSummary, scheduleSummary, ownerId, ownerName, version, createdAt, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        template: {type: string}
+        mode: {$ref: '#/components/schemas/PipelineMode'}
+        lifecycle: {$ref: '#/components/schemas/PipelineLifecycle'}
+        runStatus: {$ref: '#/components/schemas/PipelineRunStatus'}
+        dataSourceId: {type: string, format: uuid}
+        dataSourceName: {type: string}
+        sourceAssetId: {type: string, format: uuid}
+        sourceAssetName: {type: string}
+        targetSummary: {type: string}
+        scheduleSummary: {type: string}
+        ownerId: {type: string}
+        ownerName: {type: string}
+        publishedVersion: {type: integer, minimum: 1}
+        version: {type: integer, format: int64, minimum: 1}
+        lastRunAt: {type: string, format: date-time}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        draft: {$ref: '#/components/schemas/PipelineDraft'}
+    PipelineDecisionRequest:
+      type: object
+      properties:
+        comment: {type: string, maxLength: 1000}
+    PipelineDraft:
+      type: object
+      required: [graph, runtime, schedule, etag, updatedBy, updatedAt]
+      properties:
+        graph: {$ref: '#/components/schemas/PipelineGraph'}
+        runtime: {$ref: '#/components/schemas/PipelineRuntime'}
+        schedule: {$ref: '#/components/schemas/PipelineSchedule'}
+        baseVersion: {type: integer, minimum: 1}
+        etag: {type: integer, format: int64, minimum: 1}
+        updatedBy: {type: string}
+        updatedAt: {type: string, format: date-time}
+    PipelineEdge:
+      type: object
+      required: [id, source, target]
+      properties:
+        id: {type: string, maxLength: 160}
+        source: {type: string, maxLength: 160}
+        target: {type: string, maxLength: 160}
+    PipelineFieldSchema:
+      type: object
+      required: [name, type, nullable, sensitive, sourceNodeId]
+      properties:
+        name: {type: string}
+        type: {type: string}
+        nullable: {type: boolean}
+        sensitive: {type: boolean}
+        sourceNodeId: {type: string}
+    PipelineGraph:
+      type: object
+      required: [nodes, edges]
+      properties:
+        nodes: {type: array, maxItems: 500, items: {$ref: '#/components/schemas/PipelineNode'}}
+        edges: {type: array, maxItems: 1000, items: {$ref: '#/components/schemas/PipelineEdge'}}
+    PipelineLifecycle:
+      type: string
+      enum: [DRAFT, IN_REVIEW, PUBLISHED, PAUSED, ARCHIVED]
+    PipelineMode:
+      type: string
+      enum: [BATCH, STREAMING]
+    PipelineNode:
+      type: object
+      required: [id, type, name, position, config, inputSchema, outputSchema, invalidReasons]
+      properties:
+        id: {type: string, maxLength: 160}
+        type: {type: string, enum: [SOURCE, SELECT, CAST, FILTER, DERIVE, DEDUPLICATE, JOIN, WINDOW, AGGREGATE, QUALITY, ONTOLOGY_OBJECT, ONTOLOGY_RELATION]}
+        name: {type: string, maxLength: 240}
+        position:
+          type: object
+          required: [x, y]
+          properties: {x: {type: number}, y: {type: number}}
+        config: {type: object, additionalProperties: true, description: 'Typed per node; arbitrary code, SQL and UDFs are rejected.'}
+        inputSchema: {type: array, items: {$ref: '#/components/schemas/PipelineFieldSchema'}}
+        outputSchema: {type: array, items: {$ref: '#/components/schemas/PipelineFieldSchema'}}
+        invalidReasons: {type: array, items: {type: string}}
+    PipelineNodeType:
+      type: object
+      required: [type, label, category, modes, minInputs, maxInputs, source, output, description]
+      properties:
+        type: {type: string}
+        label: {type: string}
+        category: {type: string}
+        modes: {type: array, items: {$ref: '#/components/schemas/PipelineMode'}}
+        minInputs: {type: integer, minimum: 0}
+        maxInputs: {type: integer, minimum: 0}
+        source: {type: boolean}
+        output: {type: boolean}
+        description: {type: string}
+    PipelinePage:
+      type: object
+      required: [items, page, size, total, counts, appliedFilters]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Pipeline'}}
+        page: {type: integer, minimum: 0}
+        size: {type: integer, minimum: 1}
+        total: {type: integer, format: int64, minimum: 0}
+        counts: {type: object, additionalProperties: {type: integer}}
+        appliedFilters: {type: object, additionalProperties: {type: string}}
+    PipelinePreview:
+      type: object
+      required: [id, pipelineId, draftEtag, nodeId, status, rows, schema, startedAt, expiresAt]
+      properties:
+        id: {type: string, format: uuid}
+        pipelineId: {type: string, format: uuid}
+        draftEtag: {type: integer, format: int64}
+        nodeId: {type: string}
+        status: {type: string, enum: [SUBMITTED, RUNNING, COMPLETED, FAILED, CANCELLED, EXPIRED]}
+        flinkJobId: {type: string}
+        rows: {type: array, maxItems: 100, items: {type: object, additionalProperties: true}}
+        schema: {type: array, items: {$ref: '#/components/schemas/PipelineFieldSchema'}}
+        diagnostic: {type: object, additionalProperties: true}
+        startedAt: {type: string, format: date-time}
+        completedAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time}
+    PipelinePreviewRequest:
+      type: object
+      required: [nodeId]
+      properties:
+        nodeId: {type: string, maxLength: 160}
+        limit: {type: integer, minimum: 1, maximum: 100, default: 100}
+    PipelineProposal:
+      type: object
+      required: [id, pipelineId, draftEtag, status, riskLevel, title, validation, impact, submittedBy, submittedByName, submittedAt]
+      properties:
+        id: {type: string, format: uuid}
+        pipelineId: {type: string, format: uuid}
+        draftEtag: {type: integer, format: int64}
+        status: {type: string, enum: [OPEN, APPROVED, REJECTED, SUPERSEDED]}
+        riskLevel: {type: string, enum: [NORMAL, HIGH]}
+        title: {type: string}
+        summary: {type: string}
+        validation: {type: array, items: {$ref: '#/components/schemas/PipelineValidationIssue'}}
+        impact: {type: object, additionalProperties: true}
+        submittedBy: {type: string}
+        submittedByName: {type: string}
+        submittedAt: {type: string, format: date-time}
+        decidedByName: {type: string}
+        decidedAt: {type: string, format: date-time}
+        decisionComment: {type: string}
+    PipelineProposalRequest:
+      type: object
+      required: [title]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 240}
+        summary: {type: string, maxLength: 1000}
+    PipelineRun:
+      type: object
+      required: [id, pipelineId, pipelineName, pipelineVersionId, pipelineVersion, triggerType, status, correlationId, readCount, writtenCount, rejectedCount, requestedByName, startedAt, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        pipelineId: {type: string, format: uuid}
+        pipelineName: {type: string}
+        pipelineVersionId: {type: string, format: uuid}
+        pipelineVersion: {type: integer, minimum: 1}
+        retryOf: {type: string, format: uuid}
+        triggerType: {type: string}
+        status: {type: string}
+        flinkJobId: {type: string}
+        correlationId: {type: string}
+        readCount: {type: integer, format: int64, minimum: 0}
+        writtenCount: {type: integer, format: int64, minimum: 0}
+        rejectedCount: {type: integer, format: int64, minimum: 0}
+        projectionStatus: {type: string}
+        savepointPath: {type: string}
+        diagnostic: {type: object, additionalProperties: true}
+        requestedByName: {type: string}
+        startedAt: {type: string, format: date-time}
+        completedAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    PipelineRunDetail:
+      type: object
+      required: [run, stages, events, metrics, logs]
+      properties:
+        run: {$ref: '#/components/schemas/PipelineRun'}
+        stages: {type: array, items: {type: object, additionalProperties: true}}
+        events: {type: array, items: {$ref: '#/components/schemas/PipelineRunEvent'}}
+        metrics: {type: object, additionalProperties: true}
+        logs: {type: array, items: {type: object, additionalProperties: true}}
+    PipelineRunEvent:
+      type: object
+      required: [sequence, eventType, message, safeDetails, occurredAt]
+      properties:
+        sequence: {type: integer, format: int64, minimum: 1}
+        eventType: {type: string}
+        status: {type: string}
+        message: {type: string}
+        safeDetails: {type: object, additionalProperties: true}
+        occurredAt: {type: string, format: date-time}
+    PipelineRunPage:
+      type: object
+      required: [items, page, size, total]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/PipelineRun'}}
+        page: {type: integer, minimum: 0}
+        size: {type: integer, minimum: 1}
+        total: {type: integer, format: int64, minimum: 0}
+    PipelineRunStatus:
+      type: string
+      enum: [NEVER_RUN, HEALTHY, RUNNING, LIVE, DEGRADED, FAILED]
     PipelineRunSummary:
       type: object
       required: [id, pipelineName, sourceAsset, triggerType, status, startedAt, readCount, writtenCount, rejectedCount]
@@ -531,6 +1053,81 @@ components:
         status: {type: string}
         ownerName: {type: string}
         recentRunAt: {type: string, format: date-time}
+    PipelineRuntime:
+      type: object
+      required: [parallelism, checkpointIntervalMs, restartAttempts, offsetPolicy, watermarkDelayMs]
+      properties:
+        parallelism: {type: integer, minimum: 1, maximum: 4}
+        checkpointIntervalMs: {type: integer, format: int64, minimum: 0}
+        restartAttempts: {type: integer, minimum: 0, maximum: 10}
+        offsetPolicy: {type: string}
+        eventTimeField: {type: string}
+        watermarkDelayMs: {type: integer, format: int64, minimum: 0}
+    PipelineSchedule:
+      type: object
+      required: [type, concurrencyPolicy, enabled]
+      properties:
+        type: {type: string, enum: [MANUAL, CRON, AT]}
+        cronExpression: {type: string}
+        runAt: {type: string, format: date-time}
+        concurrencyPolicy: {type: string, enum: [SKIP, QUEUE, CANCEL_PREVIOUS]}
+        enabled: {type: boolean}
+    PipelineValidation:
+      type: object
+      required: [valid, issues, normalizedGraph, impact, contentHash]
+      properties:
+        valid: {type: boolean}
+        issues: {type: array, items: {$ref: '#/components/schemas/PipelineValidationIssue'}}
+        normalizedGraph: {$ref: '#/components/schemas/PipelineGraph'}
+        impact: {type: object, additionalProperties: true}
+        contentHash: {type: string, pattern: '^[0-9a-f]{64}$'}
+    PipelineValidationIssue:
+      type: object
+      required: [id, category, severity, title, detail, recoveryAction]
+      properties:
+        id: {type: string}
+        category: {type: string, enum: [GRAPH, SCHEMA, SOURCE, OUTPUT, SEMANTICS, RUNTIME, SECURITY]}
+        severity: {type: string, enum: [ERROR, WARNING, INFO]}
+        nodeId: {type: string}
+        title: {type: string}
+        detail: {type: string}
+        recoveryAction: {type: string}
+    PipelineVersion:
+      type: object
+      required: [id, pipelineId, version, graph, pipelineIr, jobSpec, contentHash, validation, publishedBy, publishedByName, publishedAt]
+      properties:
+        id: {type: string, format: uuid}
+        pipelineId: {type: string, format: uuid}
+        version: {type: integer, minimum: 1}
+        graph: {$ref: '#/components/schemas/PipelineGraph'}
+        pipelineIr: {type: object, additionalProperties: true, description: Secret-free ontology.pipeline/v1 IR.}
+        jobSpec: {type: object, additionalProperties: true, description: Signed platform Flink JAR specification.}
+        contentHash: {type: string}
+        validation: {type: array, items: {$ref: '#/components/schemas/PipelineValidationIssue'}}
+        publishedBy: {type: string}
+        publishedByName: {type: string}
+        publishedAt: {type: string, format: date-time}
+    PublishPipelineRequest:
+      type: object
+      required: [acknowledgeWarnings, startAfterPublish]
+      properties:
+        acknowledgeWarnings: {type: boolean}
+        startAfterPublish: {type: boolean}
+        proposalId: {type: string, format: uuid}
+    RollbackPipelineRequest:
+      type: object
+      required: [version, acknowledgeDataNotReverted]
+      properties:
+        version: {type: integer, minimum: 1}
+        acknowledgeDataNotReverted: {type: boolean, const: true}
+    UpdatePipelineDraftRequest:
+      type: object
+      properties:
+        graph: {$ref: '#/components/schemas/PipelineGraph'}
+        runtime: {$ref: '#/components/schemas/PipelineRuntime'}
+        schedule: {$ref: '#/components/schemas/PipelineSchedule'}
+        name: {type: string, minLength: 1, maxLength: 240}
+        description: {type: string, maxLength: 1000}
     Problem:
       type: object
       required: [type, title, status, detail, requestId]

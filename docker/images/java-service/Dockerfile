@@ -29,6 +29,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build "/workspace/backend/${MODULE}/target/${MODULE}-0.1.0-SNAPSHOT.jar" /app/app.jar
+COPY --from=build /workspace/backend/flink-job/target/flink-job-0.1.0-SNAPSHOT.jar /app/flink-job.jar
 COPY --from=agent /tmp/skywalking/skywalking-agent.jar /opt/skywalking/skywalking-agent.jar
 COPY --from=agent /tmp/skywalking/config /opt/skywalking/config
 COPY --from=agent /tmp/skywalking/plugins /opt/skywalking/plugins

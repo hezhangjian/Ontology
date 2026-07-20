@@ -34,6 +34,7 @@ services:
       SW_AGENT_NAME: ontology-core
     secrets:
       - connection_master_key
+      - flink_workload_token
       - minio_root_password
       - minio_root_user
       - postgres_password
