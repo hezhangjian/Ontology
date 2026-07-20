@@ -3,9 +3,12 @@ services:
     image: ${HUGEGRAPH_IMAGE}
     profiles: [core]
     environment:
+      JAVA_OPTS: -Xms256m -Xmx768m
       PRELOAD: "false"
     volumes:
+      - ../scripts/start-hugegraph.sh:/opt/platform/start-hugegraph.sh:ro
       - hugegraph-data:/hugegraph/hugegraph-server/hugegraph-dist
+    command: [/bin/bash, /opt/platform/start-hugegraph.sh]
     healthcheck:
       test: [CMD-SHELL, curl -fsS http://localhost:8080/versions >/dev/null]
       interval: 15s

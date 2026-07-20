@@ -27,4 +27,4 @@ The workspace contains:
 
 Runtime secrets must not be committed. The files under `secrets/examples/` are conspicuous local-only placeholders. Set `SECRET_DIR` to a protected directory containing files with the same names before any shared or production deployment.
 
-See the [P01 Compose runbook](../docs/runbooks/p01-compose-foundation.md) for startup, validation, and recovery procedures.
+See the [P01 Compose runbook](../docs/runbooks/p01-compose-foundation.md) for startup and foundation recovery, and the [P02 projection runbook](../docs/runbooks/p02-projection-storage.md) for ledger, DLQ, and index rebuild operations.

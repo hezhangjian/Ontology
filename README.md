@@ -26,9 +26,10 @@ make verify-fast
 make compose-build
 make compose-up
 make e2e-platform-foundation
+make e2e-storage
 ```
 
-浏览器访问 `http://localhost:9080/data/connections`，通过 Keycloak 完成 PKCE 登录。仓库内示例密码仅用于本机验证；部署前必须按 [P01 运行手册](docs/runbooks/p01-compose-foundation.md) 替换全部 secret。
+浏览器访问 `http://localhost:9080/data/connections`，通过 Keycloak 完成 PKCE 登录。仓库内示例密码仅用于本机验证；部署前必须按 [P01 运行手册](docs/runbooks/p01-compose-foundation.md) 替换全部 secret。投影一致性、DLQ 和索引重建操作见 [P02 运行手册](docs/runbooks/p02-projection-storage.md)。
 
 ## 目录
 

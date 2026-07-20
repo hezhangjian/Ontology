@@ -1,6 +1,15 @@
 spring:
   application:
     name: ontology-core
+  config:
+    import: optional:configtree:/run/secrets/
+  datasource:
+    password: ${postgres_password}
+    url: ${ONTOLOGY_POSTGRES_URL:jdbc:postgresql://postgres:5432/ontology}
+    username: ${ONTOLOGY_POSTGRES_USER:ontology}
+  flyway:
+    default-schema: control
+    schemas: control
 
 server:
   port: 8000

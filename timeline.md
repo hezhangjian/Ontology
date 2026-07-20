@@ -4,9 +4,9 @@
 
 ## 恢复点
 
-- 当前状态：P01 已完成并准备提交。
-- 下一阶段：P02 `feat(storage): add ontology projection foundation`。
-- 继续规则：确认 P01 提交存在且工作树干净，再只领取 P02；不得提前实现 P03 页面 Phase。
+- 当前状态：P02 已完成并准备提交。
+- 下一阶段：P03 `feat(connections): deliver data connections page`。
+- 继续规则：确认 P02 提交存在且工作树干净，再只领取 P03；P03 涉及前端，完成自动门禁后必须使用内置浏览器真实点击测试。
 
 ## Phase 状态
 
@@ -14,7 +14,7 @@
 |---|---|---|---|
 | P00 | 已完成 | `build(platform): establish project baseline`（本记录与 Phase 同一提交） | J/F/O/C + 内置浏览器点击通过 |
 | P01 | 已完成 | `feat(platform): add authenticated compose foundation`（本记录与 Phase 同一提交） | J/F/O/C + `E:platform-foundation` + 内置浏览器 PKCE 点击通过 |
-| P02 | 待实施 | `feat(storage): add ontology projection foundation` | `E:storage-e2e` |
+| P02 | 已完成 | `feat(storage): add ontology projection foundation`（本记录与 Phase 同一提交） | J/O/C + `E:storage-e2e`；无前端变更 |
 | P03 | 待实施 | `feat(connections): deliver data connections page` | `E:connections-page` |
 | P04 | 待实施 | `feat(pipelines): deliver pipeline builder page` | `E:pipelines-page` |
 | P05 | 待实施 | `feat(quality): deliver data quality page` | `E:quality-page` |
@@ -96,6 +96,39 @@
   - MinIO 使用 D-012 冻结的公共镜像，保持 Compose 私网且不暴露 API/Console；其维护时效风险记录在 P01 evidence/runbook。
   - OpenSearch 安全插件仅在 P01 私有网络关闭，禁止公网暴露；生产硬化属于 P16。
 - 下一恢复点：从干净工作树开始 P02，只实现控制面 Flyway、事件/Mutation 契约、Projection Worker、双存储投影、幂等/retry/DLQ/重建和 `E:storage-e2e`，不得提前实现 P03 数据连接页面。
+
+## P02 — 本体投影与存储基础
+
+- 完成时间：2026-07-20 17:10 CST
+- Commit：`feat(storage): add ontology projection foundation`
+- 范围：
+  - 为 Ontology Core 增加 Flyway PostgreSQL 控制面，建立不可变本体 revision/type/property/relation 元数据、event/operation ledger、failure 和 index rebuild job；从 V1 起不创建对象正文表。
+  - 在 `platform-contracts` 冻结 snake_case 的 ontology event、source lineage、typed mutation edit/batch 和 index rebuild command，并增加序列化契约测试。
+  - 实现独立 Projection Worker 的 Pulsar Key_Shared 消费、revision/类型/属性校验、事件幂等、版本乱序拒绝、graph checkpoint、negative ack 重试、安全 failure ledger 和显式 DLQ。
+  - HugeGraph 保存完整对象/关系 payload 和事实版本；OpenSearch 只保存 searchable 且非 sensitive 字段，使用隔离的 `platform-ontology-*` template/index/alias 命名，不触碰既有同名 legacy 数据。
+  - Mutation 小批次先全量校验，以调用方幂等键生成稳定 event ID，在一个 HugeGraph Gremlin 事务中提交最多 100 个混合 object/relation edit，再逐项投影搜索；重试从 graph checkpoint 续跑。
+  - 实现 tombstone 删除、从 HugeGraph 全量读取并重建 OpenSearch timestamped index、成功后原子切换 alias，以及 rebuild command 幂等。
+  - 新增真实 Pulsar/HugeGraph/OpenSearch/PostgreSQL `E:storage-e2e`、固定 fixtures、架构说明、验证证据和故障/DLQ/重建 runbook。
+- 自动验证：
+  - `make verify-fast`：通过；9 个 Maven reactor project、5 个 Java tests、frontend lint/typecheck/build、OpenAPI lint 和全 profile Compose config 全部通过。
+  - `make compose-build`：Agent Runtime、BFF、Flink、Maintenance Runner、Ontology Core、Portal 和 Projection Worker 镜像全部成功构建。
+  - `make compose-up` + `docker/scripts/healthcheck.sh`：所有声明健康检查的长期服务 healthy；Maintenance Runner 与无 Web 端口的 Projection Worker 保持 running；两个 bootstrap 服务 completed。
+  - `make e2e-storage`：在完整镜像重建后重复通过，验证 event/batch 幂等、v2 覆盖与 v1 stale、三 edit 原子事务、关系双写、tombstone、敏感字段过滤、永久错误 DLQ、搜索恢复、alias 重建和 Postgres 数据所有权。
+  - `git diff --check`、两个 shell 脚本 `sh -n`：通过。
+- 前端/内置浏览器：P02 没有新增或修改用户界面，按用户规则无需浏览器点击；P00/P01 的认证外壳未改变。
+- 真实故障恢复证据：
+  - 停止 OpenSearch 后发布新对象，ledger 达到 `DEGRADED` 且 HugeGraph graph ID 已落库；恢复 OpenSearch 和 consumer 后同一事件以 attempt 2 达到 `PROJECTED`，没有重复图写入。
+  - 永久 unknown property 事件同时增加 `CONTRACT_INVALID` failure 和 partitioned DLQ counter；有效事件耗尽重试时保留 `DLQ` 和每次安全失败记录。
+  - 重建 job 成功扫描 5 个当前图对象，创建 `platform-ontology-objects-rebuild-*`，数据库 `target_index` 与 alias 实际目标一致。
+- 发现并修复：
+  - HugeGraph 默认 Gremlin 只监听 loopback，增加私网 launcher 绑定 `0.0.0.0:8182`，端口不发布到宿主机；同时将默认 3.3 GiB heap 限制为 768 MiB，避免完整栈内存压力杀死 Java child 而 PID 1 仍存活。
+  - HugeGraph PRIMARY_KEY 顶点不能再建同字段二级索引；改由 vertex label ID 和稳定 primary key 直接定位单对象，关系 key 保留合法 secondary index。
+  - HugeGraph 批事务要求创建 edge 时一次提供全部 non-null properties，并禁止重写 primary/sort key；Gremlin batch builder 已分别处理 create/update/delete。
+  - HugeGraph 列表响应强制 gzip，即使请求 identity；Storage HTTP client 改为按 `Content-Encoding` 解压，索引重建随后通过。
+  - PostgreSQL driver 不能直接推断 `Instant` 参数；rebuild requested time 显式转换为 `Timestamp`。
+  - Pulsar CLI 的 `--messages` 会按逗号拆分 JSON；全部 E2E 改用容器内文件与 `--files`，并在证据文档固定这一约束。
+  - 发现本机 OpenSearch 卷已有用户/legacy `ontology-objects` index；新投影统一使用 `platform-ontology-*` namespace，删除仅由本次误探创建的空 template，未删除或覆盖 legacy index。
+- 下一恢复点：P02 commit 后从干净工作树开始 P03，以“数据连接”完整 vertical slice 交付 OpenAPI、Flyway、加密凭据、连接测试/资产发现/Schema 预览、列表/向导/详情、权限、审计、测试和浏览器手测；不得提前实施 P04。
 
 ## 后续记录模板
 

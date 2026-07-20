@@ -32,6 +32,8 @@ services:
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/realms/ontology/protocol/openid-connect/certs
       SW_AGENT_COLLECTOR_BACKEND_SERVICES: skywalking-oap:11800
       SW_AGENT_NAME: ontology-core
+    secrets:
+      - postgres_password
     healthcheck:
       test: [CMD-SHELL, curl -fsS http://localhost:8000/actuator/health/readiness | grep -q '"status":"UP"']
       interval: 10s
@@ -54,6 +56,8 @@ services:
     depends_on:
       hugegraph:
         condition: service_healthy
+      ontology-core:
+        condition: service_healthy
       opensearch:
         condition: service_healthy
       postgres:
@@ -61,8 +65,11 @@ services:
       pulsar-bootstrap:
         condition: service_completed_successfully
     environment:
+      SPRING_CONFIG_IMPORT: configtree:/run/secrets/
       SW_AGENT_COLLECTOR_BACKEND_SERVICES: skywalking-oap:11800
       SW_AGENT_NAME: projection-worker
+    secrets:
+      - postgres_password
 
   maintenance-runner:
     <<: *java-common

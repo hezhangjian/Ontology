@@ -1,6 +1,20 @@
 spring:
   application:
     name: projection-worker
+  config:
+    import: optional:configtree:/run/secrets/
+  datasource:
+    password: ${postgres_password}
+    url: ${ONTOLOGY_POSTGRES_URL:jdbc:postgresql://postgres:5432/ontology}
+    username: ${ONTOLOGY_POSTGRES_USER:ontology}
   main:
     keep-alive: true
     web-application-type: none
+
+projection:
+  hugegraph-gremlin-url: ${HUGEGRAPH_GREMLIN_URL:http://hugegraph:8182}
+  hugegraph-url: ${HUGEGRAPH_URL:http://hugegraph:8080}
+  max-retries: ${PROJECTION_MAX_RETRIES:3}
+  opensearch-url: ${OPENSEARCH_URL:http://opensearch:9200}
+  pulsar-url: ${PULSAR_URL:pulsar://pulsar:6650}
+  retry-delay: ${PROJECTION_RETRY_DELAY:10s}

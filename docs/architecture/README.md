@@ -10,3 +10,7 @@ Implementation evidence must preserve these boundaries:
 - OpenSearch is a rebuildable search projection.
 - PostgreSQL contains no business-object bodies.
 - Projection Worker is the only production projection path to HugeGraph and OpenSearch.
+
+Implemented architecture notes:
+
+- [P02 ontology projection foundation](p02-projection-foundation.md)
