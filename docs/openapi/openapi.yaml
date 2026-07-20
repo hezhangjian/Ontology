@@ -903,6 +903,99 @@ paths:
   /ontology/v1/bulk-action-jobs/{bulkJobId}/cancel:
     parameters: [{$ref: '#/components/parameters/BulkJobId'}]
     post: {operationId: cancelBulkActionJob, summary: Cancel future batches without reverting successful object effects, responses: {'200': {description: Bulk job, content: {application/json: {schema: {$ref: '#/components/schemas/BulkActionJob'}}}}, '409': {$ref: '#/components/responses/Conflict'}}}
+  /ontology/v1/dashboards:
+    get:
+      operationId: listDashboards
+      summary: List permission-trimmed dashboards with lifecycle, health and favorite state
+      parameters: [{name: keyword, in: query, schema: {type: string, maxLength: 240}}, {name: lifecycle, in: query, schema: {type: string}}, {name: favorites, in: query, schema: {type: boolean, default: false}}]
+      responses: {'200': {description: Dashboards, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/DashboardSummary'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+    post:
+      operationId: createDashboard
+      summary: Create a normalized blank dashboard draft owned by the caller
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardCreateRequest'}}}}
+      responses: {'201': {description: Dashboard, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardDetail'}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}}
+  /ontology/v1/dashboards/{dashboardId}:
+    parameters: [{$ref: '#/components/parameters/DashboardId'}]
+    get: {operationId: getDashboard, summary: Get dashboard metadata and the caller-visible active definition, responses: {'200': {description: Dashboard, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardDetail'}}}}, '404': {$ref: '#/components/responses/NotFound'}}}
+    patch:
+      operationId: updateDashboard
+      summary: Update Owner-controlled metadata with ETag protection
+      parameters: [{name: If-Match, in: header, required: true, schema: {type: string}}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardCreateRequest'}}}}
+      responses: {'200': {description: Dashboard, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardDetail'}}}}, '409': {$ref: '#/components/responses/Conflict'}}
+    delete: {operationId: deleteEmptyDashboardDraft, summary: Permanently delete an unpublished dependency-free empty draft, responses: {'204': {description: Deleted}, '409': {$ref: '#/components/responses/Conflict'}}}
+  /ontology/v1/dashboards/{dashboardId}/copy:
+    parameters: [{$ref: '#/components/parameters/DashboardId'}]
+    post: {operationId: copyDashboard, summary: Copy definitions and exact dependency references into a private caller-owned draft, responses: {'201': {description: Copy, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardDetail'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}}
+  /ontology/v1/dashboards/{dashboardId}/archive:
+    parameters: [{$ref: '#/components/parameters/DashboardId'}]
+    post: {operationId: archiveDashboard, summary: Archive a dashboard while retaining immutable versions and dependency evidence, responses: {'200': {description: Archived dashboard, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardDetail'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}}
+  /ontology/v1/dashboards/{dashboardId}/restore:
+    parameters: [{$ref: '#/components/parameters/DashboardId'}]
+    post: {operationId: restoreDashboard, summary: Restore an archived dashboard without changing its published version, responses: {'200': {description: Restored dashboard, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardDetail'}}}}, '409': {$ref: '#/components/responses/Conflict'}}}
+  /ontology/v1/dashboards/{dashboardId}/draft:
+    parameters: [{$ref: '#/components/parameters/DashboardId'}]
+    get: {operationId: getDashboardDraft, summary: Get or create the active typed draft from the current immutable version, responses: {'200': {description: Draft with ETag response header, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardDraft'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}}
+    put:
+      operationId: saveDashboardDraft
+      summary: Save a typed draft under an ETag and active single-editor lease
+      parameters: [{name: If-Match, in: header, required: true, schema: {type: string}}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardDefinition'}}}}
+      responses: {'200': {description: Saved draft, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardDraft'}}}}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/InvalidRequest'}}
+  /ontology/v1/dashboards/{dashboardId}/edit-lock:
+    parameters: [{$ref: '#/components/parameters/DashboardId'}]
+    post: {operationId: acquireDashboardEditLock, summary: Acquire a renewable fifteen-minute editor lease or perform audited Owner takeover, requestBody: {content: {application/json: {schema: {type: object, properties: {force: {type: boolean, default: false}}}}}}, responses: {'200': {description: Edit lock, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardEditLock'}}}}, '409': {$ref: '#/components/responses/Conflict'}}}
+    delete: {operationId: releaseDashboardEditLock, summary: Release the caller-held editor lease, responses: {'204': {description: Released}, '403': {$ref: '#/components/responses/Forbidden'}}}
+  /ontology/v1/dashboards/{dashboardId}/edit-lock/renew:
+    parameters: [{$ref: '#/components/parameters/DashboardId'}]
+    post: {operationId: renewDashboardEditLock, summary: Renew the caller-held editor lease, responses: {'200': {description: Edit lock, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardEditLock'}}}}, '409': {$ref: '#/components/responses/Conflict'}}}
+  /ontology/v1/dashboards/{dashboardId}/validate:
+    parameters: [{$ref: '#/components/parameters/DashboardId'}]
+    post: {operationId: validateDashboard, summary: 'Validate layout, typed sources, filters, aggregation safety, dependencies and query cost', responses: {'200': {description: Validation, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardValidation'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}}
+  /ontology/v1/dashboards/{dashboardId}/publish:
+    parameters: [{$ref: '#/components/parameters/DashboardId'}]
+    post: {operationId: publishDashboard, summary: Validate and atomically publish an immutable dashboard definition and query plan, requestBody: {content: {application/json: {schema: {type: object, properties: {releaseNotes: {type: string, maxLength: 4000}}}}}}, responses: {'200': {description: Published version, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardVersion'}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}, '503': {$ref: '#/components/responses/Unavailable'}}}
+  /ontology/v1/dashboards/{dashboardId}/versions:
+    parameters: [{$ref: '#/components/parameters/DashboardId'}]
+    get: {operationId: listDashboardVersions, summary: List immutable published dashboard versions, responses: {'200': {description: Versions, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/DashboardVersion'}}}}}, '404': {$ref: '#/components/responses/NotFound'}}}
+  /ontology/v1/dashboards/{dashboardId}/versions/diff:
+    parameters: [{$ref: '#/components/parameters/DashboardId'}, {name: from, in: query, required: true, schema: {type: string, format: uuid}}, {name: to, in: query, required: true, schema: {type: string, format: uuid}}]
+    get: {operationId: diffDashboardVersions, summary: Return a structured definition and dependency diff between immutable versions, responses: {'200': {description: Diff, content: {application/json: {schema: {type: object, additionalProperties: true}}}}, '404': {$ref: '#/components/responses/NotFound'}}}
+  /ontology/v1/dashboards/{dashboardId}/versions/{dashboardVersionId}:
+    parameters: [{$ref: '#/components/parameters/DashboardId'}, {$ref: '#/components/parameters/DashboardVersionId'}]
+    get: {operationId: getDashboardVersion, summary: Get a fixed immutable definition that still runs against current data and permissions, responses: {'200': {description: Version, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardVersion'}}}}, '404': {$ref: '#/components/responses/NotFound'}}}
+  /ontology/v1/dashboards/{dashboardId}/versions/{dashboardVersionId}/create-draft:
+    parameters: [{$ref: '#/components/parameters/DashboardId'}, {$ref: '#/components/parameters/DashboardVersionId'}]
+    post: {operationId: createDashboardDraftFromVersion, summary: Copy a historical definition into a new draft without moving the live pointer, responses: {'200': {description: Draft, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardDraft'}}}}, '409': {$ref: '#/components/responses/Conflict'}}}
+  /ontology/v1/dashboards/{dashboardId}/permissions:
+    parameters: [{$ref: '#/components/parameters/DashboardId'}]
+    get: {operationId: listDashboardPermissions, summary: List definition-access grants without granting underlying data access, responses: {'200': {description: Permissions, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/DashboardPermission'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}}}
+    put: {operationId: replaceDashboardPermissions, summary: Replace Owner-managed definition-access grants, requestBody: {required: true, content: {application/json: {schema: {type: object, required: [permissions], properties: {permissions: {type: array, items: {$ref: '#/components/schemas/DashboardPermission'}}}}}}}, responses: {'200': {description: Permissions, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/DashboardPermission'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}}}
+  /ontology/v1/dashboards/{dashboardId}/favorite:
+    parameters: [{$ref: '#/components/parameters/DashboardId'}]
+    put: {operationId: favoriteDashboard, summary: Add a personal favorite without changing the published definition, responses: {'204': {description: Favorited}, '404': {$ref: '#/components/responses/NotFound'}}}
+    delete: {operationId: unfavoriteDashboard, summary: Remove a personal favorite, responses: {'204': {description: Removed}, '404': {$ref: '#/components/responses/NotFound'}}}
+  /ontology/v1/dashboards/{dashboardId}/health:
+    parameters: [{$ref: '#/components/parameters/DashboardId'}]
+    get: {operationId: getDashboardHealth, summary: 'Get issues localized to version, page, widget, source and dependency', responses: {'200': {description: Health, content: {application/json: {schema: {type: object, additionalProperties: true}}}}, '404': {$ref: '#/components/responses/NotFound'}}}
+  /ontology/v1/dashboards/{dashboardId}/usage:
+    parameters: [{$ref: '#/components/parameters/DashboardId'}]
+    get: {operationId: getDashboardUsage, summary: Get threshold-safe aggregate query usage metadata, responses: {'200': {description: Usage, content: {application/json: {schema: {type: object, additionalProperties: true}}}}, '403': {$ref: '#/components/responses/Forbidden'}}}
+  /ontology/v1/dashboards/{dashboardId}/query-plan:
+    parameters: [{$ref: '#/components/parameters/DashboardId'}]
+    get: {operationId: getDashboardQueryPlan, summary: Get the current immutable permission-scoped query plan metadata, responses: {'200': {description: Query plan, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardQueryPlan'}}}}, '409': {$ref: '#/components/responses/Conflict'}}}
+  /ontology/v1/dashboard-query-plans/{dashboardPlanId}/execute:
+    parameters: [{$ref: '#/components/parameters/DashboardPlanId'}]
+    post: {operationId: executeDashboardWidget, summary: Execute one published widget through its typed plan under the current caller, requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardExecuteRequest'}}}}, responses: {'202': {description: Query run, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardBatchResult'}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}, '503': {$ref: '#/components/responses/Unavailable'}}}
+  /ontology/v1/dashboard-query-plans/{dashboardPlanId}/widgets:batch:
+    parameters: [{$ref: '#/components/parameters/DashboardPlanId'}]
+    post: {operationId: executeDashboardWidgetBatch, summary: Execute up to twenty visible widgets with partial-failure isolation and caller-scoped cache, requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardExecuteRequest'}}}}, responses: {'202': {description: Batch query run, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardBatchResult'}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}, '503': {$ref: '#/components/responses/Unavailable'}}}
+  /ontology/v1/dashboard-query-plans/{dashboardPlanId}/filter-options:
+    parameters: [{$ref: '#/components/parameters/DashboardPlanId'}]
+    post: {operationId: getDashboardFilterOptions, summary: Get permission-filtered candidate values from an explicit stable-property binding, requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: true}}}}, responses: {'200': {description: Options, content: {application/json: {schema: {type: array, items: {type: object, additionalProperties: true}}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}}}
+  /ontology/v1/dashboard-query-plans/{dashboardPlanId}/drilldown-token:
+    parameters: [{$ref: '#/components/parameters/DashboardPlanId'}]
+    post: {operationId: createDashboardDrilldownToken, summary: Sign a caller-bound short-lived declared drilldown without exposing suppressed groups, requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: true}}}}, responses: {'200': {description: Drilldown token, content: {application/json: {schema: {type: object, additionalProperties: true}}}}, '403': {$ref: '#/components/responses/Forbidden'}}}
 components:
   securitySchemes:
     bearerAuth:
@@ -914,6 +1007,9 @@ components:
     DataSourceId: {name: dataSourceId, in: path, required: true, schema: {type: string, format: uuid}}
     DeploymentId: {name: deploymentId, in: path, required: true, schema: {type: string, format: uuid}}
     BulkJobId: {name: bulkJobId, in: path, required: true, schema: {type: string, format: uuid}}
+    DashboardId: {name: dashboardId, in: path, required: true, schema: {type: string, format: uuid}}
+    DashboardPlanId: {name: dashboardPlanId, in: path, required: true, schema: {type: string, format: uuid}}
+    DashboardVersionId: {name: dashboardVersionId, in: path, required: true, schema: {type: string, format: uuid}}
     ExplorationId: {name: explorationId, in: path, required: true, schema: {type: string, format: uuid}}
     ExportJobId: {name: exportJobId, in: path, required: true, schema: {type: string, format: uuid}}
     ListId: {name: listId, in: path, required: true, schema: {type: string, format: uuid}}
@@ -949,6 +1045,207 @@ components:
       description: Required object search, graph or export storage is unavailable
       content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
   schemas:
+    DashboardCreateRequest:
+      type: object
+      required: [name, visibility, refreshPolicy]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 240}
+        description: {type: string, maxLength: 4000}
+        visibility: {type: string, enum: [PRIVATE, USERS, GROUPS, TEAM, ORGANIZATION]}
+        refreshPolicy: {type: string, enum: [MANUAL, OFF, 1_MIN, 5_MIN, 15_MIN, 60_MIN]}
+        tags: {type: array, items: {type: string, maxLength: 80}}
+    DashboardSummary:
+      type: object
+      required: [id, name, description, lifecycle, pageCount, widgetCount, ownerName, visibility, refreshPolicy, healthStatus, favorite, etag, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        lifecycle: {type: string, enum: [DRAFT, VALIDATING, READY, PUBLISHING, PUBLISHED, VALIDATION_FAILED, PUBLISH_FAILED, ARCHIVED]}
+        currentVersion: {type: integer}
+        pageCount: {type: integer, minimum: 0, maximum: 10}
+        widgetCount: {type: integer, minimum: 0, maximum: 100}
+        ownerName: {type: string}
+        visibility: {type: string}
+        refreshPolicy: {type: string}
+        healthStatus: {type: string, enum: [HEALTHY, WARNING, ERROR, UNKNOWN]}
+        favorite: {type: boolean}
+        etag: {type: integer, format: int64}
+        updatedAt: {type: string, format: date-time}
+        lastPublishedAt: {type: string, format: date-time}
+    DashboardPage:
+      type: object
+      required: [id, name, description, order]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string, minLength: 1, maxLength: 160}
+        description: {type: string, maxLength: 4000}
+        order: {type: integer, minimum: 0, maximum: 9}
+    DashboardDataSource:
+      type: object
+      required: [id, name, kind, objectTypeId, query]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string, maxLength: 160}
+        kind: {type: string, enum: [OBJECT_SET, EXPLORATION, OBJECT_LIST, FUNCTION]}
+        objectTypeId: {type: string, format: uuid}
+        referenceId: {type: string, format: uuid}
+        referenceVersion: {type: integer, minimum: 1}
+        query: {type: object, additionalProperties: true, description: Restricted Object Set AST; never native storage DSL.}
+        ontologyRevision: {type: integer, format: int64}
+    DashboardWidget:
+      type: object
+      required: [id, pageId, type, title, description, layout, config, interaction]
+      properties:
+        id: {type: string, format: uuid}
+        pageId: {type: string, format: uuid}
+        dataSourceId: {type: string, format: uuid}
+        type: {type: string, enum: [METRIC, LINE, AREA, BAR, STACKED_BAR, PIE, DONUT, SCATTER, OBJECT_TABLE, PIVOT, MARKDOWN, FILTER, SECTION]}
+        title: {type: string, maxLength: 240}
+        description: {type: string, maxLength: 4000}
+        layout: {type: object, additionalProperties: {type: object, additionalProperties: {type: integer}}}
+        config: {type: object, additionalProperties: true, description: Versioned schema-validated widget configuration; scripts and native queries are forbidden.}
+        interaction: {type: object, additionalProperties: true}
+    DashboardFilterVariable:
+      type: object
+      required: [id, name, valueType, controlType, scope, required, allowEmpty, sensitive, applyMode]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string, maxLength: 160}
+        valueType: {type: string}
+        controlType: {type: string, enum: [DROPDOWN, MULTISELECT, DATE_RANGE, NUMBER_RANGE, BOOLEAN, OBJECT_REF]}
+        scope: {type: string, enum: [GLOBAL, PAGE, WIDGET]}
+        scopeId: {type: string, format: uuid}
+        defaultValue: {}
+        required: {type: boolean}
+        allowEmpty: {type: boolean}
+        sensitive: {type: boolean}
+        applyMode: {type: string, enum: [AUTO, MANUAL, DEFERRED]}
+    DashboardFilterBinding:
+      type: object
+      required: [filterId, dataSourceId, propertyId, operator]
+      properties:
+        filterId: {type: string, format: uuid}
+        dataSourceId: {type: string, format: uuid}
+        propertyId: {type: string, format: uuid}
+        operator: {type: string, enum: [eq, in, gt, gte, lt, lte, between, starts_with, recent_days]}
+    DashboardDefinition:
+      type: object
+      required: [schemaVersion, pages, dataSources, widgets, filters, filterBindings, settings]
+      properties:
+        schemaVersion: {type: integer, enum: [1]}
+        pages: {type: array, minItems: 1, maxItems: 10, items: {$ref: '#/components/schemas/DashboardPage'}}
+        dataSources: {type: array, items: {$ref: '#/components/schemas/DashboardDataSource'}}
+        widgets: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/DashboardWidget'}}
+        filters: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/DashboardFilterVariable'}}
+        filterBindings: {type: array, items: {$ref: '#/components/schemas/DashboardFilterBinding'}}
+        settings: {type: object, additionalProperties: true}
+    DashboardDraft:
+      type: object
+      required: [id, dashboardId, definition, etag, status, updatedBy, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        dashboardId: {type: string, format: uuid}
+        baseVersionId: {type: string, format: uuid}
+        definition: {$ref: '#/components/schemas/DashboardDefinition'}
+        etag: {type: integer, format: int64}
+        status: {type: string}
+        updatedBy: {type: string}
+        updatedAt: {type: string, format: date-time}
+    DashboardVersion:
+      type: object
+      required: [id, dashboardId, version, definition, schemaVersion, ontologyRevision, queryPlanHash, publishedByName, releaseNotes, healthStatus, publishedAt]
+      properties:
+        id: {type: string, format: uuid}
+        dashboardId: {type: string, format: uuid}
+        version: {type: integer, minimum: 1}
+        definition: {$ref: '#/components/schemas/DashboardDefinition'}
+        schemaVersion: {type: integer}
+        ontologyRevision: {type: integer, format: int64}
+        queryPlanHash: {type: string, pattern: '^[0-9a-f]{64}$'}
+        publishedByName: {type: string}
+        releaseNotes: {type: string}
+        healthStatus: {type: string}
+        publishedAt: {type: string, format: date-time}
+    DashboardDetail:
+      type: object
+      required: [summary, accessRole]
+      properties:
+        summary: {$ref: '#/components/schemas/DashboardSummary'}
+        currentVersion: {$ref: '#/components/schemas/DashboardVersion'}
+        activeDraft: {$ref: '#/components/schemas/DashboardDraft'}
+        accessRole: {type: string, enum: [VIEWER, EDITOR, OWNER]}
+    DashboardEditLock:
+      type: object
+      required: [dashboardId, holderId, holderName, leaseToken, acquiredAt, expiresAt, editable]
+      properties:
+        dashboardId: {type: string, format: uuid}
+        holderId: {type: string}
+        holderName: {type: string}
+        leaseToken: {type: string, format: uuid}
+        acquiredAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time}
+        editable: {type: boolean}
+    DashboardValidation:
+      type: object
+      required: [valid, status, issues, estimatedCost, definitionHash]
+      properties:
+        valid: {type: boolean}
+        status: {type: string}
+        issues: {type: array, items: {type: object, required: [severity, code, path, message], properties: {severity: {type: string}, code: {type: string}, path: {type: string}, message: {type: string}}}}
+        estimatedCost: {type: integer}
+        definitionHash: {type: string, pattern: '^[0-9a-f]{64}$'}
+    DashboardPermission:
+      type: object
+      required: [subjectType, subjectId, role]
+      properties:
+        subjectType: {type: string, enum: [USER, GROUP, TEAM]}
+        subjectId: {type: string}
+        role: {type: string, enum: [VIEWER, EDITOR, OWNER]}
+    DashboardQueryPlan:
+      type: object
+      required: [id, dashboardId, versionId, planHash, ontologyRevision, policyRevision, estimatedCost, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        dashboardId: {type: string, format: uuid}
+        versionId: {type: string, format: uuid}
+        planHash: {type: string, pattern: '^[0-9a-f]{64}$'}
+        ontologyRevision: {type: integer, format: int64}
+        policyRevision: {type: integer, format: int64}
+        estimatedCost: {type: integer}
+        createdAt: {type: string, format: date-time}
+    DashboardExecuteRequest:
+      type: object
+      required: [pageId, widgetIds, filters, refreshId]
+      properties:
+        pageId: {type: string, format: uuid}
+        widgetIds: {type: array, minItems: 1, maxItems: 20, uniqueItems: true, items: {type: string, format: uuid}}
+        filters: {type: object, additionalProperties: true, description: Sensitive values are hashed for run metadata and never logged or persisted.}
+        refreshId: {type: string, format: uuid}
+    DashboardWidgetResult:
+      type: object
+      required: [widgetId, status, kind, cacheHit, suppressed, queriedAt, watermark, correlationId]
+      properties:
+        widgetId: {type: string, format: uuid}
+        status: {type: string, enum: [SUCCEEDED, FAILED]}
+        kind: {type: string}
+        data: {}
+        cacheHit: {type: boolean}
+        suppressed: {type: boolean}
+        queriedAt: {type: string, format: date-time}
+        watermark: {type: string, format: date-time}
+        correlationId: {type: string}
+        safeError: {type: string}
+    DashboardBatchResult:
+      type: object
+      required: [queryRunId, status, widgets, cacheHits, watermark, correlationId]
+      properties:
+        queryRunId: {type: string, format: uuid}
+        status: {type: string, enum: [SUCCEEDED, PARTIAL, FAILED]}
+        widgets: {type: array, items: {$ref: '#/components/schemas/DashboardWidgetResult'}}
+        cacheHits: {type: integer, minimum: 0}
+        watermark: {type: string, format: date-time}
+        correlationId: {type: string}
     AssetField:
       type: object
       required: [id, name, inferredType, nullable, sensitive]

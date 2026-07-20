@@ -84,7 +84,7 @@ public class ExplorerService {
                 objects.size(), Instant.now());
     }
 
-    ObjectSetPage query(ObjectSetRequest request, Actor actor) {
+    public ObjectSetPage query(ObjectSetRequest request, Actor actor) {
         ObjectTypeDefinition type = type(request.objectTypeId());
         ValidatedQuery query = policy.validate(request, type);
         List<Object> searchAfter = cursor(request.cursor(), actor, query);
@@ -101,7 +101,7 @@ public class ExplorerService {
                 page.lowerBound(), items, next, query.fingerprint(), page.indexUpdatedAt(), visibleProperties(type));
     }
 
-    List<FacetResult> facets(FacetRequest request, Actor actor) {
+    public List<FacetResult> facets(FacetRequest request, Actor actor) {
         ObjectTypeDefinition type = type(request.query().objectTypeId());
         ValidatedQuery query = policy.validate(request.query(), type);
         Map<UUID, List<FacetBucket>> results = storage.facets(query, request.propertyIds(), actor);

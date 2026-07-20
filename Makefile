@@ -3,7 +3,7 @@ SHELL := /bin/sh
 JAVA_HOME ?= $(shell if [ -d /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ]; then printf '%s' /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home; elif command -v /usr/libexec/java_home >/dev/null 2>&1; then /usr/libexec/java_home -v 21 2>/dev/null; fi)
 PNPM := pnpm --dir portal
 
-.PHONY: build compose-build compose-config compose-down compose-up e2e-connections e2e-explorer e2e-modeling e2e-pipelines e2e-platform-foundation e2e-storage frontend-build frontend-install frontend-lint frontend-typecheck openapi-check test verify-fast
+.PHONY: build compose-build compose-config compose-down compose-up e2e-connections e2e-dashboards e2e-explorer e2e-modeling e2e-pipelines e2e-platform-foundation e2e-storage frontend-build frontend-install frontend-lint frontend-typecheck openapi-check test verify-fast
 
 build: frontend-build
 	JAVA_HOME="$(JAVA_HOME)" ./mvnw package -DskipTests
@@ -34,6 +34,9 @@ e2e-modeling:
 
 e2e-explorer:
 	docker/scripts/e2e-explorer.sh
+
+e2e-dashboards:
+	docker/scripts/e2e-dashboards.sh
 
 e2e-storage:
 	docker/scripts/e2e-storage.sh

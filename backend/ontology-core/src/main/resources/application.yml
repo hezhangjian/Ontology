@@ -41,6 +41,13 @@ explorer:
   export-ttl: 24h
   export-limit: 100000
 
+dashboards:
+  token-secret: ${flink_workload_token}
+  token-ttl: 15m
+  cache-ttl: 60s
+  edit-lock-ttl: 15m
+  suppression-threshold: 5
+
 server:
   port: 8000
 

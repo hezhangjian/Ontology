@@ -49,6 +49,10 @@ import GlobalObjectSearchPage from '../features/ontology/explorer/GlobalObjectSe
 import ObjectDetailPage from '../features/ontology/explorer/ObjectDetailPage';
 import ObjectExplorationPage from '../features/ontology/explorer/ObjectExplorationPage';
 import SavedResourcesPage from '../features/ontology/explorer/SavedResourcesPage';
+import DashboardEditorPage from '../features/applications/dashboards/pages/DashboardEditorPage';
+import DashboardListPage from '../features/applications/dashboards/pages/DashboardListPage';
+import DashboardVersionsPage from '../features/applications/dashboards/pages/DashboardVersionsPage';
+import DashboardViewPage from '../features/applications/dashboards/pages/DashboardViewPage';
 
 const { Content, Header, Sider } = Layout;
 const { Paragraph, Title } = Typography;
@@ -92,7 +96,7 @@ function App({ accessToken, displayName, roles, userId, onLogout }: AppProps) {
       ],
     },
     { key: 'ontology-group', type: 'group', label: '本体', children: [{ key: '/ontology', icon: <DeploymentUnitOutlined />, label: '本体管理' }, { key: '/ontology/explorer', icon: <SearchOutlined />, label: '对象探索' }] },
-    { key: 'applications-group', type: 'group', label: '应用', children: [{ key: '/applications/dashboards', icon: <FundOutlined />, label: '分析看板', disabled: true }, { key: '/applications/business', icon: <AppstoreOutlined />, label: '业务应用', disabled: true }, { key: '/applications/automations', icon: <ThunderboltOutlined />, label: '自动化', disabled: true }, { key: '/applications/approvals', icon: <CheckCircleFilled />, label: '审批中心', disabled: true }] },
+    { key: 'applications-group', type: 'group', label: '应用', children: [{ key: '/apps/dashboards', icon: <FundOutlined />, label: '分析看板' }, { key: '/applications/business', icon: <AppstoreOutlined />, label: '业务应用', disabled: true }, { key: '/applications/automations', icon: <ThunderboltOutlined />, label: '自动化', disabled: true }, { key: '/applications/approvals', icon: <CheckCircleFilled />, label: '审批中心', disabled: true }] },
     { key: 'aip-group', type: 'group', label: 'AIP', children: [{ key: '/aip/agents', icon: <RobotOutlined />, label: '智能体工作室', disabled: true }, { key: '/aip/conversations', icon: <CommentOutlined />, label: '对话中心', disabled: true }] },
   ], [canBuild]);
 
@@ -104,10 +108,15 @@ function App({ accessToken, displayName, roles, userId, onLogout }: AppProps) {
   ], [onLogout]);
 
   const path = window.location.pathname;
+  if (path.match(/^\/apps\/dashboards\/[^/]+\/(edit|fullscreen)$/)) {
+    return <RouteContent accessToken={accessToken} canBuild={canBuild} displayName={displayName} isAdmin={isAdmin} location={location} navigate={navigate} userId={userId} />;
+  }
   const crumbs = path.startsWith('/ontology/explorer')
     ? ['本体', '对象探索', explorerCrumb(path)]
     : path.startsWith('/ontology')
     ? ['本体', '本体管理', ontologyCrumb(path)]
+    : path.startsWith('/apps/dashboards')
+    ? ['应用', '分析看板', dashboardCrumb(path)]
     : path.startsWith('/data/pipelines')
     ? path.includes('/runs/') ? ['数据', '管道构建', '运行详情'] : path.endsWith('/new') ? ['数据', '管道构建', '新建管道'] : path.includes('/edit') ? ['数据', '管道构建', 'DAG 编辑器'] : ['数据', '管道构建']
     : path.includes('/new') ? ['数据', '数据连接', '新建连接'] : path.includes('/edit') ? ['数据', '数据连接', '编辑配置'] : path.match(/^\/data\/connections\/[^/]+/) ? ['数据', '数据连接', '连接详情'] : ['数据', '数据连接'];
@@ -116,12 +125,12 @@ function App({ accessToken, displayName, roles, userId, onLogout }: AppProps) {
     <Layout className="app-shell">
       <Sider className="app-sider" collapsed={collapsed} collapsedWidth={72} trigger={null} width={238}>
         <div className="brand" aria-label="Ontology Platform"><div className="brand-mark">O</div>{!collapsed && <div><div className="brand-name">Ontology</div><div className="brand-caption">Platform</div></div>}</div>
-        <Menu className="product-menu" mode="inline" items={navigation} selectedKeys={[path.startsWith('/ontology/explorer') ? '/ontology/explorer' : path.startsWith('/ontology') ? '/ontology' : path.startsWith('/data/connections') ? '/data/connections' : path.startsWith('/data/pipelines') ? '/data/pipelines' : path]} onClick={({ key }) => navigate(key)} />
+        <Menu className="product-menu" mode="inline" items={navigation} selectedKeys={[path.startsWith('/ontology/explorer') ? '/ontology/explorer' : path.startsWith('/ontology') ? '/ontology' : path.startsWith('/apps/dashboards') ? '/apps/dashboards' : path.startsWith('/data/connections') ? '/data/connections' : path.startsWith('/data/pipelines') ? '/data/pipelines' : path]} onClick={({ key }) => navigate(key)} />
         <div className="sider-footer"><Divider /><Button aria-label="控制面板" className="control-button" disabled={!isAdmin} icon={<ControlOutlined />} type="text">{!collapsed && '控制面板'}</Button><Button aria-label={collapsed ? '展开导航' : '折叠导航'} className="collapse-button" icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setCollapsed((current) => !current)} type="text">{!collapsed && '收起导航'}</Button></div>
       </Sider>
       <Layout>
         <Header className="app-header"><Breadcrumb items={crumbs.map((title) => ({ title }))} /><Space size={8}><Button aria-label="全局搜索" icon={<SearchOutlined />} type="text"><span className="header-button-label">搜索</span></Button><Badge dot offset={[-7, 7]}><Button aria-label="通知" icon={<BellOutlined />} onClick={() => setDrawer('notifications')} type="text" /></Badge><Button aria-label="AIP 助手" className="assistant-button" icon={<BulbOutlined />} onClick={() => setDrawer('assistant')}>AIP 助手</Button><Dropdown menu={{ items: userItems }} placement="bottomRight" trigger={['click']}><Button aria-label="用户菜单" className="user-button" type="text"><Avatar size={32}>{displayName.slice(0, 1)}</Avatar><span className="header-button-label">{displayName}</span></Button></Dropdown></Space></Header>
-        <Content className="app-content">{canBuild || path.startsWith('/ontology') ? <RouteContent accessToken={accessToken} canBuild={canBuild} displayName={displayName} isAdmin={isAdmin} location={location} navigate={navigate} userId={userId} /> : <Result extra={<Button onClick={() => void onLogout()}>切换账号</Button>} status="403" subTitle="Viewer 默认不能访问连接、资产 Schema、预览或运行记录。" title="无权访问数据连接" />}</Content>
+        <Content className="app-content">{canBuild || path.startsWith('/ontology') || path.startsWith('/apps/dashboards') ? <RouteContent accessToken={accessToken} canBuild={canBuild} displayName={displayName} isAdmin={isAdmin} location={location} navigate={navigate} userId={userId} /> : <Result extra={<Button onClick={() => void onLogout()}>切换账号</Button>} status="403" subTitle="Viewer 默认不能访问连接、资产 Schema、预览或运行记录。" title="无权访问数据连接" />}</Content>
       </Layout>
       <Drawer onClose={() => setDrawer(null)} open={drawer === 'notifications'} title="通知" width={420}><div className="drawer-empty"><NotificationOutlined /><Title level={4}>通知中心已准备</Title><Paragraph>资产变化、管道失败和质量告警将在相应阶段接入。</Paragraph></div></Drawer>
       <Drawer onClose={() => setDrawer(null)} open={drawer === 'assistant'} title="AIP 助手" width={480}><Tag color="geekblue">当前上下文：数据连接</Tag><div className="drawer-empty assistant-empty"><RobotOutlined /><Title level={4}>从问题开始</Title><Paragraph>打开助手不会自动调用模型。发送消息后才会创建临时 AssistSession。</Paragraph></div></Drawer>
@@ -131,6 +140,16 @@ function App({ accessToken, displayName, roles, userId, onLogout }: AppProps) {
 
 function RouteContent({ accessToken, canBuild, displayName, isAdmin, location, navigate, userId }: { accessToken: string; canBuild: boolean; displayName: string; isAdmin: boolean; location: string; navigate: (path: string) => void; userId: string }) {
   const path = location.split('?')[0];
+  if (path === '/apps/dashboards') return <DashboardListPage accessToken={accessToken} canBuild={canBuild} navigate={navigate} />;
+  const dashboardVersion = path.match(/^\/apps\/dashboards\/([^/]+)\/versions\/([^/]+)$/);
+  if (dashboardVersion) return <DashboardViewPage accessToken={accessToken} dashboardId={dashboardVersion[1]} navigate={navigate} versionId={dashboardVersion[2]} />;
+  const dashboardRoute = path.match(/^\/apps\/dashboards\/([^/]+)\/(view|edit|fullscreen|versions)$/);
+  if (dashboardRoute) {
+    const [, id, mode] = dashboardRoute;
+    if (mode === 'edit') return canBuild ? <DashboardEditorPage accessToken={accessToken} dashboardId={id} navigate={navigate} /> : <Result status="403" title="Viewer 不能编辑看板" />;
+    if (mode === 'versions') return <DashboardVersionsPage accessToken={accessToken} dashboardId={id} navigate={navigate} />;
+    return <DashboardViewPage accessToken={accessToken} dashboardId={id} fullscreen={mode === 'fullscreen'} navigate={navigate} />;
+  }
   if (path.startsWith('/ontology/explorer')) {
     const page = explorerRoute({ accessToken, canBuild, location, navigate, path });
     return <ExplorerLayout navigate={navigate} path={path}>{page}</ExplorerLayout>;
@@ -215,6 +234,15 @@ function explorerCrumb(path: string) {
   if (path.includes('/explorations/')) return '已保存探索';
   if (path.includes('/lists/')) return '对象清单';
   return path === '/ontology/explorer' ? '首页' : '对象视图';
+}
+
+function dashboardCrumb(path: string) {
+  if (path.endsWith('/edit')) return '全屏编辑器';
+  if (path.includes('/versions/')) return '历史版本预览';
+  if (path.endsWith('/versions')) return '版本记录';
+  if (path.endsWith('/fullscreen')) return '演示模式';
+  if (path.endsWith('/view')) return '查看';
+  return '列表';
 }
 
 export default App;

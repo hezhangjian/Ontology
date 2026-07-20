@@ -11,3 +11,4 @@ This directory records implementation-level decisions derived from the frozen de
 | [0005](0005-pipeline-runtime.md) | Use one versioned Pipeline IR and Flink runtime |
 | [0006](0006-shared-ontology-revisions.md) | Publish one shared ontology through immutable revisions |
 | [0007](0007-server-side-object-sets.md) | Evaluate object sets and authorization on the server |
+| [0008](0008-permission-scoped-dashboard-plans.md) | Compile immutable dashboard plans and execute them per caller |

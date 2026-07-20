@@ -272,6 +272,36 @@
   - Cursor、选择和 Action preview token 均签名、限时且绑定调用者/查询；敏感字段在 OpenSearch contract 和 HugeGraph 响应两层收紧。
 - 下一恢复点：P08 commit 后从干净工作树开始 P09，只实现“分析看板”完整 vertical slice；P05/P06 继续按用户指令跳过，P09 完成后停止，不得继续 P10。
 
+## P09 — 分析看板完整纵切
+
+- 完成时间：2026-07-21 00:07 CST
+- Commit：`feat(dashboards): deliver analytics dashboards`
+- 范围：
+  - 在唯一 OpenAPI 中交付看板列表/详情、草稿、编辑租约、验证、发布、不可变版本/差异/恢复草稿、权限、收藏、健康、使用量、Query Plan、批执行、筛选候选和下钻 token 契约。
+  - 以 Flyway V8 建立 dashboard identity、规范化 draft/version page/source/widget/filter/binding/dependency、permission、favorite、edit lock、immutable query plan、query run、health 和 audit 控制面；PostgreSQL 不保存对象正文或完整查询结果。
+  - 实现 ETag 乐观锁、15 分钟单编辑者租约、旧发布版本保护、Owner/Editor/Viewer 门禁、复制、空草稿删除、归档/恢复和历史版本创建新草稿语义。
+  - 发布时冻结本体 revision 与稳定资源 ID，生成不可变 Dashboard Query Plan，使用发布者权限受限样例执行后原子切换版本；运行时复用 P08 Object Set，以当前调用者权限重查。
+  - 执行缓存按调用者安全上下文隔离，默认小群体阈值 5；筛选显式绑定稳定属性 ID，被抑制分组不可下钻，合法下钻使用短期签名 caller-bound token。
+  - 交付紧凑看板表格、查看/全屏/版本/固定版本路由、24 列三栏全屏编辑器、页面导航、数据源、指标/柱状图/饼图/对象表格/受限 Markdown/分节标题组件、检查器、自动保存、验证和发布。
+- 自动验证：
+  - `make verify-fast`：通过；Maven reactor、26 个 Java tests、frontend lint/typecheck/build、OpenAPI recommended lint 和全 profile Compose config 全部通过。
+  - `make e2e-dashboards`：通过；真实验证 ETag 草稿/租约、v1/v2 不可变发布、失败候选保旧版本、权限作用域查询/缓存、筛选、小群体抑制、下钻、收藏、复制、归档/恢复和审计。
+  - Ontology Core/Portal 最终镜像重建成功，Flyway V8 已应用且完整依赖服务健康；`git diff --check` 与 `docker/scripts/e2e-dashboards.sh` 语法检查通过。
+- 内置浏览器手测：
+  - 使用 Builder OIDC 从全局侧栏进入“分析看板”，确认 E2E v2 看板的状态、页面/组件数量、组织可见范围、刷新策略和健康状态，并创建“P09 浏览器手测看板”。
+  - 在全屏编辑器选择 Employee revision 5 Object Set，添加指标卡、部门柱状图、对象表格和受限 Markdown；新增并重命名第二页、添加指标，等待 2 秒自动保存后点击“验证”和“发布”。
+  - 查看页确认 v1 `SUCCEEDED`，对象总数 336，Research/Operations 聚合可见，小于 5 的 Platform/Engineering/Flight Research 显示“已抑制”，对象表格不含 email。
+  - 点击收藏、明细页面、全屏和版本；固定版本页明确标注“历史定义，不是历史数据”，手动刷新后以当前权限重新查询并成功。
+  - 最终生产 Portal 镜像下 console warning/error 为 0，浏览器请求均经 APISIX 平台 API。
+- 浏览器/E2E 发现并修复：
+  - 全屏编辑器 `z-index` 高于 Ant Design Modal/Select，导致数据源弹窗存在但被画布遮挡且无法点击；降低编辑器层级、重建 Portal 镜像后弹窗和下拉均可见可操作，并从建板到发布完整复测。
+  - `dashboard_drafts.status` 首次插入遗漏，PostgreSQL 非空约束使事务回滚；两条创建草稿路径显式写入 `DRAFT` 后完整 E2E 通过。
+- 兼容/安全证据：
+  - 看板不能提交 SQL、Gremlin、PPL、原生 OpenSearch DSL、任意 JavaScript/HTML 或 Action；静态说明仅渲染受限 Markdown。
+  - 分享看板定义不授予底层数据权限；运行、缓存和下钻都绑定当前调用者，敏感属性和小群体值不进入结果、token、日志或审计正文。
+  - HugeGraph 继续保存对象真相，OpenSearch 继续保存可重建投影，PostgreSQL 只保存规范化控制面和有界运行元数据。
+- 下一恢复点：P09 commit 后按用户明确指令停止；P05/P06 已跳过，不进入 P10。如未来继续，应先从干净工作树核对 `plan.md` 与本记录。
+
 ## 后续记录模板
 
 每完成一个 Phase，在同一 Phase commit 中追加：完成时间、Commit subject、范围、自动门禁、内置浏览器点击步骤（若涉及前端）、发现并修复的问题、依赖/兼容证据、下一恢复点。
