@@ -4,3 +4,4 @@ Deployment, upgrade, backup, restore, and failure-recovery runbooks are added by
 
 - [P01 authenticated Compose foundation](p01-compose-foundation.md)
 - [P02 projection and storage recovery](p02-projection-storage.md)
+- [P03 data connections operations](p03-data-connections.md)

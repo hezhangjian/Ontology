@@ -6,7 +6,10 @@ import { UserManager, WebStorageStateStore, type User } from 'oidc-client-ts';
 const { Paragraph, Text, Title } = Typography;
 
 interface Identity {
+  accessToken: string;
   displayName: string;
+  roles: string[];
+  userId: string;
   logout: () => Promise<void>;
 }
 
@@ -30,6 +33,8 @@ function AuthGate({ children }: AuthGateProps) {
         redirect_uri: `${window.location.origin}/auth/callback`,
         response_type: 'code',
         scope: 'openid profile email',
+        automaticSilentRenew: true,
+        monitorSession: false,
         userStore: new WebStorageStateStore({ store: window.sessionStorage }),
       }),
     [],
@@ -47,7 +52,8 @@ function AuthGate({ children }: AuthGateProps) {
           setUser(callbackUser);
           window.history.replaceState({}, '', '/data/connections');
         } else {
-          setUser(await manager.getUser());
+          const storedUser = await manager.getUser();
+          setUser(storedUser?.expired ? await manager.signinSilent() : storedUser);
         }
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : '无法完成身份验证');
@@ -56,14 +62,30 @@ function AuthGate({ children }: AuthGateProps) {
       }
     };
 
+    const handleUserLoaded = (loadedUser: User) => setUser(loadedUser);
+    const handleUserUnloaded = () => setUser(null);
+    const handleSilentRenewError = () => {
+      void manager.removeUser().finally(() => setUser(null));
+    };
+
+    manager.events.addUserLoaded(handleUserLoaded);
+    manager.events.addUserUnloaded(handleUserUnloaded);
+    manager.events.addSilentRenewError(handleSilentRenewError);
+
     void loadIdentity();
+
+    return () => {
+      manager.events.removeUserLoaded(handleUserLoaded);
+      manager.events.removeUserUnloaded(handleUserUnloaded);
+      manager.events.removeSilentRenewError(handleSilentRenewError);
+    };
   }, [manager]);
 
   if (devInsecure) {
     return (
       <>
         <div className="insecure-banner">非生产身份模式：仅用于显式 dev-insecure 调试</div>
-        {children({ displayName: '开发管理员', logout: async () => undefined })}
+        {children({ accessToken: 'dev-insecure', displayName: '开发管理员', roles: ['Admin', 'Builder'], userId: 'dev-admin', logout: async () => undefined })}
       </>
     );
   }
@@ -100,10 +122,24 @@ function AuthGate({ children }: AuthGateProps) {
     );
   }
 
+  const profileRealmAccess = user.profile.realm_access as { roles?: string[] } | undefined;
+  const tokenRealmAccess = decodeAccessToken(user.access_token).realm_access as { roles?: string[] } | undefined;
   return children({
+    accessToken: user.access_token,
     displayName: user.profile.name ?? user.profile.preferred_username ?? user.profile.sub,
+    roles: tokenRealmAccess?.roles ?? profileRealmAccess?.roles ?? [],
+    userId: user.profile.sub,
     logout: () => manager.signoutRedirect(),
   });
+}
+
+function decodeAccessToken(token: string): Record<string, unknown> {
+  try {
+    const payload = token.split('.')[1];
+    return JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/'))) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
 }
 
 export default AuthGate;

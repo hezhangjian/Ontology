@@ -4,3 +4,4 @@ Store non-sensitive, phase-specific verification summaries here when machine-rea
 
 - [P01 image and artifact locks](p01-image-locks.md)
 - [P02 storage E2E](p02-storage-e2e.md)
+- [P03 data connections E2E](p03-connections.md)

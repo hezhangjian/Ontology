@@ -17,6 +17,8 @@ networks:
     name: ontology-platform
 
 secrets:
+  connection_master_key:
+    file: ${SECRET_DIR:-./secrets/examples}/connection_master_key
   demo_admin_password:
     file: ${SECRET_DIR:-./secrets/examples}/demo_admin_password
   demo_builder_password:

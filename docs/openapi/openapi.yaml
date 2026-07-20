@@ -11,4 +11,570 @@ info:
 servers:
   - url: /api
     description: APISIX product gateway
-paths: {}
+security:
+  - bearerAuth: []
+paths:
+  /ontology/v1/data-sources:
+    get:
+      operationId: listDataSources
+      summary: List data sources visible to builders and administrators
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - {name: search, in: query, schema: {type: string, maxLength: 120}}
+        - {name: type, in: query, schema: {$ref: '#/components/schemas/DataSourceType'}}
+        - {name: status, in: query, schema: {$ref: '#/components/schemas/ConnectionStatus'}}
+        - {name: owner, in: query, schema: {type: string, maxLength: 160}}
+        - {name: sort, in: query, schema: {type: string, default: 'status,updatedAt', maxLength: 80}}
+      responses:
+        '200':
+          description: A normalized page of data sources
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DataSourcePage'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      operationId: createDataSource
+      summary: Atomically create a tested data source and managed credential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateDataSourceRequest'}
+      responses:
+        '201':
+          description: Created data source
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DataSource'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/InvalidRequest'}
+  /ontology/v1/data-sources/test:
+    post:
+      operationId: testTransientDataSource
+      summary: Test transient configuration without persisting cleartext credentials
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TestDataSourceRequest'}
+      responses:
+        '200':
+          description: Staged test result and short-lived token
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConnectionTestResult'}
+        '422': {$ref: '#/components/responses/InvalidRequest'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /ontology/v1/data-sources/{dataSourceId}:
+    parameters:
+      - $ref: '#/components/parameters/DataSourceId'
+    get:
+      operationId: getDataSource
+      summary: Get one data source without credential material
+      responses:
+        '200':
+          description: Data source
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DataSource'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      operationId: updateDataSource
+      summary: Update non-sensitive data source settings using optimistic locking
+      parameters:
+        - {name: If-Match, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateDataSourceRequest'}
+      responses:
+        '200':
+          description: Updated data source
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DataSource'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      operationId: deleteDataSource
+      summary: Permanently delete an eligible disabled data source (Admin only)
+      responses:
+        '204': {description: Deleted}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /ontology/v1/data-sources/{dataSourceId}/overview:
+    parameters:
+      - $ref: '#/components/parameters/DataSourceId'
+    get:
+      operationId: getDataSourceOverview
+      summary: Get independently recoverable detail sections
+      responses:
+        '200':
+          description: Data source overview
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DataSourceOverview'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /ontology/v1/data-sources/{dataSourceId}/test:
+    parameters:
+      - $ref: '#/components/parameters/DataSourceId'
+    post:
+      operationId: retestDataSource
+      summary: Retest a saved data source
+      responses:
+        '200':
+          description: Updated test result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConnectionTestResult'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /ontology/v1/data-sources/{dataSourceId}/disable:
+    parameters:
+      - $ref: '#/components/parameters/DataSourceId'
+    post:
+      operationId: disableDataSource
+      summary: Disable new discovery, previews and pipeline starts
+      responses:
+        '200':
+          description: Disabled data source
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DataSource'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /ontology/v1/data-sources/{dataSourceId}/enable:
+    parameters:
+      - $ref: '#/components/parameters/DataSourceId'
+    post:
+      operationId: enableDataSource
+      summary: Enable a data source in untested state
+      responses:
+        '200':
+          description: Enabled data source requiring a fresh test
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DataSource'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /ontology/v1/data-sources/{dataSourceId}/rotate-credential:
+    parameters:
+      - $ref: '#/components/parameters/DataSourceId'
+    post:
+      operationId: rotateDataSourceCredential
+      summary: Test and atomically replace credential material
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RotateCredentialRequest'}
+      responses:
+        '200':
+          description: Rotated credential metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CredentialSummary'}
+        '422': {$ref: '#/components/responses/InvalidRequest'}
+  /ontology/v1/data-sources/{dataSourceId}/assets:
+    parameters:
+      - $ref: '#/components/parameters/DataSourceId'
+    get:
+      operationId: listDataSourceAssets
+      summary: List cached discovered assets
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - {name: search, in: query, schema: {type: string, maxLength: 160}}
+      responses:
+        '200':
+          description: Asset page
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, page, size, total]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/DataSourceAsset'}}
+                  page: {type: integer, minimum: 0}
+                  size: {type: integer, minimum: 1}
+                  total: {type: integer, format: int64, minimum: 0}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /ontology/v1/data-sources/{dataSourceId}/discover:
+    parameters:
+      - $ref: '#/components/parameters/DataSourceId'
+    post:
+      operationId: discoverDataSourceAssets
+      summary: Refresh cached asset metadata
+      responses:
+        '202':
+          description: Completed or accepted discovery run
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DiscoveryRun'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /ontology/v1/data-sources/{dataSourceId}/assets/{assetId}:
+    parameters:
+      - $ref: '#/components/parameters/DataSourceId'
+      - $ref: '#/components/parameters/AssetId'
+    get:
+      operationId: getDataSourceAsset
+      summary: Get asset metadata and schema
+      responses:
+        '200':
+          description: Asset detail
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DataSourceAsset'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /ontology/v1/data-sources/{dataSourceId}/assets/{assetId}/infer-schema:
+    parameters:
+      - $ref: '#/components/parameters/DataSourceId'
+      - $ref: '#/components/parameters/AssetId'
+    post:
+      operationId: inferDataSourceAssetSchema
+      summary: Re-infer and version an asset schema
+      responses:
+        '202':
+          description: Schema inference run
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DiscoveryRun'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /ontology/v1/data-sources/{dataSourceId}/assets/{assetId}/preview:
+    parameters:
+      - $ref: '#/components/parameters/DataSourceId'
+      - $ref: '#/components/parameters/AssetId'
+    post:
+      operationId: previewDataSourceAsset
+      summary: Return a bounded, permission-filtered preview without committing offsets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                limit: {type: integer, enum: [50, 100], default: 50}
+      responses:
+        '200':
+          description: Bounded preview rows
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AssetPreview'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /ontology/v1/data-sources/{dataSourceId}/assets/{assetId}/usage:
+    parameters:
+      - $ref: '#/components/parameters/DataSourceId'
+      - $ref: '#/components/parameters/AssetId'
+    get:
+      operationId: getDataSourceAssetUsage
+      summary: Get permission-filtered downstream usage
+      responses:
+        '200':
+          description: Asset usage
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AssetUsage'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /ontology/v1/data-sources/{dataSourceId}/pipelines:
+    parameters:
+      - $ref: '#/components/parameters/DataSourceId'
+    get:
+      operationId: listDataSourcePipelines
+      summary: List pipelines that reference a data source
+      responses:
+        '200':
+          description: Referencing pipelines
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/PipelineSummary'}}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /ontology/v1/data-sources/{dataSourceId}/runs:
+    parameters:
+      - $ref: '#/components/parameters/DataSourceId'
+    get:
+      operationId: listDataSourceRuns
+      summary: List runs for pipelines that reference a data source
+      responses:
+        '200':
+          description: Referencing pipeline runs
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/PipelineRunSummary'}}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /ontology/v1/credentials:
+    get:
+      operationId: listUsableCredentials
+      summary: List only usable credential metadata
+      parameters:
+        - {name: usable, in: query, schema: {type: boolean, default: true}}
+      responses:
+        '200':
+          description: Credential summaries
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/CredentialSummary'}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    AssetId: {name: assetId, in: path, required: true, schema: {type: string, format: uuid}}
+    DataSourceId: {name: dataSourceId, in: path, required: true, schema: {type: string, format: uuid}}
+    Page: {name: page, in: query, schema: {type: integer, default: 0, minimum: 0}}
+    Size: {name: size, in: query, schema: {type: integer, default: 20, minimum: 1, maximum: 100}}
+  responses:
+    Conflict:
+      description: State or optimistic-lock conflict
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+    Forbidden:
+      description: Caller lacks a Builder or Admin role
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+    InvalidRequest:
+      description: Validation or connection policy failure
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+    NotFound:
+      description: Resource not found
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+    TooManyRequests:
+      description: User and target rate limit exceeded
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+  schemas:
+    AssetField:
+      type: object
+      required: [id, name, inferredType, nullable, sensitive]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        inferredType: {type: string}
+        originalType: {type: string}
+        nullable: {type: boolean}
+        sensitive: {type: boolean}
+        primaryKeyCandidate: {type: boolean}
+        sampleValue: {type: string, description: Masked sample value when authorized}
+    AssetPreview:
+      type: object
+      required: [columns, rows, truncated, maxBytes]
+      properties:
+        columns: {type: array, items: {type: string}}
+        rows: {type: array, items: {type: object, additionalProperties: true}}
+        truncated: {type: boolean}
+        maxBytes: {type: integer, example: 1048576}
+    AssetUsage:
+      type: object
+      required: [pipelines, restrictedReferences]
+      properties:
+        pipelines: {type: array, items: {$ref: '#/components/schemas/PipelineSummary'}}
+        restrictedReferences: {type: integer, minimum: 0}
+    ConnectionConfig:
+      type: object
+      description: Type-specific non-sensitive settings; credential keys are rejected.
+      additionalProperties: true
+    ConnectionStatus:
+      type: string
+      enum: [UNTESTED, TESTING, HEALTHY, HEALTHY_RESTRICTED, ERROR, DISABLED]
+    ConnectionTestResult:
+      type: object
+      required: [requestId, status, stages, assetCount, configFingerprint, expiresAt]
+      properties:
+        requestId: {type: string, format: uuid}
+        status: {$ref: '#/components/schemas/ConnectionStatus'}
+        stages: {type: array, items: {$ref: '#/components/schemas/TestStage'}}
+        assetCount: {type: integer, minimum: 0}
+        configFingerprint: {type: string}
+        testToken: {type: string, writeOnly: true, description: Single-purpose opaque token}
+        expiresAt: {type: string, format: date-time}
+    CreateDataSourceRequest:
+      type: object
+      required: [name, type, ownerId, config, credential, testToken]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 160}
+        description: {type: string, maxLength: 1000}
+        type: {$ref: '#/components/schemas/DataSourceType'}
+        ownerId: {type: string, maxLength: 160}
+        ownerName: {type: string, maxLength: 240}
+        tags: {type: array, maxItems: 20, items: {type: string, maxLength: 40}}
+        config: {$ref: '#/components/schemas/ConnectionConfig'}
+        credential: {$ref: '#/components/schemas/CredentialInput'}
+        testToken: {type: string}
+    CredentialInput:
+      type: object
+      required: [mode]
+      properties:
+        mode: {type: string, enum: [MANAGED, EXISTING, FILE]}
+        name: {type: string, maxLength: 160}
+        existingSecretRef: {type: string, format: uuid}
+        fileRefs: {type: object, additionalProperties: {type: string, pattern: '^file://[A-Za-z0-9_.-]+$'}}
+        values: {type: object, writeOnly: true, additionalProperties: {type: string, maxLength: 8192}}
+    CredentialSummary:
+      type: object
+      required: [id, name, provider, credentialType, status, referenceCount]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        provider: {type: string, enum: [MANAGED, FILE]}
+        credentialType: {type: string}
+        status: {type: string, enum: [CONFIGURED, EXPIRING, REVOKED]}
+        referenceCount: {type: integer, minimum: 0}
+        createdAt: {type: string, format: date-time}
+        rotatedAt: {type: string, format: date-time}
+    DataSource:
+      type: object
+      required: [id, name, type, ownerId, ownerName, config, status, syncStatus, assetCount, version, createdAt, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        type: {$ref: '#/components/schemas/DataSourceType'}
+        ownerId: {type: string}
+        ownerName: {type: string}
+        tags: {type: array, items: {type: string}}
+        config: {$ref: '#/components/schemas/ConnectionConfig'}
+        credential: {$ref: '#/components/schemas/CredentialSummary'}
+        status: {$ref: '#/components/schemas/ConnectionStatus'}
+        syncStatus: {type: string, enum: [NO_TASKS, IDLE, RUNNING, STREAMING, PARTIAL_FAILURE, ALL_FAILURE]}
+        assetCount: {type: integer, minimum: 0}
+        lastCheckedAt: {type: string, format: date-time}
+        lastError: {$ref: '#/components/schemas/Diagnostic'}
+        version: {type: integer, format: int64, minimum: 1}
+        pipelineReferenceCount: {type: integer, minimum: 0}
+        activeRunCount: {type: integer, minimum: 0}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    DataSourceAsset:
+      type: object
+      required: [id, name, fullPath, assetType, status, schemaStatus, fieldCount, permissionStatus, discoveredAt, fields]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        fullPath: {type: string}
+        parentPath: {type: string}
+        assetType: {type: string, enum: [BUCKET, PREFIX, FILE, DATABASE, SCHEMA, TABLE, VIEW, CLUSTER, TOPIC]}
+        status: {type: string, enum: [AVAILABLE, NEW, UNAVAILABLE]}
+        schemaStatus: {type: string, enum: [UNKNOWN, READY, CHANGED, ERROR]}
+        schemaHash: {type: string}
+        schemaVersion: {type: integer, minimum: 0}
+        fieldCount: {type: integer, minimum: 0}
+        sizeBytes: {type: integer, format: int64, minimum: 0}
+        estimatedRows: {type: integer, format: int64, minimum: 0}
+        partitionCount: {type: integer, minimum: 0}
+        permissionStatus: {type: string, enum: [READABLE, METADATA_ONLY, DENIED]}
+        usedByPipeline: {type: boolean}
+        discoveredAt: {type: string, format: date-time}
+        fields: {type: array, items: {$ref: '#/components/schemas/AssetField'}}
+    DataSourceOverview:
+      type: object
+      required: [connection, health, assetSummary, pipelineSummary, recentRuns, recentActivity, sectionErrors]
+      properties:
+        connection: {$ref: '#/components/schemas/DataSource'}
+        health: {type: array, items: {$ref: '#/components/schemas/TestStage'}}
+        assetSummary: {type: object, additionalProperties: {type: integer}}
+        pipelineSummary: {type: object, additionalProperties: {type: integer}}
+        recentRuns: {type: array, items: {$ref: '#/components/schemas/PipelineRunSummary'}}
+        recentActivity: {type: array, items: {$ref: '#/components/schemas/AuditEvent'}}
+        sectionErrors: {type: object, additionalProperties: {$ref: '#/components/schemas/Diagnostic'}}
+    DataSourcePage:
+      type: object
+      required: [items, page, size, total, counts, filters]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/DataSource'}}
+        page: {type: integer, minimum: 0}
+        size: {type: integer, minimum: 1}
+        total: {type: integer, format: int64, minimum: 0}
+        counts: {type: object, additionalProperties: {type: integer}}
+        filters: {type: object, additionalProperties: true}
+    DataSourceType:
+      type: string
+      enum: [S3_CSV, MYSQL, POSTGRESQL, KAFKA, EXTERNAL_PULSAR]
+    Diagnostic:
+      type: object
+      required: [stage, occurredAt, reason, requestId, suggestion]
+      properties:
+        stage: {type: string}
+        occurredAt: {type: string, format: date-time}
+        reason: {type: string}
+        requestId: {type: string, format: uuid}
+        suggestion: {type: string}
+        technicalDetail: {type: string}
+    DiscoveryRun:
+      type: object
+      required: [taskId, status, discoveredCount, startedAt]
+      properties:
+        taskId: {type: string, format: uuid}
+        status: {type: string, enum: [RUNNING, SUCCEEDED, PARTIAL, FAILED]}
+        discoveredCount: {type: integer, minimum: 0}
+        startedAt: {type: string, format: date-time}
+        completedAt: {type: string, format: date-time}
+        diagnostic: {$ref: '#/components/schemas/Diagnostic'}
+    PipelineRunSummary:
+      type: object
+      required: [id, pipelineName, sourceAsset, triggerType, status, startedAt, readCount, writtenCount, rejectedCount]
+      properties:
+        id: {type: string, format: uuid}
+        pipelineName: {type: string}
+        sourceAsset: {type: string}
+        triggerType: {type: string}
+        status: {type: string}
+        startedAt: {type: string, format: date-time}
+        durationMs: {type: integer, format: int64}
+        readCount: {type: integer, format: int64}
+        writtenCount: {type: integer, format: int64}
+        rejectedCount: {type: integer, format: int64}
+        flinkJobId: {type: string}
+    PipelineSummary:
+      type: object
+      required: [id, name, mode, status, ownerName]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        sourceAsset: {type: string}
+        mode: {type: string, enum: [BATCH, STREAMING]}
+        status: {type: string}
+        ownerName: {type: string}
+        recentRunAt: {type: string, format: date-time}
+    Problem:
+      type: object
+      required: [type, title, status, detail, requestId]
+      properties:
+        type: {type: string, format: uri-reference}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}
+        requestId: {type: string}
+    RotateCredentialRequest:
+      type: object
+      required: [credential]
+      properties:
+        credential: {$ref: '#/components/schemas/CredentialInput'}
+    TestDataSourceRequest:
+      type: object
+      required: [type, config, credential]
+      properties:
+        type: {$ref: '#/components/schemas/DataSourceType'}
+        config: {$ref: '#/components/schemas/ConnectionConfig'}
+        credential: {$ref: '#/components/schemas/CredentialInput'}
+    TestStage:
+      type: object
+      required: [stage, status, message]
+      properties:
+        stage: {type: string, enum: [NETWORK, TLS, AUTHENTICATION, METADATA, DISCOVERY]}
+        status: {type: string, enum: [PENDING, RUNNING, PASSED, WARNING, FAILED]}
+        message: {type: string}
+        durationMs: {type: integer, format: int64, minimum: 0}
+    UpdateDataSourceRequest:
+      type: object
+      properties:
+        name: {type: string, minLength: 1, maxLength: 160}
+        description: {type: string, maxLength: 1000}
+        ownerId: {type: string, maxLength: 160}
+        ownerName: {type: string, maxLength: 240}
+        tags: {type: array, maxItems: 20, items: {type: string, maxLength: 40}}
+        config: {$ref: '#/components/schemas/ConnectionConfig'}
+    AuditEvent:
+      type: object
+      required: [id, action, actorName, occurredAt, summary]
+      properties:
+        id: {type: string, format: uuid}
+        action: {type: string}
+        actorName: {type: string}
+        occurredAt: {type: string, format: date-time}
+        summary: {type: string}

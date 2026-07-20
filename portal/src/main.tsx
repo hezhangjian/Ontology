@@ -22,7 +22,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       }}
     >
       <AuthGate>
-        {(identity) => <App displayName={identity.displayName} onLogout={identity.logout} />}
+        {(identity) => <App accessToken={identity.accessToken} displayName={identity.displayName} roles={identity.roles} userId={identity.userId} onLogout={identity.logout} />}
       </AuthGate>
     </ConfigProvider>
   </React.StrictMode>,

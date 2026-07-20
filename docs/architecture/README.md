@@ -14,3 +14,4 @@ Implementation evidence must preserve these boundaries:
 Implemented architecture notes:
 
 - [P02 ontology projection foundation](p02-projection-foundation.md)
+- [P03 data connections vertical slice](p03-data-connections.md)

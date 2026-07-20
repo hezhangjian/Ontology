@@ -33,6 +33,9 @@ services:
       SW_AGENT_COLLECTOR_BACKEND_SERVICES: skywalking-oap:11800
       SW_AGENT_NAME: ontology-core
     secrets:
+      - connection_master_key
+      - minio_root_password
+      - minio_root_user
       - postgres_password
     healthcheck:
       test: [CMD-SHELL, curl -fsS http://localhost:8000/actuator/health/readiness | grep -q '"status":"UP"']

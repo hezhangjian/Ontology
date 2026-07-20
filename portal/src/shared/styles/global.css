@@ -366,6 +366,318 @@ textarea {
   min-height: 310px;
 }
 
+.connections-page,
+.connection-detail-page,
+.edit-page {
+  max-width: 1500px;
+  margin: 0 auto;
+}
+
+.page-title-row,
+.connection-header,
+.connection-identity,
+.tab-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.page-title-row {
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.page-title-row h2.ant-typography,
+.connection-header h2.ant-typography,
+.edit-page h2.ant-typography,
+.wizard-heading h2.ant-typography {
+  margin: 0;
+}
+
+.page-title-row p.ant-typography,
+.connection-header p.ant-typography,
+.edit-page > p.ant-typography {
+  margin: 6px 0 0;
+  color: #687185;
+}
+
+.compact-stats {
+  display: flex;
+  gap: 32px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  border: 1px solid #e7eaf1;
+  border-radius: 10px;
+  background: #fff;
+  color: #687185;
+}
+
+.compact-stats strong {
+  margin-left: 6px;
+  color: #172033;
+  font-size: 16px;
+}
+
+.danger-text {
+  color: #cf3f4f !important;
+}
+
+.filter-bar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 180px 180px 180px auto;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid #e7eaf1;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.connections-page > .ant-table-wrapper,
+.connection-detail-page > .ant-tabs,
+.edit-page .ant-card,
+.wizard-card,
+.test-results {
+  border: 1px solid #e3e7ef;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 5px 18px rgb(36 49 75 / 4%);
+}
+
+.connections-page .ant-table-row {
+  cursor: pointer;
+}
+
+.connection-type-icon,
+.connection-logo,
+.type-row-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: #3157d5;
+  background: #edf1ff;
+}
+
+.connection-type-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+}
+
+.connection-header {
+  align-items: flex-start;
+  padding: 8px 0 20px;
+}
+
+.connection-identity {
+  justify-content: flex-start;
+}
+
+.connection-logo {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  font-size: 23px;
+}
+
+.connection-detail-page > .ant-tabs {
+  padding: 0 20px 20px;
+}
+
+.tab-toolbar {
+  margin-bottom: 14px;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.wide-card {
+  grid-column: 1 / -1;
+}
+
+.health-row,
+.test-stage,
+.activity-row {
+  display: grid;
+  grid-template-columns: auto 130px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #eef0f4;
+}
+
+.activity-row {
+  grid-template-columns: 1fr auto;
+}
+
+.settings-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.danger-zone {
+  border-color: #f1c5c9 !important;
+}
+
+.wizard-page {
+  min-height: calc(100vh - 132px);
+  margin: -32px;
+  background: #f4f6fa;
+}
+
+.wizard-heading {
+  position: sticky;
+  top: 68px;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 210px 280px 1fr;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 28px;
+  border-bottom: 1px solid #e4e7ef;
+  background: rgb(255 255 255 / 97%);
+}
+
+.wizard-body {
+  max-width: 980px;
+  min-height: calc(100vh - 238px);
+  margin: 0 auto;
+  padding: 28px 24px 96px;
+}
+
+.wizard-footer {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 238px;
+  z-index: 4;
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 32px;
+  border-top: 1px solid #e1e5ed;
+  background: rgb(255 255 255 / 97%);
+  box-shadow: 0 -4px 20px rgb(36 49 75 / 6%);
+}
+
+.source-type-list {
+  display: grid;
+  gap: 10px;
+}
+
+.source-type-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  align-items: center;
+  gap: 15px;
+  padding: 16px 18px;
+  color: inherit;
+  border: 1px solid #dfe4ed;
+  border-radius: 10px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.source-type-row:hover,
+.source-type-row.selected {
+  border-color: #6680dc;
+  box-shadow: 0 6px 20px rgb(49 87 213 / 9%);
+}
+
+.source-type-row.selected {
+  background: #f8f9ff;
+}
+
+.source-type-row > span:nth-child(2) {
+  display: grid;
+  gap: 3px;
+}
+
+.source-type-row small {
+  color: #737d90;
+}
+
+.source-type-row > .anticon {
+  color: #35a36f;
+  font-size: 20px;
+}
+
+.type-row-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  font-size: 20px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 18px;
+}
+
+.test-step,
+.test-intro {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+}
+
+.test-intro {
+  max-width: 660px;
+  margin: 20px auto;
+  text-align: center;
+}
+
+.test-results {
+  width: 100%;
+  padding: 20px;
+}
+
+.edit-page {
+  max-width: 980px;
+}
+
+.edit-page .ant-card {
+  margin-top: 14px;
+}
+
+.config-preview {
+  max-height: 280px;
+  overflow: auto;
+  padding: 14px;
+  border-radius: 8px;
+  color: #33405a;
+  background: #f7f8fb;
+}
+
+.edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.center-state {
+  min-height: 480px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.ant-alert + .ant-table-wrapper,
+.ant-alert + .ant-descriptions,
+.ant-alert + .ant-card,
+.ant-space + .ant-alert,
+.ant-space + .ant-table-wrapper {
+  margin-top: 14px;
+}
+
 @media (max-width: 1240px) {
   .header-button-label {
     display: none;

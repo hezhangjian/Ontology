@@ -4,9 +4,9 @@
 
 ## 恢复点
 
-- 当前状态：P02 已完成并准备提交。
-- 下一阶段：P03 `feat(connections): deliver data connections page`。
-- 继续规则：确认 P02 提交存在且工作树干净，再只领取 P03；P03 涉及前端，完成自动门禁后必须使用内置浏览器真实点击测试。
+- 当前状态：P03 已完成并准备提交。
+- 下一阶段：P04 `feat(pipelines): deliver pipeline builder page`。
+- 继续规则：确认 P03 提交存在且工作树干净，再只领取 P04；P04 涉及前端，完成自动门禁后必须使用内置浏览器真实点击测试。
 
 ## Phase 状态
 
@@ -15,7 +15,7 @@
 | P00 | 已完成 | `build(platform): establish project baseline`（本记录与 Phase 同一提交） | J/F/O/C + 内置浏览器点击通过 |
 | P01 | 已完成 | `feat(platform): add authenticated compose foundation`（本记录与 Phase 同一提交） | J/F/O/C + `E:platform-foundation` + 内置浏览器 PKCE 点击通过 |
 | P02 | 已完成 | `feat(storage): add ontology projection foundation`（本记录与 Phase 同一提交） | J/O/C + `E:storage-e2e`；无前端变更 |
-| P03 | 待实施 | `feat(connections): deliver data connections page` | `E:connections-page` |
+| P03 | 已完成 | `feat(connections): deliver data connections page`（本记录与 Phase 同一提交） | J/F/O + `E:connections-page` + 内置浏览器全流程点击通过 |
 | P04 | 待实施 | `feat(pipelines): deliver pipeline builder page` | `E:pipelines-page` |
 | P05 | 待实施 | `feat(quality): deliver data quality page` | `E:quality-page` |
 | P06 | 待实施 | `feat(lineage): deliver data lineage page` | `E:lineage-page` |
@@ -129,6 +129,43 @@
   - Pulsar CLI 的 `--messages` 会按逗号拆分 JSON；全部 E2E 改用容器内文件与 `--files`，并在证据文档固定这一约束。
   - 发现本机 OpenSearch 卷已有用户/legacy `ontology-objects` index；新投影统一使用 `platform-ontology-*` namespace，删除仅由本次误探创建的空 template，未删除或覆盖 legacy index。
 - 下一恢复点：P02 commit 后从干净工作树开始 P03，以“数据连接”完整 vertical slice 交付 OpenAPI、Flyway、加密凭据、连接测试/资产发现/Schema 预览、列表/向导/详情、权限、审计、测试和浏览器手测；不得提前实施 P04。
+
+## P03 — 数据连接完整纵切
+
+- 完成时间：2026-07-20 18:25 CST
+- Commit：`feat(connections): deliver data connections page`
+- 范围：
+  - 在唯一 OpenAPI 中交付数据连接、凭据元数据、测试、发现、资产、Schema、预览、使用情况、关联管道/运行、轮换和生命周期契约。
+  - 以 Flyway V2 建立 connection secret/data source/test/asset/field/discovery/pipeline/run/audit 控制面表；连接只保存 `secret_ref`，不保存明文凭据。
+  - 实现 AES-256-GCM 托管凭据、Docker Secret/已有凭据引用、HMAC 限时测试令牌、递归 canonical fingerprint、SSRF/私网/端口/平台 Pulsar 策略和安全诊断。
+  - 实现 MinIO/S3 CSV、MySQL、PostgreSQL、Kafka、外部 Pulsar 五类真实只读适配器；MinIO 路径包含真实资产发现、四字段 CSV 推断与 50/100 行、1 MiB 预览。
+  - 实现创建前复核、目标配置原子测试并保存、乐观锁、候选凭据测试并轮换、停用/恢复/删除约束和脱敏审计。
+  - 交付紧凑列表、URL 筛选、四步向导、五 Tab 详情、资产深链抽屉、编辑页、轮换表单、影响确认与 Admin 删除二次确认。
+  - Viewer 隐藏导航并返回 403；Builder 可管理但不可删除；Admin 可使用 Docker Secret 和永久删除。
+  - OIDC 前端增加 access-token 自动续期和过期存储会话恢复，角色从 access token `realm_access` 解析。
+- 自动验证：
+  - `make verify-fast`：通过；9 个 Maven reactor project、11 个 Java tests、frontend lint/typecheck/build、OpenAPI recommended lint 和全 profile Compose config 全部通过。
+  - `make e2e-connections`：最终通过；真实验证 MinIO、加密/secret hygiene、测试令牌、发现、Schema、预览、duplicate rollback、乐观锁、Viewer/Builder/Admin、停用/恢复/删除和审计。
+  - Ontology Core/Portal 最终镜像构建成功，完整依赖服务健康；`git diff --check` 与脚本语法检查通过。
+- 内置浏览器手测：
+  - 使用 Admin OIDC 会话从空列表进入 `/data/connections/new`，逐步点击选择 MinIO/S3、填写 Bucket/Prefix 与 Docker Secret 引用、执行五阶段真实测试、确认并创建。
+  - 点击详情“概览 / 资产 / 同步任务 / 运行记录 / 设置”五个 Tab，逐一确认 URL 同步；打开 CSV 资产深链，核对 `order_id/customer/total/created_at` Schema 与订单 `1001` 的 50 行预览，关闭后回到 `?tab=assets`。
+  - 编辑 Prefix 后主按钮切换为“测试并保存”，真实测试通过且说明/配置更新；从设置页填写新 Docker Secret 引用并完成测试轮换。
+  - 点击停用影响确认、恢复确认、恢复后的 `UNTESTED`、重新测试、再次停用和 Admin 永久删除二次确认；最终清理所有浏览器/E2E 临时连接。
+  - 验证 URL 列表筛选、Viewer 无导航/路由、恢复前禁用发现/预览/创建管道，以及最终 console warning/error 为 0。
+- 浏览器发现并修复：
+  - Keycloak realm roles 位于 access token 而非 `oidc-client-ts` profile，首轮 Admin 被错误识别为 Viewer；改为安全解码 access-token claim，并补充自动续期。
+  - Keycloak lightweight access token 可省略 `sub`，导致测试令牌中的 `null` 字符串与创建请求主体不等；稳定主体改为 `sub → preferred_username → client_id` 并增加回归测试。
+  - 测试令牌原来只绑定配置；改为同时绑定凭据 fingerprint，且递归排序嵌套 Map，避免字段顺序差异和测试后替换凭据。
+  - 编辑页原来只允许基本信息；补齐五类目标字段和后端事务内真实 test-and-save，失败不修改当前有效配置。
+  - 设置页原来只描述轮换；补齐 Managed/Existing/Docker Secret 轮换表单和候选测试后原子替换。
+  - 列表/详情危险操作原来无完整二次确认，且列表菜单点击会冒泡进入详情；补齐影响文案、删除确认和菜单事件隔离。
+  - 恢复后的 `UNTESTED` 连接原可创建管道；收紧为只有 `HEALTHY/HEALTHY_RESTRICTED` 可发现、预览或创建管道。
+- 兼容/安全证据：
+  - 连接 master key 必须 base64 解码为 32 bytes，Compose 只以只读 Secret 文件挂载；key version 与轮换边界记录在 runbook。
+  - E2E 对 API、审计、config、数据库密文和近期服务日志执行明文凭据检查；浏览器和 API 均不返回 Password、Token、Access Key、Secret Key 或可逆密文。
+  - 外部 Pulsar 的 URL/tenant 策略与平台内部事件总线隔离；Kafka/Pulsar 预览不提交 offset 或创建持久订阅。
+- 下一恢复点：P03 commit 后从干净工作树开始 P04，只实现 Flink 唯一计算引擎的管道列表、新建、DAG 编辑、配置/发布/运行/调度、运行详情、权限、审计、测试和浏览器手测；不得提前实施 P05。
 
 ## 后续记录模板
 

@@ -11,6 +11,13 @@ spring:
     default-schema: control
     schemas: control
 
+connections:
+  encryption-key: ${connection_master_key}
+  key-version: 1
+  test-token-ttl: 15m
+  allowed-private-hosts: ${CONNECTIONS_ALLOWED_PRIVATE_HOSTS:minio,postgres,pulsar}
+  production-mode: ${CONNECTIONS_PRODUCTION_MODE:false}
+
 server:
   port: 8000
 
