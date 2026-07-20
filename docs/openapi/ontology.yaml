@@ -1,9 +1,0 @@
-openapi: 3.1.0
-info:
-  title: Ontology OpenAPI
-  description: Ontology OpenAPI Specification
-  version: 0.0.1
-servers:
- - url: http://localhost:4242
-   description: Local development server
-paths:

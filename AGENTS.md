@@ -4,30 +4,39 @@
 
 This repository is organized as:
 
-- `docker/` - Local infrastructure and service configuration.
-- `docs/` - Project documentation.
-- `docs/openapi/` - HTTP API contracts and related OpenAPI documentation.
-- `portal/` - Frontend application workspace.
-- `src/` - Java application source code.
+- `backend/` - Java 21 Maven modules for platform services and shared contracts.
+- `docker/` - Docker Compose, image, configuration, and operational scripts.
+- `docs/` - Architecture, ADR, OpenAPI, evidence, and runbook documentation.
+- `examples/` - Reproducible, non-sensitive examples and demo data.
+- `portal/` - React and TypeScript frontend workspace.
 
-When adding or updating REST API contracts, use `docs/openapi/`.
+The root `pom.xml` is an aggregator and dependency-management project only. Do not add business source code under a root `src/` directory.
 
-## Package Manager
+## Package Managers
 
-- Use `pnpm` for all JavaScript/TypeScript package operations (install, add, remove, run scripts).
+- Use the Maven Wrapper (`./mvnw`) for Java operations.
+- Use `pnpm` for all JavaScript and TypeScript package operations.
 - Never use `npm` or `yarn` commands.
+- Use Java 21. The Maven build rejects other feature releases.
 
 ## Code Style
 
 - All code comments must be written in English.
 - Commit messages must follow [Conventional Commits](https://www.conventionalcommits.org/) specification:
-    - Format: `<type>(<scope>): <description>`
-    - Common types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `build`
-    - Example: `feat(core): add zip utilities for archive operations`
-- All commits must be signed-off using the `-s` flag (`git commit -s`).
+  - Format: `<type>(<scope>): <description>`
+  - Common types: `build`, `chore`, `docs`, `feat`, `fix`, `refactor`, `style`, `test`
+  - Example: `feat(core): add zip utilities for archive operations`
+- All commits must be signed off using the `-s` flag (`git commit -s`).
 - When listing parallel items with no specific logical relationship, sort them alphabetically.
 
-## Documentation
+## Contracts and Architecture
 
-- Keep HTTP API contracts and related OpenAPI documentation under `docs/openapi/`.
-- Treat `docs/openapi/openapi.yaml` as the source of truth for REST API definitions.
+- Keep all public HTTP API contracts in `docs/openapi/openapi.yaml`.
+- Treat `docs/openapi/openapi.yaml` as the single source of truth for REST API definitions.
+- Keep architecture decisions in `docs/adr/` and operational procedures in `docs/runbooks/`.
+- Keep PostgreSQL limited to control-plane data. Business object bodies belong in HugeGraph and their rebuildable search projections belong in OpenSearch.
+- Route browser calls through platform APIs. The portal must not call infrastructure or model-provider APIs directly.
+
+## Verification
+
+Run `make verify-fast` before every phase commit. Frontend phases must additionally be tested through the Codex in-app browser, and their manual evidence must be recorded in `timeline.md`.

@@ -17,9 +17,20 @@
 
 # Maven
 **/target/
+.mvn/timing.properties
 
 # Node
 node_modules/
 
 # Vite
 dist/
+*.tsbuildinfo
+
+# Environment overrides
+*.local
+docker/env/.env
+
+# Test output
+coverage/
+docs/evidence/**/*.json
+docs/evidence/**/*.log

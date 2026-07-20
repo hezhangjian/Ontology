@@ -1,0 +1,14 @@
+openapi: 3.1.0
+info:
+  title: Ontology Platform API
+  version: 0.1.0
+  description: >-
+    Public HTTP contract for the Ontology Platform. Endpoints are added by the
+    earliest phase that delivers their complete vertical slice.
+  license:
+    identifier: LicenseRef-Proprietary
+    name: Proprietary
+servers:
+  - url: /api
+    description: APISIX product gateway
+paths: {}

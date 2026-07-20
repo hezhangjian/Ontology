@@ -1,0 +1,5 @@
+spring:
+  application:
+    name: projection-worker
+  main:
+    web-application-type: none

@@ -1,4 +1,4 @@
-name: ontology
+name: ontology-platform
 
 services:
   flink-jobmanager:
@@ -83,3 +83,7 @@ services:
       SW_OAP_ADDRESS: http://skywalking-oap:12800
     ports:
       - "8082:8080"
+
+networks:
+  default:
+    name: ontology-platform

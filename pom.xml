@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
@@ -11,139 +11,75 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.hezhangjian</groupId>
-    <artifactId>ontology</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <groupId>com.hezhangjian.ontology</groupId>
+    <artifactId>ontology-platform</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
 
-    <name>Ontology</name>
+    <name>Ontology Platform</name>
+    <description>Palantir Foundry and AIP inspired ontology platform</description>
+
+    <modules>
+        <module>backend/agent-runtime</module>
+        <module>backend/bff</module>
+        <module>backend/flink-job</module>
+        <module>backend/maintenance-runner</module>
+        <module>backend/ontology-core</module>
+        <module>backend/platform-contracts</module>
+        <module>backend/projection-worker</module>
+        <module>backend/test-support</module>
+    </modules>
 
     <properties>
         <java.version>21</java.version>
-        <!-- This application is not published as a Maven library. -->
+        <maven.compiler.release>21</maven.compiler.release>
         <maven.deploy.skip>true</maven.deploy.skip>
-        <!-- plugin -->
-        <maven.compiler.source>${java.version}</maven.compiler.source>
-        <maven.compiler.target>${java.version}</maven.compiler.target>
-        <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
-        <openapi-generator-maven-plugin.version>7.14.0</openapi-generator-maven-plugin.version>
-        <spotbugs-maven-plugin.version>4.10.2.0</spotbugs-maven-plugin.version>
-        <spotless-maven-plugin.version>3.8.0</spotless-maven-plugin.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <spring-boot.version>3.5.3</spring-boot.version>
     </properties>
 
-    <dependencies>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-validation</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
-
-    <organization>
-        <name>hezhangjian</name>
-        <url>https://github.com/hezhangjian</url>
-    </organization>
-
-    <developers>
-        <developer>
-            <name>hezhangjian</name>
-            <email>hezhangjian97@gmail.com</email>
-        </developer>
-    </developers>
-
-    <scm>
-        <connection>scm:git:git@github.com:hezhangjian/Ontology.git</connection>
-        <developerConnection>scm:git:git@github.com:hezhangjian/Ontology.git</developerConnection>
-        <url>git@github.com:hezhangjian/Ontology.git</url>
-        <tag>HEAD</tag>
-    </scm>
-
     <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.14.0</version>
+                    <configuration>
+                        <parameters>true</parameters>
+                        <release>${maven.compiler.release}</release>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <version>${spring-boot.version}</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>${maven-compiler-plugin.version}</version>
-                <configuration>
-                    <source>${maven.compiler.source}</source>
-                    <target>${maven.compiler.target}</target>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.openapitools</groupId>
-                <artifactId>openapi-generator-maven-plugin</artifactId>
-                <version>${openapi-generator-maven-plugin.version}</version>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.5.0</version>
                 <executions>
                     <execution>
-                        <id>generate-spring-api</id>
+                        <id>enforce-build-environment</id>
                         <goals>
-                            <goal>generate</goal>
+                            <goal>enforce</goal>
                         </goals>
                         <configuration>
-                            <inputSpec>${project.basedir}/openapi/ontology.yaml</inputSpec>
-                            <generatorName>spring</generatorName>
-                            <apiPackage>com.hezhangjian.ontology.api</apiPackage>
-                            <modelPackage>com.hezhangjian.ontology.model</modelPackage>
-                            <generateSupportingFiles>false</generateSupportingFiles>
-                            <configOptions>
-                                <annotationLibrary>none</annotationLibrary>
-                                <documentationProvider>none</documentationProvider>
-                                <interfaceOnly>true</interfaceOnly>
-                                <openApiNullable>false</openApiNullable>
-                                <skipDefaultInterface>true</skipDefaultInterface>
-                                <useSpringBoot3>true</useSpringBoot3>
-                                <useTags>true</useTags>
-                            </configOptions>
+                            <rules>
+                                <requireJavaVersion>
+                                    <version>[21,22)</version>
+                                </requireJavaVersion>
+                                <requireMavenVersion>
+                                    <version>[3.9.0,4.0.0)</version>
+                                </requireMavenVersion>
+                            </rules>
                         </configuration>
                     </execution>
                 </executions>
-            </plugin>
-            <plugin>
-                <groupId>com.github.spotbugs</groupId>
-                <artifactId>spotbugs-maven-plugin</artifactId>
-                <version>${spotbugs-maven-plugin.version}</version>
-                <configuration>
-                    <xmlOutput>true</xmlOutput>
-                    <failOnError>true</failOnError>
-                    <excludeFilterFile>ci/spotbugs/exclude.xml</excludeFilterFile>
-                </configuration>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>com.diffplug.spotless</groupId>
-                <artifactId>spotless-maven-plugin</artifactId>
-                <version>${spotless-maven-plugin.version}</version>
-                <configuration>
-                    <java>
-                        <importOrder>
-                            <order>,java,static others</order>
-                        </importOrder>
-                        <removeUnusedImports/>
-                        <trimTrailingWhitespace/>
-                        <endWithNewline/>
-                        <indent>
-                            <spaces>true</spaces>
-                            <spacesPerTab>4</spacesPerTab>
-                        </indent>
-                    </java>
-                </configuration>
             </plugin>
         </plugins>
     </build>
