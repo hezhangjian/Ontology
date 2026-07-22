@@ -97,7 +97,8 @@ final class RuntimeSource extends RichSourceFunction<String> implements Checkpoi
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
             String headerLine = reader.readLine();
             if (headerLine == null) return;
-            List<String> headers = List.of(headerLine.split(",", -1));
+            if (headerLine.startsWith("\uFEFF")) headerLine = headerLine.substring(1);
+            List<String> headers = java.util.Arrays.stream(headerLine.split(",", -1)).map(String::trim).toList();
             String line;
             while (running && (line = reader.readLine()) != null && readCount < limit) {
                 String[] values = line.split(",", -1);

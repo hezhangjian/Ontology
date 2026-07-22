@@ -6,10 +6,10 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import com.hezhangjian.ontology.core.security.ActorIdentity;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -60,7 +60,7 @@ public class DashboardController {
 
     @DeleteMapping("/dashboards/{id}")
     ResponseEntity<Void> delete(@PathVariable UUID id, Authentication authentication) {
-        service.deleteEmptyDraft(id, actor(authentication));
+        service.delete(id, actor(authentication));
         return ResponseEntity.noContent().build();
     }
 
@@ -211,13 +211,8 @@ public class DashboardController {
     }
 
     private Actor actor(Authentication authentication) {
-        Jwt jwt = (Jwt) authentication.getPrincipal();
-        String id = jwt.getSubject() == null ? jwt.getClaimAsString("preferred_username") : jwt.getSubject();
-        String name = jwt.getClaimAsString("name");
-        if (name == null) name = jwt.getClaimAsString("preferred_username");
-        List<String> roles = authentication.getAuthorities().stream().map(value -> value.getAuthority())
-                .filter(value -> value.startsWith("ROLE_")).map(value -> value.substring(5)).toList();
-        return new Actor(id, name == null ? id : name, roles);
+        ActorIdentity identity = ActorIdentity.from(authentication);
+        return new Actor(identity.id(), identity.name(), identity.roles());
     }
 
     private long etag(String value) {

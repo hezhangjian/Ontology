@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class PipelineGraphValidator {
-    private static final Set<String> OUTPUT_TYPES = Set.of("ONTOLOGY_OBJECT", "ONTOLOGY_RELATION");
+    private static final Set<String> OUTPUT_TYPES = Set.of("DATASET_OUTPUT", "ONTOLOGY_OBJECT", "ONTOLOGY_RELATION");
     private static final Set<String> SOURCE_TYPES = Set.of("SOURCE");
     private final ObjectMapper json;
 
@@ -39,7 +39,8 @@ public class PipelineGraphValidator {
                 type("DEDUPLICATE", "去重", "转换", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, false, "按键保留首条或末条记录"),
                 type("DERIVE", "派生字段", "转换", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, false, "安全表达式生成字段"),
                 type("FILTER", "过滤", "转换", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, false, "类型化 AND/OR 条件"),
-                type("JOIN", "JOIN", "转换", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 2, 4, false, false, "批处理 JOIN 或流式有界维表 JOIN"),
+                type("JOIN", "关联数据", "转换", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, false, "按字段关联一个有界辅助文件或数据表"),
+                type("DATASET_OUTPUT", "数据集输出", "输出", List.of(PipelineMode.BATCH), 1, 1, false, true, "物化为可复用的数据集"),
                 type("ONTOLOGY_OBJECT", "本体对象输出", "输出", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, true, "映射对象 ID 与属性"),
                 type("ONTOLOGY_RELATION", "本体关系输出", "输出", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, true, "映射关系端点与属性"),
                 type("QUALITY", "质量门禁", "治理", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, false, "执行版本化质量规则"),
@@ -189,13 +190,75 @@ public class PipelineGraphValidator {
                 if (mode == PipelineMode.STREAMING && !Boolean.TRUE.equals(config.get("boundedDimension"))) {
                     issue(issues, "join.stream." + node.id(), "SEMANTICS", "ERROR", node.id(), "流式 JOIN 仅支持有界维表", "v1 不支持 stream-stream JOIN。", "将辅助源设置为有界 lookup/broadcast 维表");
                 }
-                yield input.stream().collect(Collectors.toMap(FieldSchema::name, Function.identity(), (left, right) -> left, LinkedHashMap::new)).values().stream().toList();
+                String leftKey = text(config.get("leftKey"));
+                String rightKey = text(config.get("rightKey"));
+                List<FieldSchema> lookupFields = lookupFields(config.get("lookupFields"), node.id());
+                if (text(config.get("lookupConnectionId")).isBlank() || text(config.get("lookupAssetId")).isBlank()
+                        || leftKey.isBlank() || rightKey.isBlank()) {
+                    issue(issues, "join.config." + node.id(), "SEMANTICS", "ERROR", node.id(), "关联配置不完整",
+                            "请选择辅助连接、文件或数据表，以及两侧关联字段。", "在右侧完成关联配置");
+                } else {
+                    if (input.stream().noneMatch(field -> field.name().equals(leftKey))) {
+                        issue(issues, "join.left." + node.id(), "SCHEMA", "ERROR", node.id(), "主数据关联字段已失效", leftKey, "重新选择主数据字段");
+                    }
+                    if (lookupFields.stream().noneMatch(field -> field.name().equals(rightKey))) {
+                        issue(issues, "join.right." + node.id(), "SCHEMA", "ERROR", node.id(), "辅助数据关联字段已失效", rightKey, "重新选择辅助数据字段");
+                    }
+                }
+                Map<String, FieldSchema> merged = input.stream().collect(Collectors.toMap(
+                        FieldSchema::name, Function.identity(), (left, right) -> left, LinkedHashMap::new));
+                for (FieldSchema field : lookupFields) {
+                    String name = merged.containsKey(field.name()) ? textOr(config.get("lookupPrefix"), "辅助_") + field.name() : field.name();
+                    merged.put(name, new FieldSchema(name, field.type(), true, field.sensitive(), node.id()));
+                }
+                yield merged.values().stream().toList();
+            }
+            case "DATASET_OUTPUT" -> {
+                if (text(config.get("datasetName")).isBlank()) issue(issues, "dataset.name.required." + node.id(), "OUTPUT", "ERROR", node.id(),
+                        "数据集名称不能为空", "输出节点尚未配置数据集名称。", "填写数据集名称");
+                List<Map<?, ?>> mappings = new ArrayList<>();
+                if (config.get("fieldMappings") instanceof List<?> values) {
+                    for (Object value : values) if (value instanceof Map<?, ?> mapping) mappings.add(mapping);
+                }
+                boolean explicitSelection = "EXPLICIT".equals(text(config.get("fieldSelectionMode")));
+                if (mappings.isEmpty() && !explicitSelection) yield input;
+                if (mappings.isEmpty()) {
+                    issue(issues, "dataset.fields.required." + node.id(), "OUTPUT", "ERROR", node.id(),
+                            "至少保留一个输出字段", "当前 Dataset 输出会得到空记录。", "在保留字段中至少勾选一项");
+                    yield List.of();
+                }
+                List<FieldSchema> output = new ArrayList<>();
+                Set<String> targets = new HashSet<>();
+                for (Map<?, ?> mapping : mappings) {
+                    String source = text(mapping.get("source"));
+                    String target = text(mapping.get("target"));
+                    FieldSchema sourceField = input.stream().filter(field -> field.name().equals(source)).findFirst().orElse(null);
+                    if (sourceField == null) {
+                        issue(issues, "dataset.field.missing." + node.id() + "." + source, "SCHEMA", "ERROR", node.id(),
+                                "Dataset 输出字段已失效", source, "重新选择现有上游字段");
+                    } else if (target.isBlank()) {
+                        issue(issues, "dataset.field.name." + node.id() + "." + source, "OUTPUT", "ERROR", node.id(),
+                                "输出字段名不能为空", source, "填写输出字段名或取消勾选该字段");
+                    } else if (!targets.add(target)) {
+                        issue(issues, "dataset.field.duplicate." + node.id() + "." + target, "OUTPUT", "ERROR", node.id(),
+                                "输出字段名不能重复", target, "为字段设置不同的输出名称");
+                    } else {
+                        output.add(new FieldSchema(target, sourceField.type(), sourceField.nullable(),
+                                sourceField.sensitive(), node.id()));
+                    }
+                }
+                yield output;
             }
             case "ONTOLOGY_OBJECT" -> {
-                if (text(config.get("objectTypeId")).isBlank() || text(config.get("idField")).isBlank()) {
+                List<String> idFields = idFields(config);
+                if (text(config.get("objectTypeId")).isBlank() || idFields.isEmpty()) {
                     issue(issues, "output.object." + node.id(), "OUTPUT", "ERROR", node.id(), "对象输出配置不完整", "对象类型和对象 ID 字段均为必填。", "配置对象类型与稳定 ID 映射");
-                } else if (input.stream().noneMatch(field -> field.name().equals(text(config.get("idField"))))) {
-                    issue(issues, "output.object.id." + node.id(), "SCHEMA", "ERROR", node.id(), "对象 ID 字段已失效", text(config.get("idField")), "选择现有上游字段");
+                } else {
+                    List<String> missing = idFields.stream().filter(idField ->
+                            input.stream().noneMatch(field -> field.name().equals(idField))).toList();
+                    if (!missing.isEmpty()) {
+                        issue(issues, "output.object.id." + node.id(), "SCHEMA", "ERROR", node.id(), "对象唯一标识字段已失效", String.join("、", missing), "选择现有上游字段");
+                    }
                 }
                 yield List.of();
             }
@@ -224,6 +287,28 @@ public class PipelineGraphValidator {
             }
         }
         return result;
+    }
+
+    private List<String> idFields(Map<String, Object> config) {
+        if (config.get("idFields") instanceof List<?> values) {
+            return values.stream().map(this::text).filter(value -> !value.isBlank()).distinct().toList();
+        }
+        String legacy = text(config.get("idField"));
+        return legacy.isBlank() ? List.of() : List.of(legacy);
+    }
+
+    private List<FieldSchema> lookupFields(Object raw, String nodeId) {
+        if (!(raw instanceof List<?> values)) return List.of();
+        List<FieldSchema> fields = new ArrayList<>();
+        for (Object value : values) {
+            if (!(value instanceof Map<?, ?> field)) continue;
+            String name = text(field.get("name"));
+            if (!name.isBlank()) {
+                fields.add(new FieldSchema(name, textOr(field.get("type"), "STRING"),
+                        !Boolean.FALSE.equals(field.get("nullable")), Boolean.TRUE.equals(field.get("sensitive")), nodeId));
+            }
+        }
+        return fields;
     }
 
     private Set<String> connectedToOutputs(Map<String, PipelineNode> nodes, Map<String, List<String>> incoming) {

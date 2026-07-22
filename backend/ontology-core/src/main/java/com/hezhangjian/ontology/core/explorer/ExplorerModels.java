@@ -13,11 +13,11 @@ public final class ExplorerModels {
         boolean builder() { return admin() || roles.contains("Builder"); }
     }
 
-    public record PropertyDefinition(UUID id, String apiName, String displayName, String valueType,
+    public record PropertyDefinition(UUID id, String apiName, String physicalKey, String displayName, String valueType,
                                      boolean primaryKey, boolean titleProperty, boolean searchable,
                                      boolean filterable, boolean sortable, boolean sensitive) { }
 
-    public record ObjectTypeDefinition(UUID id, String apiName, String displayName, String maturity,
+    public record ObjectTypeDefinition(UUID id, String apiName, String physicalKey, String displayName, String maturity,
                                        long ontologyRevision, List<PropertyDefinition> properties) { }
 
     public record SortClause(UUID propertyId, String direction) { }
@@ -41,13 +41,16 @@ public final class ExplorerModels {
 
     public record FacetResult(UUID propertyId, String displayName, List<FacetBucket> buckets) { }
 
+    public record AggregationBucket(Object value, long count, double metric) { }
+
     public record SearchRequest(String query, String mode, String tab, Integer size) { }
 
     public record SearchResponse(List<ObjectSummary> objects, List<ObjectTypeDefinition> objectTypes,
                                  List<ExplorationView> explorations, List<ObjectListView> lists,
                                  long visibleObjectCount, Instant indexUpdatedAt) { }
 
-    public record ExplorerHome(List<ObjectTypeDefinition> objectTypes, List<ObjectSummary> recentObjects,
+    public record ExplorerHome(List<ObjectTypeDefinition> objectTypes, Map<UUID, Long> objectCounts,
+                               List<ObjectSummary> recentObjects,
                                List<ExplorationView> explorations, List<ObjectListView> lists,
                                String searchStatus, Instant indexUpdatedAt) { }
 

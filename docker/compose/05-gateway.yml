@@ -6,14 +6,11 @@ services:
       frontend:
         condition: service_healthy
         restart: true
-      keycloak:
-        condition: service_healthy
-        restart: true
       ontology-core:
         condition: service_healthy
         restart: true
     ports:
-      - 9080:9080
+      - ${BIND_ADDRESS:-0.0.0.0}:9080:9080
     volumes:
       - ../config/apisix/apisix.yaml:/usr/local/apisix/conf/apisix.yaml:ro
       - ../config/apisix/config.yaml:/usr/local/apisix/conf/config.yaml:ro

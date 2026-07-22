@@ -4,8 +4,6 @@ x-java-build: &java-build
 
 x-java-common: &java-common
   environment:
-    SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8083}/realms/ontology
-    SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/realms/ontology/protocol/openid-connect/certs
     SW_AGENT_COLLECTOR_BACKEND_SERVICES: skywalking-oap:11800
   restart: unless-stopped
 
@@ -23,13 +21,9 @@ services:
         SKYWALKING_JAVA_AGENT_SHA512: ${SKYWALKING_JAVA_AGENT_SHA512}
         SKYWALKING_JAVA_AGENT_VERSION: ${SKYWALKING_JAVA_AGENT_VERSION}
     depends_on:
-      keycloak:
-        condition: service_healthy
       postgres:
         condition: service_healthy
     environment:
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8083}/realms/ontology
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/realms/ontology/protocol/openid-connect/certs
       SW_AGENT_COLLECTOR_BACKEND_SERVICES: skywalking-oap:11800
       SW_AGENT_NAME: ontology-core
     secrets:

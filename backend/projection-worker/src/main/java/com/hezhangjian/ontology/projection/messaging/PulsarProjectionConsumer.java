@@ -8,9 +8,11 @@ import com.hezhangjian.ontology.contracts.projection.OntologyMutationBatch;
 import com.hezhangjian.ontology.projection.IndexRebuildProcessor;
 import com.hezhangjian.ontology.projection.MutationBatchProcessor;
 import com.hezhangjian.ontology.projection.ProjectionProcessor;
+import com.hezhangjian.ontology.projection.ProjectionProcessor.ProjectionInput;
 import com.hezhangjian.ontology.projection.config.ProjectionProperties;
 import com.hezhangjian.ontology.projection.control.ControlPlaneRepository;
 import com.hezhangjian.ontology.projection.model.ProjectionException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -30,6 +32,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class PulsarProjectionConsumer implements SmartLifecycle {
+    private static final int MAX_EVENT_BATCH_SIZE = 200;
     private static final Logger log = LoggerFactory.getLogger(PulsarProjectionConsumer.class);
     private static final String DLQ_TOPIC = "persistent://platform/dlq/projection-events";
     private static final List<String> INPUT_TOPICS = List.of(
@@ -94,13 +97,70 @@ public class PulsarProjectionConsumer implements SmartLifecycle {
             try {
                 Message<byte[]> message = consumer.receive(1, TimeUnit.SECONDS);
                 if (message != null) {
-                    handle(message);
+                    List<Message<byte[]>> messages = new ArrayList<>();
+                    messages.add(message);
+                    while (messages.size() < MAX_EVENT_BATCH_SIZE) {
+                        Message<byte[]> additional = consumer.receive(10, TimeUnit.MILLISECONDS);
+                        if (additional == null) {
+                            break;
+                        }
+                        messages.add(additional);
+                    }
+                    handleBatch(messages);
                 }
             } catch (Exception exception) {
                 if (running) {
                     log.error("Projection receive loop failed", exception);
                 }
             }
+        }
+    }
+
+    private void handleBatch(List<Message<byte[]>> messages) {
+        List<Message<byte[]>> eventMessages = new ArrayList<>();
+        List<ProjectionInput> inputs = new ArrayList<>();
+        for (Message<byte[]> message : messages) {
+            String topic = message.getTopicName();
+            if (!topic.contains("/object-events") && !topic.contains("/relation-events")) {
+                flushEvents(eventMessages, inputs);
+                handle(message);
+                continue;
+            }
+            try {
+                OntologyEventEnvelope event = objectMapper.readValue(message.getData(), OntologyEventEnvelope.class);
+                eventMessages.add(message);
+                inputs.add(new ProjectionInput(topic, message.getMessageId().toString(), event));
+            } catch (Exception exception) {
+                flushEvents(eventMessages, inputs);
+                handle(message);
+            }
+        }
+        flushEvents(eventMessages, inputs);
+    }
+
+    private void flushEvents(List<Message<byte[]>> messages, List<ProjectionInput> inputs) {
+        if (messages.isEmpty()) {
+            return;
+        }
+        try {
+            projectionProcessor.processBatch(inputs);
+            for (Message<byte[]> message : messages) {
+                consumer.acknowledge(message);
+            }
+        } catch (Exception exception) {
+            ProjectionException failure = classify(exception);
+            if (!failure.retryable()) {
+                for (Message<byte[]> message : messages) {
+                    handle(message);
+                }
+            } else {
+                for (int index = 0; index < messages.size(); index++) {
+                    fail(messages.get(index), inputs.get(index).event().eventId(), failure);
+                }
+            }
+        } finally {
+            messages.clear();
+            inputs.clear();
         }
     }
 
@@ -125,20 +185,24 @@ public class PulsarProjectionConsumer implements SmartLifecycle {
             consumer.acknowledge(message);
         } catch (Exception exception) {
             ProjectionException failure = classify(exception);
-            log.warn("Projection message failed with {}", failure.code(), exception);
-            int attempt = message.getRedeliveryCount() + 1;
-            repository.recordFailure(eventId, failure.code(), failure.retryable(), attempt, failure.getMessage());
-            if (failure.retryable() && attempt < properties.maxRetries()) {
-                log.warn("Projection attempt {} failed and will be retried: {}", attempt, failure.code());
-                consumer.negativeAcknowledge(message);
-                return;
-            }
-            sendToDlq(message, failure, attempt);
-            if (eventId != null) {
-                repository.dlq(eventId, failure.code(), failure.getMessage());
-            }
-            acknowledgeAfterDlq(message);
+            fail(message, eventId, failure);
         }
+    }
+
+    private void fail(Message<byte[]> message, UUID eventId, ProjectionException failure) {
+        log.warn("Projection message failed with {}", failure.code(), failure);
+        int attempt = message.getRedeliveryCount() + 1;
+        repository.recordFailure(eventId, failure.code(), failure.retryable(), attempt, failure.getMessage());
+        if (failure.retryable() && attempt < properties.maxRetries()) {
+            log.warn("Projection attempt {} failed and will be retried: {}", attempt, failure.code());
+            consumer.negativeAcknowledge(message);
+            return;
+        }
+        sendToDlq(message, failure, attempt);
+        if (eventId != null) {
+            repository.dlq(eventId, failure.code(), failure.getMessage());
+        }
+        acknowledgeAfterDlq(message);
     }
 
     private ProjectionException classify(Exception exception) {

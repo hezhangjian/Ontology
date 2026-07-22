@@ -47,7 +47,6 @@ public class OpenSearchProjectionClient {
     }
 
     public void apply(ValidatedEvent validated, String graphElementId) {
-        OntologyEventEnvelope event = validated.event();
         String alias = validated.relation() ? RELATION_ALIAS : OBJECT_ALIAS;
         String id = stableId(validated.entityKey());
         if (validated.deleted()) {
@@ -58,30 +57,54 @@ public class OpenSearchProjectionClient {
             }
             return;
         }
-        ObjectNode document = objectMapper.createObjectNode();
-        document.put("graph_element_id", graphElementId);
-        document.put("ontology_revision", event.ontologyRevision());
-        document.put("entity_version", validated.entityVersion());
-        document.put("correlation_id", event.correlationId());
-        document.put("occurred_at", event.occurredAt().toString());
-        document.set("visibility_tokens", objectMapper.createArrayNode().add("authenticated"));
-        if (validated.relation()) {
-            document.put("relation_type", event.relationType());
-            document.put("relation_id", event.relationId());
-            document.put("source_object_type", event.sourceObjectType());
-            document.put("source_object_id", event.sourceObjectId());
-            document.put("target_object_type", event.targetObjectType());
-            document.put("target_object_id", event.targetObjectId());
-        } else {
-            document.put("object_type", event.objectType());
-            document.put("object_id", event.objectId());
-        }
-        document.set("properties", validated.searchablePayload());
         http.requireSuccess(
                 "PUT",
                 uri(alias + "/_doc/" + id + "?refresh=wait_for&version="
                         + validated.entityVersion() + "&version_type=external_gte"),
-                document);
+                document(validated, graphElementId));
+    }
+
+    public void applyBatch(List<ValidatedEvent> events, List<String> graphElementIds) {
+        if (events.size() != graphElementIds.size()) {
+            throw new IllegalArgumentException("Search batch events and graph ids must have equal sizes");
+        }
+        if (events.isEmpty()) {
+            return;
+        }
+        StringBuilder body = new StringBuilder();
+        for (int index = 0; index < events.size(); index++) {
+            ValidatedEvent validated = events.get(index);
+            String alias = validated.relation() ? RELATION_ALIAS : OBJECT_ALIAS;
+            ObjectNode metadata = objectMapper.createObjectNode()
+                    .put("_index", alias)
+                    .put("_id", stableId(validated.entityKey()))
+                    .put("version", validated.entityVersion())
+                    .put("version_type", "external_gte");
+            if (validated.deleted()) {
+                appendBulkLine(body, objectMapper.createObjectNode().set("delete", metadata));
+            } else {
+                appendBulkLine(body, objectMapper.createObjectNode().set("index", metadata));
+                appendBulkLine(body, document(validated, graphElementIds.get(index)));
+            }
+        }
+        JsonNode response = http.requireSuccessRaw(
+                "POST",
+                uri("_bulk?refresh=wait_for"),
+                body.toString(),
+                "application/x-ndjson");
+        JsonNode items = response.path("items");
+        if (!items.isArray() || items.size() != events.size()) {
+            throw new ProjectionException(
+                    "SEARCH_RESPONSE_INVALID", "OpenSearch omitted bulk item results", true);
+        }
+        for (JsonNode item : items) {
+            JsonNode result = item.elements().hasNext() ? item.elements().next() : null;
+            int status = result == null ? 500 : result.path("status").asInt(500);
+            boolean deleteMissing = item.has("delete") && status == 404;
+            if ((status < 200 || status >= 300) && !deleteMissing) {
+                throw storageFailure(status, "apply bulk index document");
+            }
+        }
     }
 
     public RebuildResult rebuildObjects(List<GraphObject> objects, SearchablePayloadFilter filter) {
@@ -167,6 +190,7 @@ public class OpenSearchProjectionClient {
         fields.set("properties", objectMapper.createObjectNode().put("type", "object").put("dynamic", true));
         root.set("mappings", objectMapper.createObjectNode()
                 .put("dynamic", "strict")
+                .put("date_detection", false)
                 .set("properties", fields));
         if (alias != null) {
             root.set("aliases", objectMapper.createObjectNode().set(alias, objectMapper.createObjectNode()));
@@ -196,6 +220,39 @@ public class OpenSearchProjectionClient {
 
     private void keyword(ObjectNode fields, String field) {
         fields.set(field, objectMapper.createObjectNode().put("type", "keyword"));
+    }
+
+    private ObjectNode document(ValidatedEvent validated, String graphElementId) {
+        OntologyEventEnvelope event = validated.event();
+        ObjectNode document = objectMapper.createObjectNode();
+        document.put("graph_element_id", graphElementId);
+        document.put("ontology_revision", event.ontologyRevision());
+        document.put("entity_version", validated.entityVersion());
+        document.put("correlation_id", event.correlationId());
+        document.put("occurred_at", event.occurredAt().toString());
+        document.set("visibility_tokens", objectMapper.createArrayNode().add("authenticated"));
+        if (validated.relation()) {
+            document.put("relation_type", event.relationType());
+            document.put("relation_id", event.relationId());
+            document.put("source_object_type", event.sourceObjectType());
+            document.put("source_object_id", event.sourceObjectId());
+            document.put("target_object_type", event.targetObjectType());
+            document.put("target_object_id", event.targetObjectId());
+        } else {
+            document.put("object_type", event.objectType());
+            document.put("object_id", event.objectId());
+        }
+        document.set("properties", validated.searchablePayload());
+        return document;
+    }
+
+    private void appendBulkLine(StringBuilder body, JsonNode line) {
+        try {
+            body.append(objectMapper.writeValueAsString(line)).append('\n');
+        } catch (Exception exception) {
+            throw new ProjectionException(
+                    "SEARCH_REQUEST_INVALID", "OpenSearch bulk request could not be encoded", false, exception);
+        }
     }
 
     private String stableId(String key) {

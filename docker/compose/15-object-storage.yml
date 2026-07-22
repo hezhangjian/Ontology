@@ -11,6 +11,9 @@ services:
       - minio_root_user
     volumes:
       - minio-data:/data
+    ports:
+      - ${BIND_ADDRESS:-0.0.0.0}:9000:9000
+      - ${BIND_ADDRESS:-0.0.0.0}:9001:9001
     healthcheck:
       test: [CMD, curl, -fsS, http://localhost:9000/minio/health/live]
       interval: 10s

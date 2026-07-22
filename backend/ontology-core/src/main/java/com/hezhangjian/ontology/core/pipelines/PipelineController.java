@@ -8,10 +8,10 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.hezhangjian.ontology.core.connections.ConnectionProblem;
+import com.hezhangjian.ontology.core.security.ActorIdentity;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -167,6 +167,7 @@ public class PipelineController {
     Pipeline archive(@PathVariable UUID id, Authentication authentication) { return service.archive(id, actor(authentication)); }
 
     @DeleteMapping("/pipelines/{id}")
+    @PreAuthorize("hasAnyRole('Builder','Admin')")
     ResponseEntity<Void> delete(@PathVariable UUID id, Authentication authentication) {
         service.delete(id, actor(authentication));
         return ResponseEntity.noContent().build();
@@ -222,16 +223,8 @@ public class PipelineController {
     PreviewRun preview(@PathVariable UUID previewId) { return service.preview(previewId); }
 
     private Actor actor(Authentication authentication) {
-        Jwt jwt = (Jwt) authentication.getPrincipal();
-        String username = jwt.getClaimAsString("preferred_username");
-        String id = jwt.getSubject();
-        if (id == null || id.isBlank()) id = username;
-        if (id == null || id.isBlank()) id = jwt.getClaimAsString("client_id");
-        if (id == null || id.isBlank()) throw new ConnectionProblem("IDENTITY_SUBJECT_MISSING", "访问令牌缺少稳定主体");
-        String name = jwt.getClaimAsString("name");
-        if (name == null || name.isBlank()) name = username;
-        return new Actor(id, name == null ? id : name,
-                authentication.getAuthorities().stream().anyMatch(authority -> authority.getAuthority().equals("ROLE_Admin")));
+        ActorIdentity identity = ActorIdentity.from(authentication);
+        return new Actor(identity.id(), identity.name(), identity.admin());
     }
 
     private long parseVersion(String ifMatch) {

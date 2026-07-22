@@ -7,13 +7,12 @@ compose="${project_root}/docker/scripts/compose.sh"
 "${project_root}/docker/scripts/healthcheck.sh"
 "${project_root}/docker/scripts/compatibility-check.sh"
 
-curl -fsS http://localhost:8083/realms/ontology/.well-known/openid-configuration | grep -q '"issuer":"http://localhost:8083/realms/ontology"'
 curl -fsS http://localhost:9080/healthz | grep -q '^ok$'
 curl -fsS http://localhost:9080/data/connections | grep -q '<div id="root"></div>'
 
 status=$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:9080/api/ontology/actuator/health)
-if [ "${status}" != 401 ]; then
-  echo "Protected gateway route returned ${status}, expected 401." >&2
+if [ "${status}" != 200 ]; then
+  echo "Login-free gateway route returned ${status}, expected 200." >&2
   exit 1
 fi
 
@@ -38,4 +37,4 @@ ${compose} --profile '*' run --rm --no-deps --entrypoint /bin/sh minio-bootstrap
   done
 '
 
-echo "E:platform-foundation passed. Complete the PKCE flow in the in-app browser."
+echo "E:platform-foundation passed. The portal is available without login."

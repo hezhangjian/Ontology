@@ -14,21 +14,31 @@ export default function PipelineCanvas({ graph, nodeTypes, onChange, onSelect }:
   const nodes: Node[] = graph.nodes.map((node) => ({
     data: { label: <div className="pipeline-node-label"><strong>{node.name}</strong><small>{node.type}</small>{node.invalidReasons.length > 0 && <span>{node.invalidReasons.length} 个错误</span>}</div> },
     id: node.id,
+    initialHeight: 48,
+    initialWidth: 160,
     position: node.position,
-    type: node.type === 'SOURCE' ? 'input' : node.type.startsWith('ONTOLOGY_') ? 'output' : 'default',
+    type: node.type === 'SOURCE' ? 'input' : node.type.startsWith('ONTOLOGY_') || node.type === 'DATASET_OUTPUT' ? 'output' : 'default',
   }));
   const edges: Edge[] = graph.edges.map((edge) => ({ ...edge, animated: false }));
 
   const nodeChanges = useCallback((changes: NodeChange[]) => {
-    const updated = applyNodeChanges(changes, nodes);
-    const removed = new Set(changes.filter((change) => change.type === 'remove').map((change) => change.id));
+    const graphChanges = changes.filter((change) => change.type === 'position' || change.type === 'remove');
+    if (graphChanges.length === 0) return;
+    const updated = applyNodeChanges(graphChanges, nodes);
+    const removed = new Set(graphChanges.filter((change) => change.type === 'remove').map((change) => change.id));
     if (graph.nodes.some((node) => removed.has(node.id) && node.type === 'SOURCE')) return;
+    const nextNodes = graph.nodes
+      .filter((node) => !removed.has(node.id))
+      .map((node) => ({ ...node, position: updated.find((item) => item.id === node.id)?.position ?? node.position }));
+    const moved = nextNodes.some((node) => {
+      const current = graph.nodes.find((item) => item.id === node.id);
+      return current && (current.position.x !== node.position.x || current.position.y !== node.position.y);
+    });
+    if (!moved && removed.size === 0) return;
     onChange({
       ...graph,
       edges: graph.edges.filter((edge) => !removed.has(edge.source) && !removed.has(edge.target)),
-      nodes: graph.nodes
-        .filter((node) => !removed.has(node.id))
-        .map((node) => ({ ...node, position: updated.find((item) => item.id === node.id)?.position ?? node.position })),
+      nodes: nextNodes,
     }, removed.size > 0);
   }, [graph, nodes, onChange]);
   const edgeChanges = useCallback((changes: EdgeChange[]) => {
@@ -52,7 +62,7 @@ export default function PipelineCanvas({ graph, nodeTypes, onChange, onSelect }:
 
   return <div className="pipeline-canvas" onDragOver={(event) => event.preventDefault()} onDrop={drop}>
     <ReactFlow edges={edges} fitView nodes={nodes} onConnect={connect} onEdgesChange={edgeChanges} onNodeClick={(_, node) => onSelect(node.id)} onNodesChange={nodeChanges} onPaneClick={() => onSelect(undefined)}>
-      <Background color="#d7ddea" gap={20} /><Controls /><MiniMap pannable zoomable />
+      <Background color="#d7ddea" gap={20} /><Controls /><MiniMap style={{ pointerEvents: 'none' }} />
     </ReactFlow>
   </div>;
 }

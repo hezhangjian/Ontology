@@ -4,7 +4,6 @@ set -eu
 project_root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
 compose="${project_root}/docker/scripts/compose.sh"
 api=http://localhost:9080/api/ontology/v1
-keycloak=http://localhost:8083
 work_dir=$(mktemp -d)
 trap 'rm -rf "${work_dir}"' EXIT
 
@@ -13,50 +12,8 @@ fail() {
   exit 1
 }
 
-admin_password=$(tr -d '\r\n' < "${project_root}/docker/secrets/examples/keycloak_admin_password")
-admin_token=$(curl -fsS -X POST "${keycloak}/realms/master/protocol/openid-connect/token" \
-  -H 'Content-Type: application/x-www-form-urlencoded' \
-  --data-urlencode grant_type=password --data-urlencode client_id=admin-cli \
-  --data-urlencode username=admin --data-urlencode "password=${admin_password}" | jq -er .access_token)
-
-service_token() {
-  client_id=$1
-  roles=$2
-  client_secret=$(openssl rand -hex 24)
-  client_uuid=$(curl -fsS "${keycloak}/admin/realms/ontology/clients?clientId=${client_id}" \
-    -H "Authorization: Bearer ${admin_token}" | jq -r '.[0].id // empty')
-  client_json=$(jq -n --arg id "${client_id}" --arg secret "${client_secret}" '{clientId:$id,enabled:true,protocol:"openid-connect",publicClient:false,clientAuthenticatorType:"client-secret",secret:$secret,serviceAccountsEnabled:true,standardFlowEnabled:false,directAccessGrantsEnabled:false}')
-  if [ -z "${client_uuid}" ]; then
-    curl -fsS -X POST "${keycloak}/admin/realms/ontology/clients" -H "Authorization: Bearer ${admin_token}" \
-      -H 'Content-Type: application/json' -d "${client_json}" >/dev/null
-    client_uuid=$(curl -fsS "${keycloak}/admin/realms/ontology/clients?clientId=${client_id}" \
-      -H "Authorization: Bearer ${admin_token}" | jq -er '.[0].id')
-  else
-    curl -fsS -X PUT "${keycloak}/admin/realms/ontology/clients/${client_uuid}" -H "Authorization: Bearer ${admin_token}" \
-      -H 'Content-Type: application/json' -d "${client_json}" >/dev/null
-  fi
-  service_user=$(curl -fsS "${keycloak}/admin/realms/ontology/clients/${client_uuid}/service-account-user" \
-    -H "Authorization: Bearer ${admin_token}" | jq -er .id)
-  role_json='[]'
-  old_ifs=$IFS
-  IFS=,
-  for role in ${roles}; do
-    role_value=$(curl -fsS "${keycloak}/admin/realms/ontology/roles/${role}" -H "Authorization: Bearer ${admin_token}")
-    role_json=$(jq -c --argjson role "${role_value}" '. + [$role]' <<EOF
-${role_json}
-EOF
-)
-  done
-  IFS=$old_ifs
-  curl -fsS -X POST "${keycloak}/admin/realms/ontology/users/${service_user}/role-mappings/realm" \
-    -H "Authorization: Bearer ${admin_token}" -H 'Content-Type: application/json' -d "${role_json}" >/dev/null
-  curl -fsS -X POST "${keycloak}/realms/ontology/protocol/openid-connect/token" \
-    -H 'Content-Type: application/x-www-form-urlencoded' --data-urlencode grant_type=client_credentials \
-    --data-urlencode "client_id=${client_id}" --data-urlencode "client_secret=${client_secret}" | jq -er .access_token
-}
-
-admin_api_token=$(service_token ontology-e2e-admin Admin,Builder)
-viewer_api_token=$(service_token ontology-e2e-viewer Viewer)
+admin_api_token=local
+viewer_api_token=local
 
 "${compose}" --profile '*' run --rm --no-deps --entrypoint /bin/sh minio-bootstrap -ec '
   minio_user=$(cat /run/secrets/minio_root_user)

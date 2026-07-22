@@ -1264,6 +1264,8 @@ textarea {
 .metric-widget { display: flex; align-items: baseline; gap: 10px; padding: 12px 0; }
 .metric-widget strong { font-size: 36px; color: #16233b; }
 .metric-widget span { color: #697386; }
+.metric-values { display: flex; flex-wrap: wrap; gap: 12px 28px; }
+.metric-values .metric-widget { min-width: 160px; flex-direction: column; align-items: flex-start; gap: 2px; }
 .widget-watermark { margin-top: 14px; padding-top: 8px; border-top: 1px solid #f0f1f4; color: #8a94a6; font-size: 11px; }
 .chart-widget { display: flex; flex-direction: column; gap: 10px; }
 .chart-widget button { display: grid; grid-template-columns: minmax(90px, 1fr) 3fr 64px; align-items: center; gap: 10px; border: 0; background: transparent; text-align: left; cursor: pointer; }
@@ -1287,6 +1289,9 @@ textarea {
 .editor-widget:hover, .editor-widget.selected { border-color: #3d73dd; box-shadow: 0 0 0 2px rgb(61 115 221 / 12%); }
 .editor-widget span, .editor-widget small { color: #7b8799; }
 .inspector-empty { padding: 40px 10px; text-align: center; color: #8a94a6; }
+.dashboard-config-card { margin-bottom: 10px; background: #fafbfe; }
+.dashboard-config-card .ant-form-item { margin-bottom: 10px; }
+.dashboard-config-hint { margin-top: 16px; font-size: 12px; }
 .dashboard-editor-loading { display: grid; height: 100vh; place-items: center; }
 .dashboard-versions-page { max-width: 1500px; }
 .dashboard-view.fullscreen .dashboard-view-header { position: sticky; top: 0; z-index: 2; padding: 12px; background: rgb(243 246 251 / 94%); backdrop-filter: blur(8px); }

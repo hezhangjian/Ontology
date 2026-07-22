@@ -20,12 +20,19 @@ import java.util.concurrent.ConcurrentHashMap;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hezhangjian.ontology.core.deletion.ResourceDeletionService;
+import io.minio.BucketExistsArgs;
+import io.minio.MakeBucketArgs;
+import io.minio.MinioClient;
+import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class DataConnectionService {
@@ -46,16 +53,19 @@ public class DataConnectionService {
     private final ConnectionPolicy policy;
     private final ConnectionProbe probe;
     private final ConnectionProperties properties;
+    private final ResourceDeletionService deletion;
     private final Map<String, RateWindow> testRates = new ConcurrentHashMap<>();
 
     public DataConnectionService(JdbcTemplate jdbc, ObjectMapper json, ConnectionCrypto crypto,
-                                 ConnectionPolicy policy, ConnectionProbe probe, ConnectionProperties properties) {
+                                 ConnectionPolicy policy, ConnectionProbe probe, ConnectionProperties properties,
+                                 ResourceDeletionService deletion) {
         this.jdbc = jdbc;
         this.json = json;
         this.crypto = crypto;
         this.policy = policy;
         this.probe = probe;
         this.properties = properties;
+        this.deletion = deletion;
     }
 
     public TestResult test(TestRequest request, Actor actor) {
@@ -94,6 +104,58 @@ public class DataConnectionService {
             throw new ConnectionProblem("CREATE_RETEST_FAILED", "创建前复核失败，当前配置未保存");
         }
         UUID secretId = createOrReferenceCredential(request.credential(), request.type(), actor);
+        return persistDataSource(request.name(), request.description(), request.type(), request.ownerId(), request.ownerName(),
+                request.tags(), config, secretId, fingerprint, outcome, actor);
+    }
+
+    @Transactional
+    public DataSource importLocalCsv(String name, String description, List<String> tags, List<MultipartFile> files, Actor actor) {
+        requireName(name);
+        List<LocalCsvFile> accepted = validateLocalCsvFiles(files);
+        UUID id = UUID.randomUUID();
+        String prefix = "local-csv/" + id + "/";
+        MinioClient storage = localCsvStorage();
+        List<String> uploaded = new ArrayList<>();
+        try {
+            ensureLocalCsvBucket(storage);
+            for (LocalCsvFile file : accepted) {
+                String object = prefix + file.objectName();
+                storage.putObject(PutObjectArgs.builder().bucket(properties.localCsvBucket()).object(object)
+                        .stream(file.file().getInputStream(), file.file().getSize(), -1)
+                        .contentType("text/csv").build());
+                uploaded.add(object);
+            }
+            Map<String, Object> config = Map.of(
+                    "endpoint", properties.localCsvMinioUrl().toString(),
+                    "region", "us-east-1",
+                    "bucket", properties.localCsvBucket(),
+                    "prefix", prefix,
+                    "pathStyle", true,
+                    "timeoutSeconds", 15);
+            Map<String, String> credential = Map.of(
+                    "accessKey", properties.localCsvAccessKey(),
+                    "secretKey", properties.localCsvSecretKey());
+            ConnectionProbe.ProbeOutcome outcome = probe.probe(DataSourceType.S3_CSV, config, credential);
+            if (outcome.status() == ConnectionStatus.ERROR) {
+                throw new ConnectionProblem("LOCAL_CSV_DISCOVERY_FAILED", "文件已上传，但平台未能识别 CSV；请检查文件编码和内容");
+            }
+            UUID secretId = createOrReferenceCredential(
+                    new CredentialInput("MANAGED", "平台托管本地 CSV 存储", null, null, credential),
+                    DataSourceType.S3_CSV, actor);
+            return persistDataSource(name, description, DataSourceType.S3_CSV, null, null, tags, config, secretId,
+                    fingerprint(DataSourceType.S3_CSV, config, credential), outcome, actor);
+        } catch (ConnectionProblem cause) {
+            deleteUploaded(storage, uploaded);
+            throw cause;
+        } catch (Exception cause) {
+            deleteUploaded(storage, uploaded);
+            throw new ConnectionProblem("LOCAL_CSV_UPLOAD_FAILED", "无法上传所选 CSV 文件夹，请稍后重试");
+        }
+    }
+
+    private DataSource persistDataSource(String name, String description, DataSourceType type, String requestedOwnerId,
+                                         String requestedOwnerName, List<String> tags, Map<String, Object> config,
+                                         UUID secretId, String fingerprint, ConnectionProbe.ProbeOutcome outcome, Actor actor) {
         UUID id = UUID.randomUUID();
         Instant now = Instant.now();
         try {
@@ -102,8 +164,8 @@ public class DataConnectionService {
                       (id,name,normalized_name,description,source_type,owner_id,owner_name,tags,config,secret_ref,
                        connection_status,asset_count,last_checked_at,created_by,created_at,updated_at)
                     VALUES (?,?,?,?,?,?,?,string_to_array(?, E'\\u001f'),?::jsonb,?,?,?,?,?,?,?)
-                    """, id, request.name().trim(), normalizeName(request.name()), safeDescription(request.description()),
-                    request.type().name(), ownerId(request, actor), ownerName(request, actor), joinTags(request.tags()),
+                    """, id, name.trim(), normalizeName(name), safeDescription(description),
+                    type.name(), ownerId(requestedOwnerId, actor), ownerName(requestedOwnerName, actor), joinTags(tags),
                     writeJson(config), secretId, outcome.status().name(), outcome.assets().size(), Timestamp.from(now),
                     actor.id(), Timestamp.from(now), Timestamp.from(now));
         } catch (DuplicateKeyException cause) {
@@ -111,8 +173,8 @@ public class DataConnectionService {
         }
         saveTest(id, actor, UUID.randomUUID(), fingerprint, outcome);
         replaceAssets(id, outcome.assets());
-        audit(actor, "DATA_SOURCE_CREATED", "data_source", id.toString(), "创建数据连接“" + request.name().trim() + "”",
-                Map.of("type", request.type().name(), "credential", "configured"));
+        audit(actor, "DATA_SOURCE_CREATED", "data_source", id.toString(), "创建数据连接“" + name.trim() + "”",
+                Map.of("type", type.name(), "credential", "configured"));
         return get(id);
     }
 
@@ -262,14 +324,8 @@ public class DataConnectionService {
     @Transactional
     public void delete(UUID id, Actor actor) {
         DataSource source = get(id);
-        if (source.status() != ConnectionStatus.DISABLED) throw new ConnectionProblem("DELETE_REQUIRES_DISABLED", "永久删除前必须先停用连接");
-        if (source.pipelineReferenceCount() > 0 || source.activeRunCount() > 0) {
-            throw new ConnectionProblem("CONNECTION_REFERENCED", "连接仍被管道引用或存在活动运行，只能保持停用");
-        }
-        UUID secretId = source.credential().id();
-        audit(actor, "DATA_SOURCE_DELETED", "data_source", id.toString(), "永久删除已停用且无引用的数据连接“" + source.name() + "”", Map.of());
-        jdbc.update("DELETE FROM control.data_sources WHERE id=?", id);
-        jdbc.update("DELETE FROM control.connection_secrets c WHERE c.id=? AND NOT EXISTS (SELECT 1 FROM control.data_sources d WHERE d.secret_ref=c.id)", secretId);
+        audit(actor, "DATA_SOURCE_DELETED", "data_source", id.toString(), "永久删除数据连接“" + source.name() + "”及关联记录", Map.of());
+        deletion.deleteDataSource(id);
     }
 
     @Transactional
@@ -377,6 +433,20 @@ public class DataConnectionService {
         AssetPreview result = probe.preview(source.type(), source.config(), credentialValues(source.credential().id(), actor, true), asset, limit);
         audit(actor, "ASSET_PREVIEWED", "data_source_asset", assetId.toString(), "预览资产（最多 " + limit + " 行）", Map.of("dataSourceId", sourceId));
         return result;
+    }
+
+    public AssetPreview runtimePreview(UUID sourceId, UUID assetId, int limit) {
+        DataSource source = get(sourceId);
+        if (source.status() != ConnectionStatus.HEALTHY && source.status() != ConnectionStatus.HEALTHY_RESTRICTED) {
+            throw new ConnectionProblem("CONNECTION_NOT_RUNNABLE", "辅助连接未处于可运行状态");
+        }
+        DataSourceAsset asset = asset(sourceId, assetId);
+        if (!"READABLE".equals(asset.permissionStatus())) {
+            throw new ConnectionProblem("LOOKUP_ASSET_NOT_READABLE", "辅助资产不可读取");
+        }
+        return probe.preview(source.type(), source.config(),
+                credentialValues(source.credential().id(), new Actor("pipeline-runtime", "Pipeline Runtime", true), true),
+                asset, Math.max(1, Math.min(1000, limit)));
     }
 
     public AssetUsage usage(UUID sourceId, UUID assetId) {
@@ -599,8 +669,75 @@ public class DataConnectionService {
         return Objects.requireNonNull(jdbc.queryForObject("SELECT count(*) FROM control.data_sources WHERE deleted_at IS NULL AND connection_status=?", Integer.class, status));
     }
 
-    private String ownerId(CreateRequest request, Actor actor) { return request.ownerId() == null || request.ownerId().isBlank() ? actor.id() : request.ownerId(); }
-    private String ownerName(CreateRequest request, Actor actor) { return request.ownerName() == null || request.ownerName().isBlank() ? actor.name() : request.ownerName(); }
+    private List<LocalCsvFile> validateLocalCsvFiles(List<MultipartFile> files) {
+        if (files == null || files.isEmpty()) throw new ConnectionProblem("LOCAL_CSV_FILES_REQUIRED", "请选择至少一个 CSV 文件");
+        if (files.size() > properties.localCsvMaxFiles()) {
+            throw new ConnectionProblem("LOCAL_CSV_FILE_COUNT_EXCEEDED", "一次最多可导入 " + properties.localCsvMaxFiles() + " 个 CSV 文件");
+        }
+        long total = 0;
+        Map<String, MultipartFile> unique = new LinkedHashMap<>();
+        for (MultipartFile file : files) {
+            if (file == null || file.isEmpty()) throw new ConnectionProblem("LOCAL_CSV_FILE_EMPTY", "不能导入空文件");
+            String objectName = localCsvObjectName(file.getOriginalFilename());
+            if (!objectName.toLowerCase(java.util.Locale.ROOT).endsWith(".csv")) {
+                throw new ConnectionProblem("LOCAL_CSV_FILE_TYPE_INVALID", "所选文件夹中只能包含 CSV 文件");
+            }
+            if (file.getSize() > properties.localCsvMaxFileBytes()) {
+                throw new ConnectionProblem("LOCAL_CSV_FILE_TOO_LARGE", "单个 CSV 文件不能超过 " + bytesLabel(properties.localCsvMaxFileBytes()));
+            }
+            total += file.getSize();
+            if (total > properties.localCsvMaxTotalBytes()) {
+                throw new ConnectionProblem("LOCAL_CSV_TOTAL_TOO_LARGE", "所选 CSV 文件总大小不能超过 " + bytesLabel(properties.localCsvMaxTotalBytes()));
+            }
+            if (unique.putIfAbsent(objectName, file) != null) {
+                throw new ConnectionProblem("LOCAL_CSV_FILE_DUPLICATE", "文件夹中存在同名 CSV 文件，请重命名后再导入");
+            }
+        }
+        return unique.entrySet().stream().map(entry -> new LocalCsvFile(entry.getKey(), entry.getValue())).toList();
+    }
+
+    private String localCsvObjectName(String originalName) {
+        if (originalName == null || originalName.isBlank()) throw new ConnectionProblem("LOCAL_CSV_NAME_INVALID", "CSV 文件名无效");
+        String candidate = originalName.replace('\\', '/').replaceAll("^/+", "");
+        if (candidate.contains("../") || candidate.equals("..")) {
+            throw new ConnectionProblem("LOCAL_CSV_NAME_INVALID", "CSV 文件名无效");
+        }
+        String[] segments = candidate.split("/");
+        List<String> safe = new ArrayList<>();
+        for (String segment : segments) {
+            if (segment.isBlank() || segment.equals(".") || segment.equals("..")) continue;
+            String normalized = segment.replaceAll("[^A-Za-z0-9._-]", "_");
+            if (normalized.isBlank()) throw new ConnectionProblem("LOCAL_CSV_NAME_INVALID", "CSV 文件名无效");
+            safe.add(normalized);
+        }
+        if (safe.isEmpty()) throw new ConnectionProblem("LOCAL_CSV_NAME_INVALID", "CSV 文件名无效");
+        return String.join("/", safe);
+    }
+
+    private MinioClient localCsvStorage() {
+        return MinioClient.builder().endpoint(properties.localCsvMinioUrl().toString())
+                .credentials(properties.localCsvAccessKey(), properties.localCsvSecretKey()).build();
+    }
+
+    private void ensureLocalCsvBucket(MinioClient storage) throws Exception {
+        if (!storage.bucketExists(BucketExistsArgs.builder().bucket(properties.localCsvBucket()).build())) {
+            storage.makeBucket(MakeBucketArgs.builder().bucket(properties.localCsvBucket()).build());
+        }
+    }
+
+    private void deleteUploaded(MinioClient storage, List<String> objects) {
+        for (String object : objects) {
+            try {
+                storage.removeObject(RemoveObjectArgs.builder().bucket(properties.localCsvBucket()).object(object).build());
+            } catch (Exception ignored) {
+                // Best effort cleanup; storage may be temporarily unavailable.
+            }
+        }
+    }
+
+    private String bytesLabel(long bytes) { return (bytes / (1024 * 1024)) + " MB"; }
+    private String ownerId(String requested, Actor actor) { return requested == null || requested.isBlank() ? actor.id() : requested; }
+    private String ownerName(String requested, Actor actor) { return requested == null || requested.isBlank() ? actor.name() : requested; }
     private String normalizeName(String value) { return value.trim().toLowerCase(java.util.Locale.ROOT); }
     private String safeDescription(String value) { return value == null ? null : value.trim().substring(0, Math.min(1000, value.trim().length())); }
     private String empty(String value) { return value == null ? "" : value.trim(); }
@@ -631,5 +768,6 @@ public class DataConnectionService {
     private Instant instant(ResultSet rs, String column) throws SQLException { Timestamp value = rs.getTimestamp(column); return value == null ? null : value.toInstant(); }
     private Long nullableLong(ResultSet rs, String column) throws SQLException { long value = rs.getLong(column); return rs.wasNull() ? null : value; }
     private Integer nullableInt(ResultSet rs, String column) throws SQLException { int value = rs.getInt(column); return rs.wasNull() ? null : value; }
+    private record LocalCsvFile(String objectName, MultipartFile file) { }
     private record RateWindow(Instant started, int count) { }
 }

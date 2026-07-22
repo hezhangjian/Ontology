@@ -120,12 +120,13 @@ public class PipelineRuntimeCoordinator {
         config.put("offsetPolicy", "EARLIEST");
         config.put("pipelineId", preview.get("pipelineId"));
         config.put("pipelineMode", preview.get("mode"));
+        config.put("ontologyRevision", activeOntologyRevision());
         config.put("preview", true);
         config.put("runId", request.previewId());
         config.put("subscription", "ontology-preview-" + request.previewId());
         jdbc.update("UPDATE control.pipeline_preview_runs SET status='RUNNING' WHERE id=?", request.previewId());
         return new PreviewExchangeResponse(request.previewId(), material.type().name(), config, material.credential(),
-                (PipelineGraph) preview.get("graph"), (RuntimeSettings) preview.get("runtime"),
+                runtimeGraph((PipelineGraph) preview.get("graph")), (RuntimeSettings) preview.get("runtime"),
                 "preview:" + request.previewId(), String.valueOf(preview.get("nodeId")), (int) preview.get("rowLimit"),
                 (Instant) preview.get("expiresAt"));
     }
@@ -282,6 +283,13 @@ public class PipelineRuntimeCoordinator {
     public PipelineRun cancel(UUID runId, Actor actor) {
         PipelineRun run = pipelines.runById(runId);
         if (!ACTIVE_STATUSES.contains(run.status()) && !run.status().equals("STOPPING")) throw new ConnectionProblem("PIPELINE_RUN_NOT_ACTIVE", "运行已结束，不能取消");
+        if (run.status().equals("PROJECTING")) {
+            jdbc.update("UPDATE control.pipeline_runs SET status='CANCELLED',completed_at=now(),updated_at=now() WHERE id=?", runId);
+            jdbc.update("UPDATE control.projection_batches SET status='DEGRADED',completed_at=now() WHERE pipeline_run_id=?", runId);
+            event(runId, "PROJECTION_WAIT_CANCELLED", "CANCELLED", "已取消 Projection 等待；已投影对象不会自动删除", Map.of());
+            audit(actor, "PIPELINE_RUN_CANCELLED", run.pipelineId(), "取消等待 Projection 的管道运行", Map.of("runId", runId, "businessDataReverted", false));
+            return pipelines.runById(runId);
+        }
         if (run.flinkJobId() != null) flink.cancel(run.flinkJobId());
         jdbc.update("UPDATE control.pipeline_runs SET status='CANCELLING',updated_at=now() WHERE id=?", runId);
         event(runId, "CANCEL_REQUESTED", "CANCELLING", "已请求取消 Flink Job；已投影对象不会自动删除", Map.of());
@@ -348,6 +356,7 @@ public class PipelineRuntimeCoordinator {
         config.put("pipelineId", grant.get("pipelineId"));
         config.put("pipelineMode", grant.get("pipelineMode"));
         config.put("pipelineVersion", grant.get("pipelineVersion"));
+        config.put("ontologyRevision", activeOntologyRevision());
         config.put("runId", request.runId());
         config.put("subscription", "ontology-" + grant.get("pipelineId") + "-" + grant.get("pipelineVersion"));
         jdbc.update("UPDATE control.workload_credential_grants SET exchanged_at=now() WHERE id=?", grant.get("grantId"));
@@ -355,9 +364,86 @@ public class PipelineRuntimeCoordinator {
         @SuppressWarnings("unchecked") Map<String, Object> ir = (Map<String, Object>) grant.get("pipelineIr");
         RuntimeSettings runtime = json.convertValue(ir.get("runtime"), RuntimeSettings.class);
         return new WorkloadExchangeResponse((UUID) grant.get("grantId"), request.runId(), material.type().name(), config,
-                material.credential(), (PipelineGraph) grant.get("graph"), runtime, properties.platformTopic(),
+                material.credential(), runtimeGraph((PipelineGraph) grant.get("graph"), (UUID) grant.get("pipelineId")), runtime, properties.platformTopic(),
                 String.valueOf(grant.get("correlationId")), expiresAt);
     }
+
+    private PipelineGraph runtimeGraph(PipelineGraph graph) {
+        return runtimeGraph(graph, null);
+    }
+
+    private PipelineGraph runtimeGraph(PipelineGraph graph, UUID owningPipelineId) {
+        if (graph == null) return null;
+        List<PipelineNode> nodes = graph.nodes().stream().map(node -> {
+            if (node.type().equals("JOIN")) {
+                Map<String, Object> config = new LinkedHashMap<>(node.config());
+                UUID connectionId = uuid(config.get("lookupConnectionId"));
+                UUID assetId = uuid(config.get("lookupAssetId"));
+                if (connectionId != null && assetId != null) {
+                    var preview = connections.runtimePreview(connectionId, assetId, 1000);
+                    if (preview.truncated()) {
+                        throw new ConnectionProblem("LOOKUP_ASSET_TOO_LARGE", "辅助数据超过 1000 行，请先过滤或换用更小的辅助表");
+                    }
+                    config.put("lookupRows", preview.rows());
+                }
+                return new PipelineNode(node.id(), node.type(), node.name(), node.position(), config,
+                        node.inputSchema(), node.outputSchema(), node.invalidReasons());
+            }
+            if (node.type().equals("DATASET_OUTPUT")) {
+                Map<String, Object> config = new LinkedHashMap<>(node.config());
+                UUID pipelineId = owningPipelineId;
+                if (pipelineId != null) {
+                    UUID datasetId = jdbc.query("SELECT id FROM control.datasets WHERE pipeline_id=? ORDER BY updated_at DESC LIMIT 1",
+                            (row, number) -> row.getObject(1, UUID.class), pipelineId).stream().findFirst().orElse(null);
+                    if (datasetId != null) config.put("datasetId", datasetId.toString());
+                }
+                return new PipelineNode(node.id(), node.type(), node.name(), node.position(), config,
+                        node.inputSchema(), node.outputSchema(), node.invalidReasons());
+            }
+            if (!node.type().equals("ONTOLOGY_OBJECT")) return node;
+            Map<String, Object> config = new LinkedHashMap<>(node.config());
+            TypeBinding type = objectType(String.valueOf(config.getOrDefault("objectTypeId", "")));
+            config.put("objectTypeId", type.physicalKey());
+            if (type.primaryPropertyKey() != null) {
+                config.put("primaryPropertyKey", type.primaryPropertyKey());
+            }
+            if (config.get("mappings") instanceof Map<?, ?> mappings) {
+                Map<String, String> properties = jdbc.query("SELECT api_name,physical_key FROM control.properties WHERE object_type_id=?",
+                        (row, number) -> Map.entry(row.getString("api_name"), row.getString("physical_key")), type.id()).stream()
+                        .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                Map<String, Object> translated = new LinkedHashMap<>();
+                mappings.forEach((property, field) -> translated.put(properties.getOrDefault(String.valueOf(property), String.valueOf(property)), field));
+                config.put("mappings", translated);
+            }
+            return new PipelineNode(node.id(), node.type(), node.name(), node.position(), config,
+                    node.inputSchema(), node.outputSchema(), node.invalidReasons());
+        }).toList();
+        return new PipelineGraph(nodes, graph.edges());
+    }
+
+    private UUID uuid(Object value) {
+        try { return value == null ? null : UUID.fromString(String.valueOf(value)); }
+        catch (IllegalArgumentException ignored) { return null; }
+    }
+
+    private TypeBinding objectType(String identifier) {
+        return jdbc.query("""
+                SELECT r.id,r.physical_key,primary_property.physical_key AS primary_property_key
+                FROM control.ontology_resources r
+                JOIN control.ontology_resource_versions v ON v.resource_id=r.id AND v.version=r.latest_version
+                LEFT JOIN control.property_versions primary_version
+                  ON primary_version.object_type_version_id=v.id AND primary_version.primary_key=true
+                LEFT JOIN control.properties primary_property
+                  ON primary_property.id=primary_version.property_id AND primary_property.tombstoned=false
+                WHERE r.kind='OBJECT_TYPE' AND v.lifecycle='PUBLISHED'
+                  AND (r.api_name=? OR r.physical_key=? OR r.id::text=?)
+                """, (row, number) -> new TypeBinding(row.getObject("id", UUID.class), row.getString("physical_key"),
+                        row.getString("primary_property_key")),
+                identifier, identifier, identifier).stream().findFirst()
+                .orElseThrow(() -> new ConnectionProblem("PIPELINE_OBJECT_TYPE_NOT_FOUND", "对象输出引用的已发布对象类型不存在"));
+    }
+
+    private record TypeBinding(UUID id, String physicalKey, String primaryPropertyKey) { }
 
     public void progress(UUID runId, RuntimeProgressRequest request, String token) {
         requireServiceToken(token);
@@ -380,6 +466,11 @@ public class PipelineRuntimeCoordinator {
                 """, UUID.randomUUID(), runId, order, phase, "RUNNING", run.correlationId(), run.flinkJobId(),
                 Math.max(0, request.readCount()), Math.max(0, request.writtenCount()), Math.max(0, request.rejectedCount()));
         event(runId, "RUNTIME_PROGRESS", phase, valueOr(request.message(), "Flink 运行进度"), safeDetails(request.safeDetails()));
+    }
+
+    private long activeOntologyRevision() {
+        Long revision = jdbc.queryForObject("SELECT revision FROM control.ontology_revisions WHERE status='ACTIVE'", Long.class);
+        return revision == null ? 1 : revision;
     }
 
     public void projectionAck(ProjectionAckRequest request, String token) {

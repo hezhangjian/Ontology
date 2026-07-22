@@ -4,7 +4,7 @@ set -eu
 project_root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
 compose="${project_root}/docker/scripts/compose.sh"
 
-healthy_services="agent-runtime apisix bff flink-jobmanager flink-taskmanager frontend hugegraph keycloak maintenance-runner minio ontology-core opensearch otel-collector postgres pulsar skywalking-oap skywalking-ui"
+healthy_services="agent-runtime apisix bff flink-jobmanager flink-taskmanager frontend hugegraph maintenance-runner minio ontology-core opensearch otel-collector postgres pulsar skywalking-oap skywalking-ui"
 
 for service in ${healthy_services}; do
   container_id=$(${compose} --profile '*' ps -q "${service}")

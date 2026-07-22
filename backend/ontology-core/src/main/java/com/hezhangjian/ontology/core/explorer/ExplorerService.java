@@ -55,13 +55,16 @@ public class ExplorerService {
     ExplorerHome home(Actor actor) {
         List<ObjectTypeDefinition> types = types();
         List<ObjectSummary> recent = new ArrayList<>();
+        Map<UUID, Long> counts = new LinkedHashMap<>();
         if (storage.searchAvailable()) {
-            storage.globalSearch("", 8, actor).forEach(hit -> {
-                ObjectTypeDefinition type = findTypeByApi(hit.objectType());
-                if (type != null) recent.add(summary(hit, type));
+            types.forEach(type -> counts.put(type.id(), storage.objectCount(type.physicalKey(), actor)));
+            Set<UUID> representedTypes = new LinkedHashSet<>();
+            storage.globalSearch("", 100, actor).forEach(hit -> {
+                ObjectTypeDefinition type = findTypeByStorageKey(hit.objectType());
+                if (type != null && representedTypes.add(type.id()) && recent.size() < 8) recent.add(summary(hit, type));
             });
         }
-        return new ExplorerHome(types, List.copyOf(recent), explorations(actor), lists(actor),
+        return new ExplorerHome(types, Map.copyOf(counts), List.copyOf(recent), explorations(actor), lists(actor),
                 storage.searchAvailable() ? "HEALTHY" : "DEGRADED", Instant.now());
     }
 
@@ -69,7 +72,7 @@ public class ExplorerService {
         int size = request.size() == null ? 30 : Math.min(Math.max(request.size(), 1), 100);
         List<ObjectSummary> objects = new ArrayList<>();
         for (RawSearchHit hit : storage.globalSearch(request.query(), size, actor)) {
-            ObjectTypeDefinition type = findTypeByApi(hit.objectType());
+            ObjectTypeDefinition type = findTypeByStorageKey(hit.objectType());
             if (type != null) objects.add(summary(hit, type));
         }
         String needle = request.query() == null ? "" : request.query().toLowerCase();
@@ -110,9 +113,23 @@ public class ExplorerService {
                 properties.get(entry.getKey()).displayName(), entry.getValue())).toList();
     }
 
+    public List<AggregationBucket> aggregate(ObjectSetRequest request, UUID dimensionPropertyId,
+                                             UUID measurePropertyId, String aggregation, Actor actor) {
+        return aggregate(request, List.of(dimensionPropertyId), measurePropertyId, null, aggregation, actor);
+    }
+
+    public List<AggregationBucket> aggregate(ObjectSetRequest request, List<UUID> dimensionPropertyIds,
+                                             UUID measurePropertyId, UUID divisorPropertyId,
+                                             String aggregation, Actor actor) {
+        ObjectTypeDefinition type = type(request.objectTypeId());
+        ValidatedQuery query = policy.validate(request, type);
+        return storage.aggregate(
+                query, dimensionPropertyIds, measurePropertyId, divisorPropertyId, aggregation, actor);
+    }
+
     ObjectDetail object(UUID objectTypeId, String objectId, Actor actor) {
         ObjectTypeDefinition type = type(objectTypeId);
-        GraphObject graph = storage.getObject(type.apiName(), objectId);
+        GraphObject graph = storage.getObject(type.physicalKey(), objectId);
         ObjectDetail detail = detail(graph, type);
         recent(actor, "OBJECT", type.id() + ":" + objectId, type.id(), detail.title());
         return detail;
@@ -120,12 +137,12 @@ public class ExplorerService {
 
     LinkPage links(UUID objectTypeId, String objectId, LinkRequest request, Actor actor) {
         ObjectTypeDefinition sourceType = type(objectTypeId);
-        GraphObject graph = storage.getObject(sourceType.apiName(), objectId);
+        GraphObject graph = storage.getObject(sourceType.physicalKey(), objectId);
         int size = request == null || request.pageSize() == null ? 25 : Math.min(request.pageSize(), 100);
         List<ObjectLink> links = new ArrayList<>();
         for (GraphEdge edge : storage.links(graph, size)) {
             LinkDefinition link = findLink(edge.relationType());
-            ObjectTypeDefinition targetType = findTypeByApi(edge.target().objectType());
+            ObjectTypeDefinition targetType = findTypeByStorageKey(edge.target().objectType());
             if (link == null || targetType == null) continue;
             ObjectDetail target = detail(edge.target(), targetType);
             links.add(new ObjectLink(edge.relationId(), link.id(), link.name(), edge.direction(),
@@ -155,7 +172,7 @@ public class ExplorerService {
 
     List<ActivityItem> activity(UUID objectTypeId, String objectId, Actor actor) {
         ObjectTypeDefinition type = type(objectTypeId);
-        storage.getObject(type.apiName(), objectId);
+        storage.getObject(type.physicalKey(), objectId);
         String entityKey = "object:" + type.apiName() + ":" + objectId;
         return jdbc.sql("""
                 SELECT status,correlation_id,updated_at,entity_version FROM control.projection_ledger
@@ -167,7 +184,7 @@ public class ExplorerService {
 
     ProvenanceView provenance(UUID objectTypeId, String objectId, Actor actor) {
         ObjectTypeDefinition type = type(objectTypeId);
-        GraphObject object = storage.getObject(type.apiName(), objectId);
+        GraphObject object = storage.getObject(type.physicalKey(), objectId);
         Map<String, Object> mapping = jdbc.sql("""
                 SELECT p.name pipeline_name,m.pipeline_version,ds.name source_name
                 FROM control.object_type_versions ot
@@ -305,7 +322,7 @@ public class ExplorerService {
         ObjectTypeDefinition type = type(request.objectTypeId());
         List<String> ids = uniqueIds(request.objectIds());
         if (ids.size() > 10000) throw invalid("对象清单最多保存 10,000 个对象引用");
-        ids.forEach(id -> storage.getObject(type.apiName(), id));
+        ids.forEach(id -> storage.getObject(type.physicalKey(), id));
         UUID listId = UUID.randomUUID();
         jdbc.sql("""
                 INSERT INTO control.object_lists(id,name,description,object_type_id,source_exploration_id,owner_id,owner_name,visibility)
@@ -327,7 +344,7 @@ public class ExplorerService {
         List<String> ids = uniqueIds(request.objectIds());
         long current = list.itemCount();
         if (current + ids.size() > 10000) throw invalid("对象清单最多保存 10,000 个对象引用");
-        ids.forEach(objectId -> storage.getObject(type.apiName(), objectId));
+        ids.forEach(objectId -> storage.getObject(type.physicalKey(), objectId));
         insertListItems(id, ids, actor);
         jdbc.sql("UPDATE control.object_lists SET etag=etag+1,updated_at=now() WHERE id=:id").param("id", id).update();
         return list(id, actor);
@@ -351,7 +368,7 @@ public class ExplorerService {
         List<SearchHit> selected = new ArrayList<>();
         if (request.objectIds() != null && !request.objectIds().isEmpty()) {
             for (String id : uniqueIds(request.objectIds())) {
-                GraphObject graph = storage.getObject(type.apiName(), id);
+                GraphObject graph = storage.getObject(type.physicalKey(), id);
                 selected.add(new SearchHit(id, graph.version(), graph.ontologyRevision(), graph.payload(), graph.updatedAt(), List.of()));
             }
         } else {
@@ -399,7 +416,7 @@ public class ExplorerService {
             List<SearchHit> rows;
             if (request.objectIds() != null && !request.objectIds().isEmpty()) {
                 rows = uniqueIds(request.objectIds()).stream().map(objectId -> {
-                    GraphObject object = storage.getObject(type.apiName(), objectId);
+                    GraphObject object = storage.getObject(type.physicalKey(), objectId);
                     return new SearchHit(objectId, object.version(), object.ontologyRevision(), object.payload(), object.updatedAt(), List.of());
                 }).toList();
             } else {
@@ -554,8 +571,8 @@ public class ExplorerService {
     private Map<String, Object> safeProperties(JsonNode source, ObjectTypeDefinition type) {
         Map<String, Object> result = new LinkedHashMap<>();
         for (PropertyDefinition property : type.properties()) {
-            if (!property.sensitive() && source.has(property.apiName())) {
-                result.put(property.apiName(), objectMapper.convertValue(source.get(property.apiName()), Object.class));
+            if (!property.sensitive() && source.has(property.physicalKey())) {
+                result.put(property.apiName(), objectMapper.convertValue(source.get(property.physicalKey()), Object.class));
             }
         }
         return Map.copyOf(result);
@@ -583,35 +600,35 @@ public class ExplorerService {
 
     private ObjectTypeDefinition type(UUID id) {
         return jdbc.sql("""
-                SELECT r.id,r.api_name,r.display_name,r.maturity,COALESCE(ar.revision,1) ontology_revision
+                SELECT r.id,r.api_name,r.physical_key,r.display_name,r.maturity,COALESCE(ar.revision,1) ontology_revision
                 FROM control.ontology_resources r
                 CROSS JOIN LATERAL (SELECT revision FROM control.ontology_revisions WHERE status='ACTIVE') ar
                 WHERE r.id=:id AND r.kind='OBJECT_TYPE' AND r.active_version IS NOT NULL AND r.tombstoned=false
                 """).param("id", id).query((rs, row) -> new ObjectTypeDefinition(rs.getObject("id", UUID.class),
-                        rs.getString("api_name"), rs.getString("display_name"), rs.getString("maturity"),
+                        rs.getString("api_name"), rs.getString("physical_key"), rs.getString("display_name"), rs.getString("maturity"),
                         rs.getLong("ontology_revision"), properties(rs.getObject("id", UUID.class)))).optional()
                 .orElseThrow(() -> notFound("对象类型不存在或尚未发布"));
     }
 
     private List<ObjectTypeDefinition> types() {
         return jdbc.sql("""
-                SELECT r.id,r.api_name,r.display_name,r.maturity,ar.revision ontology_revision
+                SELECT r.id,r.api_name,r.physical_key,r.display_name,r.maturity,ar.revision ontology_revision
                 FROM control.ontology_resources r
                 CROSS JOIN LATERAL (SELECT revision FROM control.ontology_revisions WHERE status='ACTIVE') ar
                 WHERE r.kind='OBJECT_TYPE' AND r.active_version IS NOT NULL AND r.tombstoned=false
                 ORDER BY r.promoted DESC,r.display_name
                 """).query((rs, row) -> new ObjectTypeDefinition(rs.getObject("id", UUID.class),
-                rs.getString("api_name"), rs.getString("display_name"), rs.getString("maturity"),
+                rs.getString("api_name"), rs.getString("physical_key"), rs.getString("display_name"), rs.getString("maturity"),
                 rs.getLong("ontology_revision"), properties(rs.getObject("id", UUID.class)))).list();
     }
 
-    private ObjectTypeDefinition findTypeByApi(String apiName) {
-        return types().stream().filter(type -> type.apiName().equals(apiName)).findFirst().orElse(null);
+    private ObjectTypeDefinition findTypeByStorageKey(String physicalKey) {
+        return types().stream().filter(type -> type.physicalKey().equals(physicalKey)).findFirst().orElse(null);
     }
 
     private List<PropertyDefinition> properties(UUID objectTypeId) {
         return jdbc.sql("""
-                SELECT p.id,p.api_name,pv.display_name,pv.value_type,pv.primary_key,pv.title_property,
+                SELECT p.id,p.api_name,p.physical_key,pv.display_name,pv.value_type,pv.primary_key,pv.title_property,
                 pv.searchable,pv.filterable,pv.sortable,pv.sensitive
                 FROM control.ontology_resources r
                 JOIN control.ontology_resource_versions rv ON rv.resource_id=r.id AND rv.version=r.active_version
@@ -620,7 +637,7 @@ public class ExplorerService {
                 JOIN control.properties p ON p.id=pv.property_id
                 WHERE r.id=:id AND p.tombstoned=false ORDER BY pv.primary_key DESC,pv.title_property DESC,pv.display_name
                 """).param("id", objectTypeId).query((rs, row) -> new PropertyDefinition(
-                rs.getObject("id", UUID.class), rs.getString("api_name"), rs.getString("display_name"),
+                        rs.getObject("id", UUID.class), rs.getString("api_name"), rs.getString("physical_key"), rs.getString("display_name"),
                 rs.getString("value_type"), rs.getBoolean("primary_key"), rs.getBoolean("title_property"),
                 rs.getBoolean("searchable"), rs.getBoolean("filterable"), rs.getBoolean("sortable"), rs.getBoolean("sensitive"))).list();
     }

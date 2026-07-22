@@ -63,8 +63,8 @@ export default function PipelineListPage({ accessToken, navigate }: { accessToke
       { key: 'duplicate', label: '复制', onClick: () => void operation('已创建管道副本', () => api.duplicate(pipeline.id)) },
       { key: 'pause', label: pipeline.lifecycle === 'PAUSED' ? '恢复' : '暂停', disabled: !pipeline.publishedVersion, onClick: () => void operation(pipeline.lifecycle === 'PAUSED' ? '已恢复' : '已暂停', () => pipeline.lifecycle === 'PAUSED' ? api.resume(pipeline.id) : api.pause(pipeline.id)) },
       { key: 'archive', label: '归档', disabled: pipeline.lifecycle === 'ARCHIVED' || ['LIVE', 'RUNNING'].includes(pipeline.runStatus), onClick: () => Modal.confirm({ title: `归档“${pipeline.name}”？`, content: '不可变版本、运行历史和血缘将保留。', onOk: () => operation('已归档', () => api.archive(pipeline.id)) }) },
-      ...(pipeline.publishedVersion === undefined && pipeline.runStatus === 'NEVER_RUN' ? [{ key: 'delete', danger: true, label: '永久删除', onClick: () => Modal.confirm({ title: `永久删除“${pipeline.name}”？`, onOk: () => operation('已删除草稿', () => api.delete(pipeline.id)) }) }] : []),
-    ], onClick: ({ domEvent }) => domEvent.stopPropagation() }}><Button aria-label={`${pipeline.name} 更多操作`} icon={<EllipsisOutlined />} onClick={(event) => event.stopPropagation()} type="text" /></Dropdown> },
+      { key: 'delete', danger: true, disabled: pipeline.lifecycle !== 'ARCHIVED', label: pipeline.lifecycle === 'ARCHIVED' ? '永久删除' : '永久删除（请先归档）', onClick: () => Modal.confirm({ title: `永久删除“${pipeline.name}”？`, content: '版本、运行记录、调度与映射将一并删除；若仍有关联 Dataset，平台会要求先删除 Dataset。此操作不可撤销。', okButtonProps: { danger: true }, okText: '永久删除', onOk: () => operation('已删除管道', () => api.delete(pipeline.id)) }) },
+    ], onClick: ({ domEvent }) => domEvent.stopPropagation() }} trigger={['click']}><Button aria-label={`${pipeline.name} 更多操作`} icon={<EllipsisOutlined />} onClick={(event) => event.stopPropagation()} type="text" /></Dropdown> },
   ];
   const reset = () => { setSearch(''); setMode(''); setLifecycle(''); setRunStatus(''); setOwner(''); setPage(0); };
   return <div className="pipelines-page">

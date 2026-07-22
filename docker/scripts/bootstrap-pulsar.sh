@@ -15,6 +15,7 @@ declare -A topics=(
   [commands/mutation-batches]=6
   [dlq/projection-events]=3
   [index/rebuild-events]=3
+  [ingestion/dataset-events]=6
   [ingestion/object-events]=12
   [ingestion/relation-events]=12
   [quality/quarantine]=3

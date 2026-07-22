@@ -27,13 +27,29 @@ public class StorageHttpClient {
 
     public Response exchange(String method, URI uri, JsonNode body) {
         try {
+            return exchange(
+                    method,
+                    uri,
+                    body == null ? null : objectMapper.writeValueAsString(body),
+                    "application/json");
+        } catch (IOException exception) {
+            throw unavailable(uri, exception);
+        }
+    }
+
+    public Response exchangeRaw(String method, URI uri, String body, String contentType) {
+        return exchange(method, uri, body, contentType);
+    }
+
+    private Response exchange(String method, URI uri, String body, String contentType) {
+        try {
             HttpRequest.BodyPublisher publisher = body == null
                     ? HttpRequest.BodyPublishers.noBody()
-                    : HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body));
+                    : HttpRequest.BodyPublishers.ofString(body);
             HttpRequest request = HttpRequest.newBuilder(uri)
                     .timeout(Duration.ofSeconds(20))
                     .header("Accept", "application/json")
-                    .header("Content-Type", "application/json")
+                    .header("Content-Type", contentType)
                     .method(method, publisher)
                     .build();
             HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
@@ -56,6 +72,15 @@ public class StorageHttpClient {
 
     public JsonNode requireSuccess(String method, URI uri, JsonNode body) {
         Response response = exchange(method, uri, body);
+        return requireSuccess(uri, response);
+    }
+
+    public JsonNode requireSuccessRaw(String method, URI uri, String body, String contentType) {
+        Response response = exchangeRaw(method, uri, body, contentType);
+        return requireSuccess(uri, response);
+    }
+
+    private JsonNode requireSuccess(URI uri, Response response) {
         if (response.status() < 200 || response.status() >= 300) {
             throw new ProjectionException(
                     "STORAGE_HTTP_" + response.status(),

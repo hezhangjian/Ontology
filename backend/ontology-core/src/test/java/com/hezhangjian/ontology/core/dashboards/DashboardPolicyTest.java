@@ -23,6 +23,44 @@ class DashboardPolicyTest {
     }
 
     @Test
+    void acceptsSelfServiceChartWithMultipleMeasures() {
+        DashboardWidget chart = widget("BAR", 0, 0, 12, 6, Map.of(
+                "xField", "month", "seriesField", "leader", "xTimeGrain", "MONTH",
+                "measures", List.of(
+                        Map.of("id", "tokens", "label", "Token", "aggregation", "sum", "field", "token_count"),
+                        Map.of("id", "per_capita", "label", "人均 Token", "aggregation", "sum_per_distinct",
+                                "field", "token_count", "divisorField", "employee_id"))));
+
+        DashboardValidationResult result = policy.validate(definition(List.of(chart)));
+
+        assertThat(result.valid()).isTrue();
+    }
+
+    @Test
+    void acceptsFilterThatComparesTwoDatasetFields() {
+        DashboardWidget chart = widget("BAR", 0, 0, 12, 6, Map.of(
+                "xField", "name",
+                "measures", List.of(Map.of("id", "tokens", "aggregation", "sum", "field", "tokens")),
+                "filters", List.of(Map.of("id", "leaders", "field", "name", "operator", "FIELD_EQUALS",
+                        "comparisonField", "leader_name", "values", List.of()))));
+
+        DashboardValidationResult result = policy.validate(definition(List.of(chart)));
+
+        assertThat(result.valid()).isTrue();
+    }
+
+    @Test
+    void rejectsIncompleteSelfServiceMeasure() {
+        DashboardWidget chart = widget("LINE", 0, 0, 12, 6, Map.of(
+                "xField", "month", "measures", List.of(Map.of(
+                        "id", "tokens", "label", "Token", "aggregation", "sum"))));
+
+        DashboardValidationResult result = policy.validate(definition(List.of(chart)));
+
+        assertThat(result.issues()).extracting(DashboardValidationIssue::code).contains("MEASURE_FIELD");
+    }
+
+    @Test
     void rejectsOverlappingDesktopLayout() {
         DashboardWidget first = widget("METRIC", 0, 0, 8, 4, Map.of("aggregation", "count"));
         DashboardWidget second = widget("OBJECT_TABLE", 4, 2, 8, 4, Map.of());
@@ -48,7 +86,7 @@ class DashboardPolicyTest {
     @Test
     void requiresExactVersionForReferencedSource() {
         DashboardDataSource source = new DashboardDataSource(sourceId, "固定探索", "EXPLORATION", objectTypeId,
-                UUID.randomUUID(), null, Map.of(), 5L);
+                null, UUID.randomUUID(), null, Map.of(), 5L);
         DashboardDefinition definition = new DashboardDefinition(1, List.of(new DashboardPage(pageId, "概览", "", 0)),
                 List.of(source), List.of(widget("METRIC", 0, 0, 6, 3, Map.of("aggregation", "count"))),
                 List.of(), List.of(), Map.of());
@@ -56,7 +94,7 @@ class DashboardPolicyTest {
     }
 
     private DashboardDefinition definition(List<DashboardWidget> widgets) {
-        DashboardDataSource source = new DashboardDataSource(sourceId, "员工", "OBJECT_SET", objectTypeId, null, null,
+        DashboardDataSource source = new DashboardDataSource(sourceId, "员工", "OBJECT_SET", objectTypeId, null, null, null,
                 Map.of("objectTypeId", objectTypeId, "where", Map.of(), "sort", List.of(), "pageSize", 50, "columns", List.of()), 5L);
         return new DashboardDefinition(1, List.of(new DashboardPage(pageId, "概览", "", 0)), List.of(source), widgets,
                 List.of(), List.of(), Map.of("timezone", "Asia/Shanghai"));

@@ -2,6 +2,7 @@ package com.hezhangjian.ontology.projection;
 
 import com.hezhangjian.ontology.contracts.projection.OntologyEventEnvelope;
 import com.hezhangjian.ontology.projection.control.ControlPlaneRepository;
+import com.hezhangjian.ontology.projection.control.ControlPlaneRepository.GraphUpdate;
 import com.hezhangjian.ontology.projection.model.LedgerEntry;
 import com.hezhangjian.ontology.projection.model.ProjectionException;
 import com.hezhangjian.ontology.projection.storage.HugeGraphProjectionClient;
@@ -49,10 +50,22 @@ public class ProjectionProcessor {
             String topic,
             String messageId,
             List<OntologyEventEnvelope> events) {
-        List<ValidatedEvent> validatedEvents = events.stream().map(validator::validate).toList();
+        List<ProjectionInput> inputs = new ArrayList<>();
+        for (int index = 0; index < events.size(); index++) {
+            inputs.add(new ProjectionInput(topic, messageId + ":" + index, events.get(index)));
+        }
+        return processBatch(inputs);
+    }
+
+    public List<ProjectionResult> processBatch(List<ProjectionInput> inputs) {
+        List<ValidatedEvent> validatedEvents = inputs.stream()
+                .map(ProjectionInput::event)
+                .map(validator::validate)
+                .toList();
         List<BatchContext> contexts = new ArrayList<>();
         for (int index = 0; index < validatedEvents.size(); index++) {
-            contexts.add(prepare(topic, messageId + ":" + index, validatedEvents.get(index)));
+            ProjectionInput input = inputs.get(index);
+            contexts.add(prepare(input.topic(), input.messageId(), validatedEvents.get(index)));
         }
 
         List<BatchContext> graphPending = contexts.stream()
@@ -66,9 +79,34 @@ public class ProjectionProcessor {
         for (int index = 0; index < graphPending.size(); index++) {
             BatchContext context = graphPending.get(index);
             String graphId = graphIds.get(index);
-            repository.graphApplied(context.validated().event().eventId(), graphId);
             context.setGraphElementId(graphId);
         }
+        repository.graphAppliedBatch(graphPending.stream()
+                .map(context -> new GraphUpdate(
+                        context.validated().event().eventId(),
+                        context.ledger().graphElementId()))
+                .toList());
+
+        List<BatchContext> searchPending = contexts.stream()
+                .filter(context -> context.result() == null)
+                .toList();
+        try {
+            search.applyBatch(
+                    searchPending.stream().map(BatchContext::validated).toList(),
+                    searchPending.stream().map(context -> context.ledger().graphElementId()).toList());
+        } catch (ProjectionException exception) {
+            for (BatchContext context : searchPending) {
+                repository.degraded(
+                        context.validated().event().eventId(),
+                        exception.code(),
+                        exception.getMessage());
+            }
+            throw exception;
+        }
+
+        repository.projectedBatch(searchPending.stream()
+                .map(context -> context.validated().event().eventId())
+                .toList());
 
         List<ProjectionResult> results = new ArrayList<>();
         for (BatchContext context : contexts) {
@@ -76,10 +114,7 @@ public class ProjectionProcessor {
                 results.add(context.result());
                 continue;
             }
-            results.add(projectSearch(
-                    context.validated(),
-                    context.ledger().graphElementId(),
-                    context.ledger().attempts()));
+            results.add(new ProjectionResult("PROJECTED", context.ledger().attempts()));
         }
         return List.copyOf(results);
     }
@@ -153,5 +188,8 @@ public class ProjectionProcessor {
     }
 
     public record ProjectionResult(String status, int attempts) {
+    }
+
+    public record ProjectionInput(String topic, String messageId, OntologyEventEnvelope event) {
     }
 }

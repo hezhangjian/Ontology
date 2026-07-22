@@ -13,7 +13,10 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -170,6 +173,9 @@ public class HugeGraphProjectionClient {
         if (events.isEmpty()) {
             return List.of();
         }
+        if (events.stream().allMatch(event -> !event.relation() && !event.deleted())) {
+            return upsertObjectsBatch(events);
+        }
         ArrayNode edits = objectMapper.createArrayNode();
         events.forEach(event -> edits.add(batchEdit(event)));
         ObjectNode body = objectMapper.createObjectNode();
@@ -185,6 +191,53 @@ public class HugeGraphProjectionClient {
         }
         List<String> ids = new ArrayList<>();
         data.forEach(id -> ids.add(id.asText()));
+        return List.copyOf(ids);
+    }
+
+    private List<String> upsertObjectsBatch(List<ValidatedEvent> events) {
+        Map<String, ValidatedEvent> uniqueEvents = new LinkedHashMap<>();
+        for (ValidatedEvent event : events) {
+            uniqueEvents.put(
+                    objectKey(event.event().objectType(), event.event().objectId()),
+                    event);
+        }
+        ArrayNode vertices = objectMapper.createArrayNode();
+        ObjectNode strategies = null;
+        for (ValidatedEvent validated : uniqueEvents.values()) {
+            ObjectNode properties = objectProperties(validated.event());
+            ObjectNode vertex = objectMapper.createObjectNode();
+            vertex.put("label", OBJECT_LABEL);
+            vertex.set("properties", properties);
+            vertices.add(vertex);
+            if (strategies == null) {
+                strategies = overrideStrategies(properties);
+            }
+        }
+        ObjectNode body = objectMapper.createObjectNode();
+        body.set("vertices", vertices);
+        body.set("update_strategies", strategies);
+        body.put("create_if_not_exist", true);
+        JsonNode response = http.requireSuccess("PUT", uri("graph/vertices/batch"), body);
+        JsonNode stored = response.path("vertices");
+        if (!stored.isArray() || stored.size() != uniqueEvents.size()) {
+            throw new ProjectionException(
+                    "GRAPH_RESPONSE_INVALID", "HugeGraph omitted batch vertex ids", true);
+        }
+        Map<String, String> idsByObjectKey = new LinkedHashMap<>();
+        Iterator<String> objectKeys = uniqueEvents.keySet().iterator();
+        for (JsonNode vertex : stored) {
+            if (!vertex.hasNonNull("id")) {
+                throw new ProjectionException(
+                        "GRAPH_RESPONSE_INVALID", "HugeGraph omitted a batch vertex id", true);
+            }
+            idsByObjectKey.put(objectKeys.next(), vertex.path("id").asText());
+        }
+        List<String> ids = new ArrayList<>();
+        for (ValidatedEvent event : events) {
+            ids.add(idsByObjectKey.get(objectKey(
+                    event.event().objectType(),
+                    event.event().objectId())));
+        }
         return List.copyOf(ids);
     }
 
@@ -214,15 +267,7 @@ public class HugeGraphProjectionClient {
     }
 
     private String upsertObject(OntologyEventEnvelope event) {
-        ObjectNode properties = objectMapper.createObjectNode();
-        properties.put("object_key", objectKey(event.objectType(), event.objectId()));
-        properties.put("object_type", event.objectType());
-        properties.put("object_id", event.objectId());
-        properties.put("object_version", event.objectVersion());
-        properties.put("ontology_revision", event.ontologyRevision());
-        properties.put("payload_json", event.payload().toString());
-        properties.put("correlation_id", event.correlationId());
-        properties.put("occurred_at", event.occurredAt().toString());
+        ObjectNode properties = objectProperties(event);
         ObjectNode vertex = objectMapper.createObjectNode();
         vertex.put("label", OBJECT_LABEL);
         vertex.set("properties", properties);
@@ -236,6 +281,19 @@ public class HugeGraphProjectionClient {
             throw new ProjectionException("GRAPH_RESPONSE_INVALID", "HugeGraph omitted the vertex id", true);
         }
         return stored.path("id").asText();
+    }
+
+    private ObjectNode objectProperties(OntologyEventEnvelope event) {
+        ObjectNode properties = objectMapper.createObjectNode();
+        properties.put("object_key", objectKey(event.objectType(), event.objectId()));
+        properties.put("object_type", event.objectType());
+        properties.put("object_id", event.objectId());
+        properties.put("object_version", event.objectVersion());
+        properties.put("ontology_revision", event.ontologyRevision());
+        properties.put("payload_json", event.payload() == null ? "{}" : event.payload().toString());
+        properties.put("correlation_id", event.correlationId());
+        properties.put("occurred_at", event.occurredAt().toString());
+        return properties;
     }
 
     private String deleteObject(OntologyEventEnvelope event) {
@@ -338,16 +396,7 @@ public class HugeGraphProjectionClient {
         } else {
             edit.put("kind", "object");
             edit.put("key", objectKey(event.objectType(), event.objectId()));
-            ObjectNode properties = objectMapper.createObjectNode();
-            properties.put("object_key", objectKey(event.objectType(), event.objectId()));
-            properties.put("object_type", event.objectType());
-            properties.put("object_id", event.objectId());
-            properties.put("object_version", event.objectVersion());
-            properties.put("ontology_revision", event.ontologyRevision());
-            properties.put("payload_json", event.payload() == null ? "{}" : event.payload().toString());
-            properties.put("correlation_id", event.correlationId());
-            properties.put("occurred_at", event.occurredAt().toString());
-            edit.set("properties", properties);
+            edit.set("properties", objectProperties(event));
         }
         return edit;
     }

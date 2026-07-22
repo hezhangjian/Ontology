@@ -6,13 +6,16 @@ services:
       opensearch:
         condition: service_healthy
     environment:
-      JAVA_OPTS: -Xms512m -Xmx512m
+      JAVA_OPTS: -Xms256m -Xmx384m
       SW_CORE_RECORD_DATA_TTL: "7"
       SW_CORE_METRICS_DATA_TTL: "7"
       SW_NAMESPACE: skywalking
       SW_STORAGE: elasticsearch
       SW_STORAGE_ES_CLUSTER_NODES: opensearch:9200
       SW_TELEMETRY: prometheus
+    ports:
+      - ${BIND_ADDRESS:-0.0.0.0}:11800:11800
+      - ${BIND_ADDRESS:-0.0.0.0}:12800:12800
     healthcheck:
       test: [CMD, bash, -ec, "exec 3<>/dev/tcp/127.0.0.1/12800; printf 'GET /healthcheck HTTP/1.1\r\nhost: localhost\r\nConnection: close\r\n\r\n' >&3; grep -q '200 OK' <&3"]
       interval: 15s
@@ -29,6 +32,8 @@ services:
         condition: service_healthy
     environment:
       SW_OAP_ADDRESS: http://skywalking-oap:12800
+    ports:
+      - ${BIND_ADDRESS:-0.0.0.0}:8082:8080
     healthcheck:
       test: [CMD, bash, -ec, "exec 3<>/dev/tcp/127.0.0.1/8080; printf 'GET / HTTP/1.1\r\nhost: localhost\r\nConnection: close\r\n\r\n' >&3; grep -q '200 OK' <&3"]
       interval: 10s

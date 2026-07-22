@@ -9,13 +9,16 @@ services:
         bin/apply-config-from-env.py conf/standalone.conf
         exec bin/pulsar standalone
     environment:
-      PULSAR_MEM: -Xms512m -Xmx512m -XX:MaxDirectMemorySize=512m
+      PULSAR_MEM: -Xms384m -Xmx384m -XX:MaxDirectMemorySize=256m
       PULSAR_PREFIX_allowAutoTopicCreation: "false"
       PULSAR_PREFIX_brokerDeleteInactiveTopicsEnabled: "false"
       PULSAR_PREFIX_transactionCoordinatorEnabled: "true"
     volumes:
       - pulsar-conf:/pulsar/conf
       - pulsar-data:/pulsar/data
+    ports:
+      - ${BIND_ADDRESS:-0.0.0.0}:6650:6650
+      - ${BIND_ADDRESS:-0.0.0.0}:8080:8080
     healthcheck:
       test: [CMD, bin/pulsar-admin, brokers, healthcheck]
       interval: 15s

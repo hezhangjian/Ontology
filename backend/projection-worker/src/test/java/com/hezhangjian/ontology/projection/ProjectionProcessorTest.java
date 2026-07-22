@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hezhangjian.ontology.contracts.projection.OntologyEventEnvelope;
 import com.hezhangjian.ontology.projection.control.ControlPlaneRepository;
+import com.hezhangjian.ontology.projection.control.ControlPlaneRepository.GraphUpdate;
 import com.hezhangjian.ontology.projection.model.LedgerEntry;
 import com.hezhangjian.ontology.projection.model.ProjectionException;
 import com.hezhangjian.ontology.projection.storage.HugeGraphProjectionClient;
@@ -80,10 +81,13 @@ class ProjectionProcessorTest {
                 .toList());
         InOrder ordered = inOrder(graph, repository, search);
         ordered.verify(graph).applyBatch(List.of(firstValidated, secondValidated));
-        ordered.verify(repository).graphApplied(first.eventId(), "graph-2");
-        ordered.verify(repository).graphApplied(second.eventId(), "graph-3");
-        ordered.verify(search).apply(firstValidated, "graph-2");
-        ordered.verify(search).apply(secondValidated, "graph-3");
+        ordered.verify(repository).graphAppliedBatch(List.of(
+                new GraphUpdate(first.eventId(), "graph-2"),
+                new GraphUpdate(second.eventId(), "graph-3")));
+        ordered.verify(search).applyBatch(
+                List.of(firstValidated, secondValidated),
+                List.of("graph-2", "graph-3"));
+        ordered.verify(repository).projectedBatch(List.of(first.eventId(), second.eventId()));
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.hezhangjian.ontology.core.connections;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
@@ -15,7 +16,8 @@ import org.junit.jupiter.api.Test;
 
 class ConnectionCryptoTest {
     private final ConnectionCrypto crypto = new ConnectionCrypto(
-            new ConnectionProperties(Base64.getEncoder().encodeToString(new byte[32]), 1, Duration.ofMinutes(15), Set.of(), false),
+            new ConnectionProperties(Base64.getEncoder().encodeToString(new byte[32]), 1, Duration.ofMinutes(15), Set.of(), false,
+                    URI.create("http://minio:9000"), "import-staging", "access-key", "secret-key", 50, 25_000_000, 100_000_000),
             new ObjectMapper());
 
     @Test

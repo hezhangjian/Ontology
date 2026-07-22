@@ -6,10 +6,10 @@ import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 
+import com.hezhangjian.ontology.core.security.ActorIdentity;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/v1")
@@ -49,6 +50,16 @@ public class DataConnectionController {
     @PostMapping("/data-sources")
     ResponseEntity<DataSource> create(@RequestBody CreateRequest request, Authentication authentication) {
         DataSource created = service.create(request, actor(authentication));
+        return ResponseEntity.created(URI.create("/v1/data-sources/" + created.id())).eTag(Long.toString(created.version())).body(created);
+    }
+
+    @PostMapping(value = "/data-sources/local-csv", consumes = "multipart/form-data")
+    ResponseEntity<DataSource> importLocalCsv(@RequestParam String name,
+                                               @RequestParam(required = false) String description,
+                                               @RequestParam(required = false) List<String> tags,
+                                               @RequestParam("files") List<MultipartFile> files,
+                                               Authentication authentication) {
+        DataSource created = service.importLocalCsv(name, description, tags, files, actor(authentication));
         return ResponseEntity.created(URI.create("/v1/data-sources/" + created.id())).eTag(Long.toString(created.version())).body(created);
     }
 
@@ -86,7 +97,7 @@ public class DataConnectionController {
     }
 
     @DeleteMapping("/data-sources/{id}")
-    @PreAuthorize("hasRole('Admin')")
+    @PreAuthorize("hasAnyRole('Viewer','Builder','Admin')")
     ResponseEntity<Void> delete(@PathVariable UUID id, Authentication authentication) {
         service.delete(id, actor(authentication));
         return ResponseEntity.noContent().build();
@@ -149,15 +160,8 @@ public class DataConnectionController {
     }
 
     private Actor actor(Authentication authentication) {
-        Jwt jwt = (Jwt) authentication.getPrincipal();
-        String id = jwt.getSubject();
-        String username = jwt.getClaimAsString("preferred_username");
-        if (id == null || id.isBlank()) id = username;
-        if (id == null || id.isBlank()) id = jwt.getClaimAsString("client_id");
-        if (id == null || id.isBlank()) throw new ConnectionProblem("IDENTITY_SUBJECT_MISSING", "访问令牌缺少稳定主体");
-        String name = jwt.getClaimAsString("name");
-        if (name == null || name.isBlank()) name = username;
-        return new Actor(id, name == null ? id : name, authentication.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_Admin")));
+        ActorIdentity identity = ActorIdentity.from(authentication);
+        return new Actor(identity.id(), identity.name(), identity.admin());
     }
 
     private long parseVersion(String ifMatch) {

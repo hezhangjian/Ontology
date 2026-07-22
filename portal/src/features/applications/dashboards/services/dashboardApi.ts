@@ -11,6 +11,7 @@ export class DashboardApi {
   list = (keyword = '', lifecycle = '', favorites = false) => this.request<DashboardSummary[]>(`/dashboards?keyword=${encodeURIComponent(keyword)}&lifecycle=${encodeURIComponent(lifecycle)}&favorites=${favorites}`);
   create = (body: Record<string, unknown>) => this.request<DashboardDetail>('/dashboards', { method: 'POST', body: JSON.stringify(body) });
   detail = (id: string) => this.request<DashboardDetail>(`/dashboards/${id}`);
+  delete = (id: string) => this.request<void>(`/dashboards/${id}`, { method: 'DELETE' });
   patch = (id: string, etag: number, body: Record<string, unknown>) => this.request<DashboardDetail>(`/dashboards/${id}`, { method: 'PATCH', headers: { 'If-Match': String(etag) }, body: JSON.stringify(body) });
   copy = (id: string) => this.request<DashboardDetail>(`/dashboards/${id}/copy`, { method: 'POST' });
   archive = (id: string) => this.request<DashboardDetail>(`/dashboards/${id}/archive`, { method: 'POST' });

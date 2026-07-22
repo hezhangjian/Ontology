@@ -2,8 +2,6 @@ ARG NGINX_IMAGE=nginx:1.27.0-alpine3.19
 ARG NODE_IMAGE=node:22.22.0-alpine3.23
 FROM ${NODE_IMAGE} AS build
 
-ARG VITE_OIDC_AUTHORITY
-ENV VITE_OIDC_AUTHORITY=${VITE_OIDC_AUTHORITY}
 WORKDIR /workspace
 COPY portal/package.json portal/pnpm-lock.yaml portal/pnpm-workspace.yaml ./
 RUN corepack enable && pnpm install --frozen-lockfile

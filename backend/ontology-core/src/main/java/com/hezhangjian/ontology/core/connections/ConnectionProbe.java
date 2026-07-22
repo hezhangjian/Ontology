@@ -76,7 +76,7 @@ public final class ConnectionProbe {
 
     public AssetPreview preview(DataSourceType type, Map<String, Object> config,
                                 Map<String, String> credential, DataSourceAsset asset, int requestedLimit) {
-        int limit = requestedLimit == 100 ? 100 : 50;
+        int limit = Math.max(1, Math.min(1000, requestedLimit));
         try {
             return switch (type) {
                 case S3_CSV -> previewS3(config, credential, asset, limit);
@@ -206,7 +206,7 @@ public final class ConnectionProbe {
                 .getObject(GetObjectArgs.builder().bucket(bucket).object(object).build()), StandardCharsets.UTF_8))) {
             String header = reader.readLine();
             if (header == null) return new AssetPreview(List.of(), List.of(), false, MAX_PREVIEW_BYTES);
-            List<String> columns = List.of(header.split(",", -1));
+            List<String> columns = csvColumns(header);
             List<Map<String, Object>> rows = new ArrayList<>();
             int bytes = header.length();
             boolean truncated = false;
@@ -228,7 +228,7 @@ public final class ConnectionProbe {
             String header = reader.readLine();
             String sample = reader.readLine();
             if (header == null) return List.of();
-            String[] names = header.split(",", -1);
+            String[] names = csvColumns(header).toArray(String[]::new);
             String[] values = sample == null ? new String[0] : sample.split(",", -1);
             List<DiscoveredField> fields = new ArrayList<>();
             for (int index = 0; index < names.length; index++) {
@@ -262,6 +262,11 @@ public final class ConnectionProbe {
             }
             return new AssetPreview(columns, rows, false, MAX_PREVIEW_BYTES);
         }
+    }
+
+    private List<String> csvColumns(String header) {
+        String normalized = header.startsWith("\uFEFF") ? header.substring(1) : header;
+        return java.util.Arrays.stream(normalized.split(",", -1)).map(String::trim).toList();
     }
 
     private MinioClient minio(Map<String, Object> config, Map<String, String> credential) {

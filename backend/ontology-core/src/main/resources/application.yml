@@ -10,6 +10,10 @@ spring:
   flyway:
     default-schema: control
     schemas: control
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 110MB
 
 connections:
   encryption-key: ${connection_master_key}
@@ -17,6 +21,13 @@ connections:
   test-token-ttl: 15m
   allowed-private-hosts: ${CONNECTIONS_ALLOWED_PRIVATE_HOSTS:minio,postgres,pulsar}
   production-mode: ${CONNECTIONS_PRODUCTION_MODE:false}
+  local-csv-minio-url: ${LOCAL_CSV_MINIO_URL:http://minio:9000}
+  local-csv-bucket: ${LOCAL_CSV_BUCKET:import-staging}
+  local-csv-access-key: ${minio_root_user}
+  local-csv-secret-key: ${minio_root_password}
+  local-csv-max-files: ${LOCAL_CSV_MAX_FILES:50}
+  local-csv-max-file-bytes: ${LOCAL_CSV_MAX_FILE_BYTES:26214400}
+  local-csv-max-total-bytes: ${LOCAL_CSV_MAX_TOTAL_BYTES:104857600}
 
 pipelines:
   flink-url: ${PIPELINES_FLINK_URL:http://flink-jobmanager:8081}

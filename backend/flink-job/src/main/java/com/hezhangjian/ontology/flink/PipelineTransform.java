@@ -30,6 +30,7 @@ final class PipelineTransform extends RichFlatMapFunction<String, String> {
     private transient ObjectMapper json;
     private transient List<Map<String, Object>> orderedNodes;
     private transient Set<String> deduplicationKeys;
+    private transient long datasetRowNumber;
 
     PipelineTransform(Map<String, Object> graph, Map<String, Object> source, String correlationId) {
         this(graph, source, correlationId, null);
@@ -48,6 +49,7 @@ final class PipelineTransform extends RichFlatMapFunction<String, String> {
         json = new ObjectMapper();
         orderedNodes = topologicalNodes();
         deduplicationKeys = new HashSet<>();
+        datasetRowNumber = 0;
     }
 
     @Override
@@ -63,8 +65,13 @@ final class PipelineTransform extends RichFlatMapFunction<String, String> {
                 case "DEDUPLICATE" -> { if (!deduplicate(row, config)) return; }
                 case "DERIVE" -> row = derive(row, config);
                 case "FILTER" -> { if (!matches(row, config)) return; }
+                case "JOIN" -> {
+                    row = join(row, config);
+                    if (row == null) return;
+                }
                 case "ONTOLOGY_OBJECT" -> outputs.add(objectEvent(row, node, config));
                 case "ONTOLOGY_RELATION" -> outputs.add(relationEvent(row, node, config));
+                case "DATASET_OUTPUT" -> outputs.add(datasetEvent(row, node, config));
                 case "QUALITY" -> { if (!qualityPasses(row, config) && "STOP".equals(config.get("failureAction"))) throw new IllegalStateException("Quality gate rejected a record"); }
                 case "SELECT" -> row = select(row, config);
                 default -> { }
@@ -183,16 +190,43 @@ final class PipelineTransform extends RichFlatMapFunction<String, String> {
         return !"NOT_NULL".equals(config.get("rule")) || row.get(field) != null;
     }
 
+    private Map<String, Object> join(Map<String, Object> row, Map<String, Object> config) {
+        String leftKey = text(config.get("leftKey"));
+        String rightKey = text(config.get("rightKey"));
+        String expected = text(row.get(leftKey));
+        Map<String, Object> match = listOfMaps(config.get("lookupRows")).stream()
+                .filter(candidate -> Objects.equals(expected, text(candidate.get(rightKey))))
+                .findFirst().orElse(null);
+        if (match == null) return "INNER".equals(textOr(config.get("joinType"), "LEFT")) ? null : row;
+        String prefix = textOr(config.get("lookupPrefix"), "辅助_");
+        Map<String, Object> result = new LinkedHashMap<>(row);
+        match.forEach((field, value) -> result.put(result.containsKey(field) ? prefix + field : field, value));
+        return result;
+    }
+
     private Map<String, Object> objectEvent(Map<String, Object> row, Map<String, Object> node, Map<String, Object> config) throws Exception {
         String objectType = text(config.get("objectTypeId"));
-        String objectId = text(row.get(text(config.get("idField"))));
+        List<String> idFields = config.get("idFields") instanceof List<?> values
+                ? values.stream().map(this::text).filter(field -> !field.isBlank()).toList()
+                : List.of(text(config.get("idField")));
+        Map<String, Object> identity = new LinkedHashMap<>();
+        idFields.forEach(field -> identity.put(field, row.get(field)));
+        String objectId = idFields.size() == 1 ? text(identity.get(idFields.get(0)))
+                : hash(json.writeValueAsBytes(identity));
         Map<String, Object> payload = new LinkedHashMap<>();
-        map(config.get("mappings")).forEach((property, field) -> payload.put(property, row.get(text(field))));
-        String rowHash = hash(json.writeValueAsBytes(row));
-        Map<String, Object> event = envelope("object.upsert", node, objectType + ":" + objectId, rowHash);
+        map(config.get("mappings")).forEach((property, field) -> {
+            String sourceField = text(field);
+            payload.put(property, typedValue(row.get(sourceField), schemaType(node, sourceField)));
+        });
+        String primaryPropertyKey = text(config.get("primaryPropertyKey"));
+        if (!primaryPropertyKey.isBlank()) {
+            payload.putIfAbsent(primaryPropertyKey, objectId);
+        }
+        String payloadHash = hash(json.writeValueAsBytes(payload));
+        Map<String, Object> event = envelope("object.upsert", node, objectType + ":" + objectId, payloadHash);
         event.put("object_id", objectId);
         event.put("object_type", objectType);
-        event.put("object_version", version(config, row, rowHash));
+        event.put("object_version", version(config, row, payloadHash));
         event.put("payload", payload);
         return event;
     }
@@ -215,19 +249,47 @@ final class PipelineTransform extends RichFlatMapFunction<String, String> {
         return event;
     }
 
+    private Map<String, Object> datasetEvent(Map<String, Object> row, Map<String, Object> node,
+                                             Map<String, Object> config) throws Exception {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        List<Map<String, Object>> mappings = listOfMaps(config.get("fieldMappings"));
+        boolean explicitSelection = "EXPLICIT".equals(text(config.get("fieldSelectionMode")));
+        if (mappings.isEmpty() && !explicitSelection) payload.putAll(row);
+        else mappings.forEach(mapping -> {
+            String sourceField = text(mapping.get("source"));
+            String targetField = text(mapping.get("target"));
+            if (!sourceField.isBlank() && !targetField.isBlank()) payload.put(targetField, row.get(sourceField));
+        });
+        String rowHash = hash(json.writeValueAsBytes(payload));
+        long rowNumber = ++datasetRowNumber;
+        Map<String, Object> event = envelope("dataset.row", node,
+                text(config.get("datasetId")) + ":" + rowNumber, rowHash + ":" + rowNumber);
+        event.put("dataset_id", text(config.get("datasetId")));
+        event.put("dataset_name", text(config.get("datasetName")));
+        event.put("payload", payload);
+        event.put("row_number", rowNumber);
+        return event;
+    }
+
     private Map<String, Object> envelope(String eventType, Map<String, Object> node, String key, String rowHash) {
-        String stable = source.get("pipelineId") + ":" + source.get("pipelineVersion") + ":" + node.get("id") + ":" + key + ":" + rowHash;
+        String stable = correlationId + ":" + source.get("pipelineId") + ":" + source.get("pipelineVersion")
+                + ":" + node.get("id") + ":" + key + ":" + rowHash;
         Map<String, Object> event = new LinkedHashMap<>();
         event.put("correlation_id", correlationId);
         event.put("event_id", UUID.nameUUIDFromBytes(stable.getBytes(StandardCharsets.UTF_8)));
         event.put("event_type", eventType);
-        event.put("flink_job_id", getRuntimeContext().getJobId().toString());
+        event.put("flink_job_id", flinkJobId());
         event.put("occurred_at", Instant.now().toString());
-        event.put("ontology_revision", 1);
+        event.put("ontology_revision", number(source.get("ontologyRevision"), 1));
         event.put("producer", "ontology-flink-job");
         event.put("schema_version", 1);
         event.put("source", Map.of("asset_id", source.get("assetId"), "data_source_id", source.get("connectionId"), "pipeline_run_id", source.get("runId")));
         return event;
+    }
+
+    private String flinkJobId() {
+        try { return getRuntimeContext().getJobId().toString(); }
+        catch (IllegalStateException ignored) { return textOr(source.get("flinkJobId"), "local"); }
     }
 
     private long version(Map<String, Object> config, Map<String, Object> row, String rowHash) {
@@ -235,6 +297,34 @@ final class PipelineTransform extends RichFlatMapFunction<String, String> {
         if (configured instanceof Number number) return Math.max(1, number.longValue());
         try { return Math.max(1, Long.parseLong(text(configured))); }
         catch (NumberFormatException ignored) { return Math.max(1, Long.parseUnsignedLong(rowHash.substring(0, 15), 16)); }
+    }
+
+    private long number(Object value, long fallback) {
+        if (value instanceof Number number) return number.longValue();
+        try { return Long.parseLong(text(value)); }
+        catch (NumberFormatException ignored) { return fallback; }
+    }
+
+    private String schemaType(Map<String, Object> node, String field) {
+        return listOfMaps(node.get("inputSchema")).stream()
+                .filter(item -> field.equals(text(item.get("name"))))
+                .map(item -> text(item.get("type"))).findFirst().orElse("TEXT");
+    }
+
+    private Object typedValue(Object value, String type) {
+        if (value == null || text(value).isBlank()) return value;
+        return switch (type) {
+            case "BOOLEAN" -> value instanceof Boolean ? value : Boolean.parseBoolean(text(value));
+            case "DECIMAL", "DOUBLE", "FLOAT" -> value instanceof Number ? value : decimal(value);
+            case "INT", "INTEGER", "LONG" -> value instanceof Number ? value : Long.parseLong(text(value));
+            case "JSON" -> value instanceof Map<?, ?> || value instanceof List<?> ? value : parseJson(value);
+            default -> value;
+        };
+    }
+
+    private Object parseJson(Object value) {
+        try { return json.readValue(text(value), Object.class); }
+        catch (Exception ignored) { return value; }
     }
 
     private BigDecimal decimal(Object value) { return new BigDecimal(text(value)); }

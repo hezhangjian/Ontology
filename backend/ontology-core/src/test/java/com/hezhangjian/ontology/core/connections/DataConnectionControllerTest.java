@@ -1,12 +1,11 @@
 package com.hezhangjian.ontology.core.connections;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -16,13 +15,11 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(DataConnectionController.class)
@@ -30,45 +27,52 @@ import org.springframework.test.web.servlet.MockMvc;
 class DataConnectionControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean DataConnectionService service;
-    @MockitoBean JwtDecoder jwtDecoder;
 
     @Test
-    void builderCanListWithoutCredentialMaterial() throws Exception {
+    void localUserCanListWithoutCredentialMaterialOrLogin() throws Exception {
         when(service.list(0, 20, null, null, null, null)).thenReturn(new ConnectionModels.DataSourcePage(
                 List.of(source()), 0, 20, 1, Map.of("all", 1), Map.of()));
 
-        mvc.perform(get("/v1/data-sources").with(jwt().jwt(jwt -> jwt.subject("builder").claim("name", "平台构建者"))
-                        .authorities(new SimpleGrantedAuthority("ROLE_Builder"))))
+        mvc.perform(get("/v1/data-sources"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].name").value("受控 MinIO"))
                 .andExpect(jsonPath("$.items[0].credential.ciphertext").doesNotExist());
     }
 
     @Test
-    void viewerCannotReadAndOnlyAdminCanDelete() throws Exception {
+    void localUserCanReadAndDeleteWithoutLogin() throws Exception {
         UUID id = UUID.randomUUID();
-        mvc.perform(get("/v1/data-sources").with(jwt().authorities(new SimpleGrantedAuthority("ROLE_Viewer"))))
-                .andExpect(status().isForbidden());
-        mvc.perform(delete("/v1/data-sources/" + id).with(jwt().authorities(new SimpleGrantedAuthority("ROLE_Builder"))))
-                .andExpect(status().isForbidden());
-        mvc.perform(delete("/v1/data-sources/" + id).with(jwt().jwt(jwt -> jwt.subject("admin").claim("name", "管理员"))
-                        .authorities(new SimpleGrantedAuthority("ROLE_Admin"))))
+        when(service.list(0, 20, null, null, null, null)).thenReturn(new ConnectionModels.DataSourcePage(
+                List.of(), 0, 20, 0, Map.of(), Map.of()));
+        mvc.perform(get("/v1/data-sources")).andExpect(status().isOk());
+        mvc.perform(delete("/v1/data-sources/" + id))
                 .andExpect(status().isNoContent());
         verify(service).delete(any(), any());
     }
 
     @Test
-    void lightweightTokenFallsBackToPreferredUsername() throws Exception {
+    void localIdentityIsUsedWithoutLogin() throws Exception {
         UUID id = UUID.randomUUID();
-        mvc.perform(delete("/v1/data-sources/" + id).with(jwt().jwt(token -> token
-                        .claims(claims -> claims.remove("sub"))
-                        .claim("preferred_username", "platform-admin"))
-                        .authorities(new SimpleGrantedAuthority("ROLE_Admin"))))
+        mvc.perform(delete("/v1/data-sources/" + id))
                 .andExpect(status().isNoContent());
 
-        ArgumentCaptor<ConnectionModels.Actor> actor = ArgumentCaptor.forClass(ConnectionModels.Actor.class);
-        verify(service).delete(any(), actor.capture());
-        assertEquals("platform-admin", actor.getValue().id());
+        verify(service).delete(any(), any());
+    }
+
+    @Test
+    void builderCanImportChosenCsvFilesWithoutStorageParameters() throws Exception {
+        ConnectionModels.DataSource imported = source();
+        when(service.importLocalCsv(any(), any(), any(), any(), any())).thenReturn(imported);
+        MockMultipartFile file = new MockMultipartFile("files", "data/demo-token-usage.csv", "text/csv",
+                "employee_name,month,total_token\n张三,2026-07,120\n".getBytes());
+
+        mvc.perform(multipart("/v1/data-sources/local-csv").file(file)
+                        .param("name", "7 月 Token 消耗")
+                        .param("tags", "Token", "月度"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("受控 MinIO"));
+
+        verify(service).importLocalCsv(any(), any(), any(), any(), any());
     }
 
     private ConnectionModels.DataSource source() {

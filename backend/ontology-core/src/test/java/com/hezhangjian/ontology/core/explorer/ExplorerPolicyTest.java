@@ -20,9 +20,9 @@ class ExplorerPolicyTest {
     private final UUID nameId = UUID.randomUUID();
     private final UUID secretId = UUID.randomUUID();
     private final ExplorerPolicy policy = new ExplorerPolicy(new ObjectMapper());
-    private final ObjectTypeDefinition type = new ObjectTypeDefinition(typeId, "Asset", "资产", "ACTIVE", 7,
-            List.of(new PropertyDefinition(nameId, "name", "名称", "STRING", true, true, true, true, true, false),
-                    new PropertyDefinition(secretId, "secret", "秘密", "STRING", false, false, false, false, false, true)));
+    private final ObjectTypeDefinition type = new ObjectTypeDefinition(typeId, "Asset", "Asset", "资产", "ACTIVE", 7,
+            List.of(new PropertyDefinition(nameId, "name", "name", "名称", "STRING", true, true, true, true, true, false),
+                    new PropertyDefinition(secretId, "secret", "secret", "秘密", "STRING", false, false, false, false, false, true)));
 
     @Test
     void acceptsStableTypedPropertyAndSortIds() {

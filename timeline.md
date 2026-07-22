@@ -304,4 +304,59 @@
 
 ## 后续记录模板
 
+## 2026-07-21 — CSV 到部门 Token 看板浏览器演示
+
+- 数据与浏览器操作：使用内置浏览器以 Admin 登录，从 `/Users/dijkstra/project/06-shixi/data` 的两个原始 CSV 创建 `Token 消耗演示 CSV` MinIO 连接，刷新发现 5 个资产；在 UI 中创建、校验、预览、发布并运行完整事实与部门汇总管道。
+- 本体操作：在 UI 中创建并发布 `TokenUsage`（13 属性，Revision 6）和 `TokenDepartmentSummary`（7 属性，Revision 7）；两次发布 Saga 的 HugeGraph、OpenSearch、Revision 激活和审计步骤全部成功。
+- 看板操作：在 UI 中创建并发布 `部门与团队 Token 消耗`，绑定 `TokenDepartmentSummary` Object Set，添加一级部门与三级组两张 `sum(totalToken)` 柱状图。
+- 浏览器验收：发布查看页成功显示 4 个一级部门和 5 个三级组；产品研发中心 `16,124,098`、数据平台组 `7,587,487`，两种分组总计均为 `47,127,118`，与 6000 行源 CSV 的命令行独立聚合一致。
+- 安全验证：保留每组至少 5 个对象的小群体抑制；汇总数据为每个组织路径增加 4 个零值占位对象，满足门槛且不改变 Token 合计。清理的 5,807 条消息仅是已取消演示运行在 `ontology-projection-v1` 的待处理积压。
+- 浏览器发现并修复：React Flow 节点尺寸/MiniMap 遮挡、尺寸事件导致自动保存饥饿、发布前未保存、Flink revision 硬编码、CSV 数值未类型化、新本体 API/物理键查询不一致、PROJECTING 无法取消，以及看板缺少分组 SUM。
+- 已知改进项：完整 6000 行 Projection 在本机逐条写图和搜索，吞吐不足以现场等待；幂等重跑中的 5 条更新没有计入新 batch ack。演示使用准确的物化汇总，生产应实现 Projection 批处理和 correlation-aware 幂等回执。
+- 演示步骤与启动/登录说明见 `docs/runbooks/token-consumption-demo.md`。
+
+## 2026-07-21 — 全资源无资格限制删除
+
+- 范围：数据连接、管道、本体对象/关系/接口/Action/Function、分析看板均提供永久删除入口；删除不再要求 Admin、Owner、停用、空草稿、未发布、无引用或无运行记录。
+- 级联行为：删除服务按实际 PostgreSQL 外键顺序清理连接资产与凭据授权、管道版本/运行/调度/提议/映射、本体版本/属性/提议/探索记录/直接依赖资源，以及看板草稿/版本/查询计划/运行/权限/收藏/锁和健康记录。
+- 权限回归：Data Connection 与 Pipeline MVC 测试明确验证 Viewer 可执行 DELETE；本体和看板删除继承 Viewer/Builder/Admin 访问范围，Portal 删除入口不再依赖 `canBuild` 或 `isAdmin`。
+- 自动验证：Java 21 Docker 中完整 Maven reactor 通过，Ontology Core 27 项测试通过；Portal lint、typecheck、production build 通过；OpenAPI 有效并保留既有 46 条非阻断警告；全 profile Compose config 与 `git diff --check` 通过。
+- 浏览器验收：重建并启动 `ontology-core`、`frontend` 和 APISIX 后，经 `http://localhost:9080` 登录；使用 `Codex 删除验证 1784599023` 一次性资源确认已发布/健康连接和管道仍显示永久删除，连接确认框明确显示关联管道数量并成功级联删除。
+- 清理核对：一次性数据连接、关联管道、独立管道来源、本体资源、看板和连接凭据在 PostgreSQL 中均为 0 条残留；APISIX、Frontend、Keycloak、Ontology Core、PostgreSQL 均保持 healthy。
+
+## 2026-07-21 — Dataset-first 通用平台与 Token 面板验收
+
+- 范围：依据 `111.md` 增加通用 Dataset 控制面、Pipeline `DATASET_OUTPUT`、Dataset 列表/详情/字段映射、Dataset 驱动对象向导和可配置分析面板；Portal 主导航聚焦数据、本体、探索和应用主流程。
+- 内置浏览器数据操作：从 `/Users/dijkstra/project/06-shixi/data` 手动选择并上传 `demo-employee-leaders.csv` 与 `demo-token-usage.csv`，创建 `Token 消耗 Dataset-first 验收` 连接（`ff64aed9-0dfd-401f-8af1-91a21138156c`）；从连接详情点击创建 `Token 使用明细宽表管道`（`f3e5e7f2-205e-4d14-aa6a-8407ab2c9921`）。
+- Pipeline 与 Dataset：在 DAG 中依次配置员工工号关联和组长姓名关联，输出稳定字段 `employee_id`、`leader_group_id`、`leader_group_name`、`month`、`total_tokens` 及五级组织字段；点击“生成数据集”得到 `Token 使用组织宽表`（`61eadd47-d22c-456c-ba68-290319fe22e4`），共 6,000 行、18 字段。
+- 本体操作：从同一 Dataset 逐项预览并发布 `人员`（100 个对象、5,900 重复行、0 冲突，Revision 15）、`部门`（5 个对象，Revision 16）、`组长小组`（8 个对象，Revision 17）；发布 `人员属于部门（Dataset）`（Revision 18）和 `人员属于组长小组（Group）`（Revision 19）两条多对一关系。
+- 面板验收：从 Dataset 详情点击“制作看板”，默认识别稳定字段并扫描 6,000 行；显示 80 个部门×月份组合、8 个组长小组，以及“部门月份 Token 消耗”“部门月份人均 Token 消耗”“各小组 Token 月均消耗”三组结果。一级部门合计为产品研发中心 `16,124,098`、市场与销售中心 `9,437,020`、运营中心 `10,337,318`、财务中心 `11,228,682`，总计 `47,127,118`；小组月均最高为张子涵组 `309,537.05`，并点击“查看每月”确认 20 个月明细。
+- 浏览器发现并修复：Pipeline 新增节点改为自动插入当前选中节点之前并重连边；Dataset 对象向导预览后表单项卸载导致名称和主键丢失，改为从保留的完整表单值创建；关系技术名冲突在 UI 中通过唯一稳定技术名避免。最终面板浏览器控制台日志为空。
+- 自动门禁：`make verify-fast` 通过；Maven reactor（Ontology Core 29 项测试）、Portal lint/typecheck/production build、OpenAPI 有效性和全 profile Compose 配置全部通过；OpenAPI 保留 49 条既有风格类非阻断警告。`git diff --check` 通过，本轮未创建 commit。
+
+### 2026-07-21 复核更正：页面职责通过，平台链路未通过
+
+- 页面职责修正：Dataset 详情仅保留预览、字段和来源，不再提供“创建业务对象”或“制作看板”；对象创建入口和三步向导归属 `/ontology/object-types/new/from-dataset`；看板创建入口和 Dataset 选择归属 `/apps/dashboards/new/from-dataset`。
+- 内置浏览器复核：经 APISIX `http://localhost:9080` 验证本体与看板各自的面包屑、返回路径、Dataset 选择器和独立页面；选择 `Token 使用组织宽表` 后仍可扫描 6,000 行并展示部门月份合计、部门月份人均和 8 个组长小组月均结果；Dataset 详情文本中不存在两个跨模块创建入口。
+- 基础设施审计：`control.dataset_rows` 实际保存 6,000 条业务数据；该 Pipeline 没有对应 Flink run；MinIO 只有导入暂存 CSV，没有 Dataset Parquet 正文；OpenSearch 没有 Dataset 查询副本。因此此前“Dataset 主路径验收通过”的结论无效，现仅判定 Portal 信息架构和指标展示通过。
+- 组件职责结论：组件不需要在每个请求中机械地全部经过，但完整 Dataset 主路径应为 MinIO 保存正文、Flink 执行物化、OpenSearch 提供分析查询、PostgreSQL 只保存控制面；对象实例路径再经 Pulsar 和 Projection Worker 写入 HugeGraph/OpenSearch。当前实现未满足这一边界，不能称为通用平台链路验收通过。
+
+### 2026-07-21 最终复核：真实 Flink、对象语义、通用图表与删除生命周期
+
+- Dataset 主链路已改为真实 Flink：`DATASET_OUTPUT` 由 Flink 读取 6,000 行并经 Pulsar 交给 Dataset consumer，正文写 MinIO NDJSON、查询副本写 OpenSearch、PostgreSQL 只保留 Dataset 控制面和投影账本；当前 Dataset 为 `f060e65c-dc2f-4963-bd41-de8b8fd96ecb`，状态 READY、6,000 行、18 字段。此前“平台链路未通过”的结论由本条替代。
+- 内置浏览器在本体页面分别创建并发布 `人员`、`部门`、`组长小组`；属性边界为人员 4 个自身属性、部门 2 个组织属性、小组 2 个身份属性。对应 Flink 映射读取均为 6,000 行，去重写出 100、5、8 个对象，Projection 全部 COMPLETED；人员 Job `230cb06605548ad1726c360b85971ac8`，部门 Job `ec55ab4e7f56e16a7f938af78af31bcf`，小组 Job `49f0672bef1cbb95bacb7738ee5c4999`。
+- 对象探索页确认探索的是业务对象实例而非对象定义，显示人员 100/4 属性、部门 5/2 属性、组长小组 8/2 属性，并提供各类型“探索实例”入口。
+- 内置浏览器在分析看板页面创建 `Token 使用组织分析`，手动添加 Dataset 数据源并从组件库选择图表；编辑器保留 Dataset、图表类型、维度、聚合、指标字段的可编辑配置。发布页实时渲染 `部门月份 Token 消耗` 堆叠柱状图、`部门月份人均 Token 消耗` 折线图和 `各小组 Token 月度消耗` 柱状图，没有写死专用 Dashboard 页面。
+- 删除生命周期验收：用临时 Dataset 从列表确认框永久删除成功；复制临时管道后，未归档时永久删除为禁用，归档后入口启用并永久删除成功。修复管道更多菜单仅悬停触发的问题，现按钮明确使用 click 触发。最终 Dataset 被已发布看板引用时，删除被阻止并显示“Dataset 正被分析看板使用，请先移除对应数据源”，资源未误删。
+- 稳定性修复：连续 Flink 作业暴露 TaskManager `768m` 在 Flink 1.20 JVM 最小内存分配下无法重启，调整为 `1024m`；重启后恢复 1 个 TaskManager、2 个可用 slot，小组映射重跑完成。
+- 最终门禁：`make verify-fast` 通过；Maven reactor（Flink 4 项、Ontology Core 29 项、Projection Worker 4 项测试）、Portal lint/typecheck/production build、OpenAPI 有效性、全 profile Compose 配置和 `git diff --check` 均通过。OpenAPI 保留 49 条既有风格类非阻断警告。
+
 每完成一个 Phase，在同一 Phase commit 中追加：完成时间、Commit subject、范围、自动门禁、内置浏览器点击步骤（若涉及前端）、发现并修复的问题、依赖/兼容证据、下一恢复点。
+
+## 2026-07-21 — Dataset 自助式通用图表配置
+
+- 范围：看板检查器改为直接从 Dataset 原始字段配置横轴、日/周/月/季度/年时间粒度、系列、最多四个独立指标和图表内筛选；未引入需要预维护的语义字段或指标目录。
+- 查询执行：Dataset 查询增加显式维度规格和服务端时间分桶；同一查询支持多指标、`SUM_PER_DISTINCT` 人均口径及字段筛选，返回统一的维度、指标和行结果；旧 `dimensionPropertyIds + aggregation` 配置继续兼容。
+- 渲染：柱状图可按系列分组，堆叠柱状图按系列堆叠，折线图/面积图支持系列和多指标，透视表动态显示全部指标，指标卡可展示多个值。
+- 自动验证：新增 Dataset 月度分桶、多指标、人均和字段筛选测试，以及看板多指标配置校验测试；Java 21 Maven 完整 reactor 43 项测试、Portal lint/typecheck/production build、OpenAPI 有效性、全 profile Compose config 和 `git diff --check` 全部通过。OpenAPI 保留 49 条既有非阻断警告；宿主机没有本地 Java 21，因此 Maven 门禁使用仓库已有的 Java 21 Maven 镜像等价执行。
+- 浏览器验证：按用户明确要求未使用内置浏览器；由用户手工验证编辑器交互和最终图表显示。

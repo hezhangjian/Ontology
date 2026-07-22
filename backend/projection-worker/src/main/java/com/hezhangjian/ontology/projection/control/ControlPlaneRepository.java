@@ -3,6 +3,7 @@ package com.hezhangjian.ontology.projection.control;
 import com.hezhangjian.ontology.contracts.projection.IndexRebuildCommand;
 import com.hezhangjian.ontology.projection.model.LedgerEntry;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -126,11 +127,41 @@ public class ControlPlaneRepository {
                 eventId);
     }
 
+    public void graphAppliedBatch(List<GraphUpdate> updates) {
+        jdbc.batchUpdate(
+                """
+                UPDATE control.projection_ledger
+                SET status = 'GRAPH_APPLIED', graph_element_id = ?, graph_applied_at = now(),
+                    last_error_code = NULL, last_error_message = NULL, updated_at = now()
+                WHERE event_id = ?
+                """,
+                updates.stream()
+                        .map(update -> new Object[] { update.graphElementId(), update.eventId() })
+                        .toList());
+    }
+
     public void projected(UUID eventId) {
-        updateStatus(eventId, "PROJECTED", null, null);
         jdbc.update(
-                "UPDATE control.projection_ledger SET projected_at = now() WHERE event_id = ?",
+                """
+                UPDATE control.projection_ledger
+                SET status = 'PROJECTED', projected_at = now(), last_error_code = NULL,
+                    last_error_message = NULL, updated_at = now()
+                WHERE event_id = ?
+                """,
                 eventId);
+    }
+
+    public void projectedBatch(List<UUID> eventIds) {
+        List<Object[]> arguments = new ArrayList<>();
+        eventIds.forEach(eventId -> arguments.add(new Object[] { eventId }));
+        jdbc.batchUpdate(
+                """
+                UPDATE control.projection_ledger
+                SET status = 'PROJECTED', projected_at = now(), last_error_code = NULL,
+                    last_error_message = NULL, updated_at = now()
+                WHERE event_id = ?
+                """,
+                arguments);
     }
 
     public void stale(UUID eventId) {
@@ -307,6 +338,9 @@ public class ControlPlaneRepository {
     }
 
     public record RelationContract(String sourceTypeId, String targetTypeId) {
+    }
+
+    public record GraphUpdate(UUID eventId, String graphElementId) {
     }
 
     public record ProjectionOperation(UUID operationId, String status) {

@@ -13,6 +13,7 @@ export function modelingApi(accessToken: string) {
       const problem = await result.json().catch(() => ({ detail: '请求未能完成' })) as { detail?: string; requestId?: string };
       throw new ApiProblem(problem.detail ?? '请求未能完成', problem.requestId, result.status);
     }
+    if (result.status === 204) return { data: undefined as T, etag: result.headers.get('ETag') ?? undefined };
     return { data: await result.json() as T, etag: result.headers.get('ETag') ?? undefined };
   }
   const request = async <T,>(path: string, init: RequestInit = {}) => (await response<T>(path, init)).data;
@@ -21,6 +22,7 @@ export function modelingApi(accessToken: string) {
     closeProposal: (id: string) => request<Proposal>(`/proposals/${id}/close`, { method: 'POST' }),
     createProposal: (body: Record<string, unknown>) => request<Proposal>('/proposals', { method: 'POST', body: JSON.stringify(body) }),
     createResource: (kind: ResourceKind, body: Record<string, unknown>) => request<OntologyResource>(`/${segment[kind]}`, { method: 'POST', body: JSON.stringify(body) }),
+    deleteResource: (kind: ResourceKind, id: string) => request<void>(`/${segment[kind]}/${id}`, { method: 'DELETE' }),
     deployment: (id: string) => request<Deployment>(`/deployments/${id}`),
     functionTest: (id: string, inputs: Record<string, unknown>) => request<Record<string, unknown>>(`/functions/${id}/test`, { method: 'POST', body: JSON.stringify({ inputs }) }),
     getProposal: (id: string) => request<Proposal>(`/proposals/${id}`),

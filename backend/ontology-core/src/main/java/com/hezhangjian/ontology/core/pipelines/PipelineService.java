@@ -19,6 +19,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hezhangjian.ontology.core.connections.ConnectionCrypto;
 import com.hezhangjian.ontology.core.connections.ConnectionModels.DataSource;
 import com.hezhangjian.ontology.core.connections.ConnectionProblem;
+import com.hezhangjian.ontology.core.deletion.ResourceDeletionService;
 import com.hezhangjian.ontology.core.connections.DataConnectionService;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.DuplicateKeyException;
@@ -45,16 +46,19 @@ public class PipelineService {
     private final ObjectMapper json;
     private final PipelineGraphValidator validator;
     private final PipelineRuntimeCoordinator runtime;
+    private final ResourceDeletionService deletion;
 
     public PipelineService(ConnectionCrypto crypto, DataConnectionService connections, JdbcTemplate jdbc,
                            ObjectMapper json, PipelineGraphValidator validator,
-                           @Lazy PipelineRuntimeCoordinator runtime) {
+                           @Lazy PipelineRuntimeCoordinator runtime,
+                           ResourceDeletionService deletion) {
         this.crypto = crypto;
         this.connections = connections;
         this.jdbc = jdbc;
         this.json = json;
         this.validator = validator;
         this.runtime = runtime;
+        this.deletion = deletion;
     }
 
     public PipelinePage list(int page, int size, String search, String mode, String lifecycle,
@@ -178,7 +182,7 @@ public class PipelineService {
     public ValidationResult validate(UUID id) {
         Pipeline pipeline = get(id);
         if (pipeline.draft() == null) throw new ConnectionProblem("PIPELINE_DRAFT_MISSING", "管道没有可校验草稿");
-        return validator.validate(pipeline.draft().graph(), pipeline.mode(), sourceSchema(pipeline.sourceAssetId()));
+        return validator.validate(enrichLookupSchemas(pipeline.draft().graph()), pipeline.mode(), sourceSchema(pipeline.sourceAssetId()));
     }
 
     public List<NodeType> nodeTypes() { return validator.nodeTypes(); }
@@ -364,10 +368,15 @@ public class PipelineService {
     @Transactional
     public void delete(UUID id, Actor actor) {
         Pipeline pipeline = get(id);
-        Integer runs = jdbc.queryForObject("SELECT count(*) FROM control.pipeline_runs WHERE pipeline_id=?", Integer.class, id);
-        if (pipeline.publishedVersion() != null || runs == null || runs > 0) throw new ConnectionProblem("PIPELINE_DELETE_FORBIDDEN", "只有从未发布且没有运行记录的草稿可永久删除");
-        audit(actor, "PIPELINE_DELETED", "pipeline", id.toString(), "永久删除未发布管道草稿", Map.of());
-        jdbc.update("DELETE FROM control.pipelines WHERE id=?", id);
+        if (pipeline.lifecycle() != PipelineLifecycle.ARCHIVED) {
+            throw new ConnectionProblem("PIPELINE_DELETE_REQUIRES_ARCHIVE", "请先归档管道，再执行永久删除");
+        }
+        Integer datasets = jdbc.queryForObject("SELECT count(*) FROM control.datasets WHERE pipeline_id=?", Integer.class, id);
+        if (datasets != null && datasets > 0) {
+            throw new ConnectionProblem("PIPELINE_HAS_DATASETS", "管道仍有 Dataset，请先删除 Dataset");
+        }
+        audit(actor, "PIPELINE_DELETED", "pipeline", id.toString(), "永久删除管道“" + pipeline.name() + "”及关联记录", Map.of());
+        deletion.deletePipeline(id);
     }
 
     public PipelineRunPage runs(UUID id, int page, int size) {
@@ -439,8 +448,8 @@ public class PipelineService {
         PipelineNode source = new PipelineNode("source-1", "SOURCE", "源资产", new Position(80, 180),
                 Map.of("assetId", assetId, "connectionId", sourceId, "sourceType", sourceType), List.of(), List.of(), List.of());
         PipelineNode select = new PipelineNode("select-1", "SELECT", "选择字段", new Position(360, 180), Map.of("fields", List.of()), List.of(), List.of(), List.of());
-        PipelineNode output = new PipelineNode("output-1", template.equals("OBJECT_RELATION") ? "ONTOLOGY_RELATION" : "ONTOLOGY_OBJECT",
-                template.equals("OBJECT_RELATION") ? "关系输出" : "对象输出", new Position(660, 180), Map.of(), List.of(), List.of(), List.of());
+        PipelineNode output = new PipelineNode("output-1", "DATASET_OUTPUT", "数据集输出", new Position(660, 180),
+                Map.of("datasetName", "新数据集", "description", "由管道生成", "fieldMappings", List.of()), List.of(), List.of(), List.of());
         List<PipelineNode> nodes = template.equals("BLANK") ? List.of(source, output) : List.of(source, select, output);
         List<PipelineEdge> edges = template.equals("BLANK")
                 ? List.of(new PipelineEdge("edge-1", source.id(), output.id()))
@@ -454,10 +463,42 @@ public class PipelineService {
                         row.getBoolean("sensitive"), "source-1"), assetId);
     }
 
+    private PipelineGraph enrichLookupSchemas(PipelineGraph graph) {
+        List<PipelineNode> nodes = graph.nodes().stream().map(node -> {
+            if (!node.type().equals("JOIN")) return node;
+            Map<String, Object> config = new LinkedHashMap<>(node.config());
+            UUID connectionId = uuid(config.get("lookupConnectionId"));
+            UUID assetId = uuid(config.get("lookupAssetId"));
+            if (connectionId == null || assetId == null) return node;
+            Integer count = jdbc.queryForObject("""
+                    SELECT count(*) FROM control.data_source_assets
+                    WHERE id=? AND data_source_id=? AND status<>'UNAVAILABLE' AND permission_status='READABLE'
+                    """, Integer.class, assetId, connectionId);
+            if (count == null || count == 0) {
+                config.put("lookupFields", List.of());
+            } else {
+                List<Map<String, Object>> fields = sourceSchema(assetId).stream().map(field -> Map.<String, Object>of(
+                        "name", field.name(), "nullable", field.nullable(), "sensitive", field.sensitive(), "type", field.type())).toList();
+                config.put("lookupFields", fields);
+            }
+            return new PipelineNode(node.id(), node.type(), node.name(), node.position(), config,
+                    node.inputSchema(), node.outputSchema(), node.invalidReasons());
+        }).toList();
+        return new PipelineGraph(nodes, graph.edges());
+    }
+
+    private UUID uuid(Object value) {
+        try { return value == null ? null : UUID.fromString(String.valueOf(value)); }
+        catch (IllegalArgumentException ignored) { return null; }
+    }
+
     private Map<String, Object> compileIr(Pipeline pipeline, PipelineGraph graph, int version) {
         List<Map<String, Object>> sources = graph.nodes().stream().filter(node -> node.type().equals("SOURCE"))
-                .map(node -> Map.<String, Object>of("asset_id", pipeline.sourceAssetId(), "connection_id", pipeline.dataSourceId(), "node_id", node.id())).toList();
-        List<Map<String, Object>> outputs = graph.nodes().stream().filter(node -> node.type().startsWith("ONTOLOGY_"))
+                .map(node -> Map.<String, Object>of(
+                        "asset_id", node.config().getOrDefault("assetId", pipeline.sourceAssetId()),
+                        "connection_id", node.config().getOrDefault("connectionId", pipeline.dataSourceId()),
+                        "node_id", node.id())).toList();
+        List<Map<String, Object>> outputs = graph.nodes().stream().filter(node -> node.type().startsWith("ONTOLOGY_") || node.type().equals("DATASET_OUTPUT"))
                 .map(node -> Map.<String, Object>of("config", node.config(), "node_id", node.id(), "type", node.type())).toList();
         return Map.of("api_version", "ontology.pipeline/v1", "graph", graph, "mode", pipeline.mode(),
                 "outputs", outputs, "pipeline_id", pipeline.id(), "runtime", pipeline.draft().runtime(),
@@ -499,6 +540,8 @@ public class PipelineService {
             addDependency(versionId, "ONTOLOGY_OBJECT", String.valueOf(node.config().get("objectTypeId")), node.name(), node.id(), node.config());
         } else if (node.type().equals("ONTOLOGY_RELATION")) {
             addDependency(versionId, "ONTOLOGY_RELATION", String.valueOf(node.config().get("relationTypeId")), node.name(), node.id(), node.config());
+        } else if (node.type().equals("DATASET_OUTPUT")) {
+            addDependency(versionId, "DATASET", String.valueOf(node.config().get("datasetName")), node.name(), node.id(), node.config());
         }
     }
 
@@ -512,15 +555,15 @@ public class PipelineService {
     private boolean isHighRisk(Pipeline pipeline) {
         if (pipeline.publishedVersion() == null || pipeline.draft() == null) return false;
         PipelineVersion base = version(pipeline.id(), pipeline.publishedVersion());
-        String baseOutput = base.graph().nodes().stream().filter(node -> node.type().startsWith("ONTOLOGY_"))
-                .map(node -> node.type() + node.config().get("idField") + node.config().get("sourceIdField") + node.config().get("targetIdField")).sorted().toList().toString();
-        String draftOutput = pipeline.draft().graph().nodes().stream().filter(node -> node.type().startsWith("ONTOLOGY_"))
-                .map(node -> node.type() + node.config().get("idField") + node.config().get("sourceIdField") + node.config().get("targetIdField")).sorted().toList().toString();
+        String baseOutput = base.graph().nodes().stream().filter(node -> node.type().startsWith("ONTOLOGY_") || node.type().equals("DATASET_OUTPUT"))
+                .map(node -> node.type() + node.config().get("idFields") + node.config().get("idField") + node.config().get("sourceIdField") + node.config().get("targetIdField")).sorted().toList().toString();
+        String draftOutput = pipeline.draft().graph().nodes().stream().filter(node -> node.type().startsWith("ONTOLOGY_") || node.type().equals("DATASET_OUTPUT"))
+                .map(node -> node.type() + node.config().get("idFields") + node.config().get("idField") + node.config().get("sourceIdField") + node.config().get("targetIdField")).sorted().toList().toString();
         return !baseOutput.equals(draftOutput) || !Objects.equals(pipeline.draft().runtime().offsetPolicy(), "EARLIEST");
     }
 
     private String lastConnectedNode(Pipeline pipeline) {
-        return pipeline.draft().graph().nodes().stream().filter(node -> node.type().startsWith("ONTOLOGY_"))
+        return pipeline.draft().graph().nodes().stream().filter(node -> node.type().startsWith("ONTOLOGY_") || node.type().equals("DATASET_OUTPUT"))
                 .map(PipelineNode::id).findFirst().orElseThrow(() -> new ConnectionProblem("PIPELINE_OUTPUT_MISSING", "管道缺少输出节点"));
     }
 
@@ -610,7 +653,7 @@ public class PipelineService {
     }
 
     private String targetSummary(PipelineGraph graph) {
-        return graph.nodes().stream().filter(node -> node.type().startsWith("ONTOLOGY_"))
+        return graph.nodes().stream().filter(node -> node.type().startsWith("ONTOLOGY_") || node.type().equals("DATASET_OUTPUT"))
                 .map(node -> valueOr(node.name(), node.type())).sorted().reduce((left, right) -> left + "、" + right).orElse("未配置输出");
     }
 

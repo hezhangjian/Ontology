@@ -66,6 +66,43 @@ paths:
               schema: {$ref: '#/components/schemas/ConnectionTestResult'}
         '422': {$ref: '#/components/responses/InvalidRequest'}
         '429': {$ref: '#/components/responses/TooManyRequests'}
+  /ontology/v1/data-sources/local-csv:
+    post:
+      operationId: importLocalCsvDataSource
+      summary: Import CSV files selected from a local folder
+      description: The platform stores and discovers the selected CSV files. Callers do not provide storage endpoints, buckets, credentials, or IDs.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [name, files]
+              properties:
+                name:
+                  type: string
+                  maxLength: 160
+                description:
+                  type: string
+                  maxLength: 1000
+                tags:
+                  type: array
+                  items:
+                    type: string
+                    maxLength: 80
+                files:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        '201':
+          description: Imported and discovered data source
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DataSource'}
+        '422': {$ref: '#/components/responses/InvalidRequest'}
   /ontology/v1/data-sources/{dataSourceId}:
     parameters:
       - $ref: '#/components/parameters/DataSourceId'
@@ -98,7 +135,7 @@ paths:
         '409': {$ref: '#/components/responses/Conflict'}
     delete:
       operationId: deleteDataSource
-      summary: Permanently delete an eligible disabled data source (Admin only)
+      summary: Permanently delete a data source and its dependent pipelines and runs
       responses:
         '204': {description: Deleted}
         '409': {$ref: '#/components/responses/Conflict'}
@@ -344,8 +381,8 @@ paths:
         '200': {description: Pipeline, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/Pipeline'}}}}
         '404': {$ref: '#/components/responses/NotFound'}
     delete:
-      operationId: deletePipelineDraft
-      summary: Permanently delete an unpublished pipeline without runs
+      operationId: deletePipeline
+      summary: Permanently delete a pipeline with its versions, runs, schedules and mappings
       responses:
         '204': {description: Deleted}
         '409': {$ref: '#/components/responses/Conflict'}
@@ -636,6 +673,10 @@ paths:
       responses:
         '200': {description: Object type, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyResource'}}}}
         '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      operationId: deleteObjectType
+      summary: Permanently delete an object type and directly dependent control-plane records
+      responses: {'204': {description: Deleted}}
   /ontology/v1/modeling/object-types/{modelingResourceId}/drafts:
     parameters: [{$ref: '#/components/parameters/ModelingResourceId'}]
     post:
@@ -675,6 +716,10 @@ paths:
       operationId: getLinkType
       summary: Get one link type and its endpoint, cardinality and source contract
       responses: {'200': {description: Link type, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyResource'}}}}, '404': {$ref: '#/components/responses/NotFound'}}
+    delete:
+      operationId: deleteLinkType
+      summary: Permanently delete a link type and its versions and mappings
+      responses: {'204': {description: Deleted}}
   /ontology/v1/modeling/interfaces:
     get:
       operationId: listOntologyInterfaces
@@ -691,6 +736,10 @@ paths:
       operationId: getOntologyInterface
       summary: Get one lightweight interface and explicit property mappings
       responses: {'200': {description: Interface, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyResource'}}}}, '404': {$ref: '#/components/responses/NotFound'}}
+    delete:
+      operationId: deleteOntologyInterface
+      summary: Permanently delete an interface and its versions and implementations
+      responses: {'204': {description: Deleted}}
   /ontology/v1/modeling/actions:
     get:
       operationId: listOntologyActions
@@ -707,6 +756,10 @@ paths:
       operationId: getOntologyAction
       summary: Get action parameters, ordered rules, conditions and approval policy
       responses: {'200': {description: Action, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyResource'}}}}, '404': {$ref: '#/components/responses/NotFound'}}
+    delete:
+      operationId: deleteOntologyAction
+      summary: Permanently delete an action and its versions and jobs
+      responses: {'204': {description: Deleted}}
   /ontology/v1/modeling/actions/{modelingResourceId}/preview:
     parameters: [{$ref: '#/components/parameters/ModelingResourceId'}]
     post:
@@ -730,6 +783,10 @@ paths:
       operationId: getOntologyFunction
       summary: Get function types, exact dependencies and restricted DSL
       responses: {'200': {description: Function, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyResource'}}}}, '404': {$ref: '#/components/responses/NotFound'}}
+    delete:
+      operationId: deleteOntologyFunction
+      summary: Permanently delete a function and its versions and mappings
+      responses: {'204': {description: Deleted}}
   /ontology/v1/modeling/functions/{modelingResourceId}/test:
     parameters: [{$ref: '#/components/parameters/ModelingResourceId'}]
     post:
@@ -923,7 +980,7 @@ paths:
       parameters: [{name: If-Match, in: header, required: true, schema: {type: string}}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardCreateRequest'}}}}
       responses: {'200': {description: Dashboard, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardDetail'}}}}, '409': {$ref: '#/components/responses/Conflict'}}
-    delete: {operationId: deleteEmptyDashboardDraft, summary: Permanently delete an unpublished dependency-free empty draft, responses: {'204': {description: Deleted}, '409': {$ref: '#/components/responses/Conflict'}}}
+    delete: {operationId: deleteDashboard, summary: 'Permanently delete a dashboard with its drafts, versions, plans and runs', responses: {'204': {description: Deleted}}}
   /ontology/v1/dashboards/{dashboardId}/copy:
     parameters: [{$ref: '#/components/parameters/DashboardId'}]
     post: {operationId: copyDashboard, summary: Copy definitions and exact dependency references into a private caller-owned draft, responses: {'201': {description: Copy, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardDetail'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}}
@@ -996,6 +1053,61 @@ paths:
   /ontology/v1/dashboard-query-plans/{dashboardPlanId}/drilldown-token:
     parameters: [{$ref: '#/components/parameters/DashboardPlanId'}]
     post: {operationId: createDashboardDrilldownToken, summary: Sign a caller-bound short-lived declared drilldown without exposing suppressed groups, requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: true}}}}, responses: {'200': {description: Drilldown token, content: {application/json: {schema: {type: object, additionalProperties: true}}}}, '403': {$ref: '#/components/responses/Forbidden'}}}
+  /ontology/v1/datasets:
+    get:
+      operationId: listDatasets
+      summary: List reusable Dataset products
+      parameters: [{name: search, in: query, schema: {type: string, maxLength: 240}}]
+      responses:
+        '200': {description: Dataset page, content: {application/json: {schema: {$ref: '#/components/schemas/DatasetPage'}}}}
+  /ontology/v1/datasets/{datasetId}:
+    parameters: [{$ref: '#/components/parameters/DatasetId'}]
+    get:
+      operationId: getDataset
+      summary: Get Dataset metadata, schema and source Pipeline
+      responses:
+        '200': {description: Dataset, content: {application/json: {schema: {$ref: '#/components/schemas/Dataset'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      operationId: deleteDataset
+      summary: Permanently delete Dataset storage and metadata when no dashboard depends on it
+      responses:
+        '204': {description: Deleted}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /ontology/v1/datasets/{datasetId}/preview:
+    parameters: [{$ref: '#/components/parameters/DatasetId'}]
+    get:
+      operationId: previewDataset
+      summary: Preview Dataset rows through the platform API
+      parameters: [{name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}, {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}]
+      responses:
+        '200': {description: Preview rows, content: {application/json: {schema: {$ref: '#/components/schemas/DatasetPreview'}}}}
+  /ontology/v1/datasets/{datasetId}/query:
+    parameters: [{$ref: '#/components/parameters/DatasetId'}]
+    post:
+      operationId: queryDataset
+      summary: Execute generic dimensions, filters and aggregate metrics
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DatasetQueryRequest'}}}}
+      responses:
+        '200': {description: Aggregated rows, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '422': {$ref: '#/components/responses/InvalidRequest'}
+  /ontology/v1/datasets/{datasetId}/mapping-preview:
+    parameters: [{$ref: '#/components/parameters/DatasetId'}]
+    get:
+      operationId: previewDatasetObjectMapping
+      summary: Preview identity completeness, deduplication and conflicts before object creation
+      parameters: [{name: identityField, in: query, required: true, schema: {type: string}}, {name: titleField, in: query, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Mapping preview, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+  /ontology/v1/pipelines/{pipelineId}/materialize-dataset:
+    parameters: [{$ref: '#/components/parameters/PipelineId'}]
+    post:
+      operationId: materializePipelineDataset
+      summary: Atomically materialize the DATASET_OUTPUT node as a reusable Dataset
+      requestBody: {content: {application/json: {schema: {type: object, properties: {name: {type: string, maxLength: 240}, description: {type: string, maxLength: 4000}}}}}}
+      responses:
+        '201': {description: Generated Dataset, content: {application/json: {schema: {$ref: '#/components/schemas/Dataset'}}}}
+        '422': {$ref: '#/components/responses/InvalidRequest'}
 components:
   securitySchemes:
     bearerAuth:
@@ -1010,6 +1122,7 @@ components:
     DashboardId: {name: dashboardId, in: path, required: true, schema: {type: string, format: uuid}}
     DashboardPlanId: {name: dashboardPlanId, in: path, required: true, schema: {type: string, format: uuid}}
     DashboardVersionId: {name: dashboardVersionId, in: path, required: true, schema: {type: string, format: uuid}}
+    DatasetId: {name: datasetId, in: path, required: true, schema: {type: string, format: uuid}}
     ExplorationId: {name: explorationId, in: path, required: true, schema: {type: string, format: uuid}}
     ExportJobId: {name: exportJobId, in: path, required: true, schema: {type: string, format: uuid}}
     ListId: {name: listId, in: path, required: true, schema: {type: string, format: uuid}}
@@ -1045,6 +1158,84 @@ components:
       description: Required object search, graph or export storage is unavailable
       content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
   schemas:
+    DatasetField:
+      type: object
+      required: [name, type, nullable, samples]
+      properties:
+        name: {type: string}
+        type: {type: string, enum: [TEXT, INTEGER, DECIMAL, BOOLEAN, DATE, DATETIME]}
+        nullable: {type: boolean}
+        samples: {type: array, maxItems: 3, items: {}}
+    Dataset:
+      type: object
+      required: [id, name, description, pipelineId, pipelineName, fields, rowCount, status, ownerName, createdAt, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        pipelineId: {type: string, format: uuid}
+        pipelineName: {type: string}
+        fields: {type: array, items: {$ref: '#/components/schemas/DatasetField'}}
+        rowCount: {type: integer, format: int64}
+        status: {type: string, enum: [BUILDING, READY, FAILED]}
+        ownerName: {type: string}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    DatasetPage:
+      type: object
+      required: [items, total]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Dataset'}}
+        total: {type: integer, format: int64}
+    DatasetPreview:
+      type: object
+      required: [columns, rows, total]
+      properties:
+        columns: {type: array, items: {type: string}}
+        rows: {type: array, items: {type: object, additionalProperties: true}}
+        total: {type: integer, format: int64}
+    DatasetQueryRequest:
+      type: object
+      required: [dimensions, metrics]
+      properties:
+        dimensions: {type: array, maxItems: 3, items: {type: string}}
+        dimensionSpecs:
+          type: array
+          maxItems: 3
+          description: Optional self-service field roles with server-side time bucketing; takes precedence over dimensions.
+          items:
+            type: object
+            required: [field, label]
+            properties:
+              field: {type: string}
+              label: {type: string}
+              timeGrain: {type: string, enum: [NONE, DAY, WEEK, MONTH, QUARTER, YEAR]}
+        metrics:
+          type: array
+          maxItems: 8
+          items:
+            type: object
+            required: [operation, label]
+            properties:
+              operation: {type: string, enum: [SUM, AVG, MIN, MAX, COUNT, DISTINCT_COUNT, SUM_PER_DISTINCT]}
+              field: {type: string}
+              distinctField: {type: string}
+              label: {type: string}
+        filters:
+          type: array
+          items:
+            type: object
+            required: [field, operator, values]
+            properties:
+              field: {type: string}
+              operator: {type: string, enum: [EQUALS, FIELD_EQUALS, IN, NOT_IN]}
+              values: {type: array, items: {type: string}}
+              comparisonField:
+                type: string
+                description: Right-hand field used when operator is FIELD_EQUALS.
+        orderBy: {type: string}
+        orderDirection: {type: string, enum: [ASC, DESC]}
+        limit: {type: integer, minimum: 1, maximum: 2000}
     DashboardCreateRequest:
       type: object
       required: [name, visibility, refreshPolicy]
@@ -1083,15 +1274,16 @@ components:
         order: {type: integer, minimum: 0, maximum: 9}
     DashboardDataSource:
       type: object
-      required: [id, name, kind, objectTypeId, query]
+      required: [id, name, kind, query]
       properties:
         id: {type: string, format: uuid}
         name: {type: string, maxLength: 160}
-        kind: {type: string, enum: [OBJECT_SET, EXPLORATION, OBJECT_LIST, FUNCTION]}
+        kind: {type: string, enum: [DATASET, OBJECT_SET, EXPLORATION, OBJECT_LIST, FUNCTION]}
         objectTypeId: {type: string, format: uuid}
+        datasetId: {type: string, format: uuid}
         referenceId: {type: string, format: uuid}
         referenceVersion: {type: integer, minimum: 1}
-        query: {type: object, additionalProperties: true, description: Restricted Object Set AST; never native storage DSL.}
+        query: {type: object, additionalProperties: true, description: Restricted platform query configuration; never native storage DSL.}
         ontologyRevision: {type: integer, format: int64}
     DashboardWidget:
       type: object
@@ -2046,9 +2238,12 @@ components:
         indexUpdatedAt: {type: string, format: date-time}
     ExplorerHome:
       type: object
-      required: [objectTypes, recentObjects, explorations, lists, searchStatus, indexUpdatedAt]
+      required: [objectTypes, objectCounts, recentObjects, explorations, lists, searchStatus, indexUpdatedAt]
       properties:
         objectTypes: {type: array, items: {$ref: '#/components/schemas/ExplorerObjectType'}}
+        objectCounts:
+          type: object
+          additionalProperties: {type: integer, format: int64}
         recentObjects: {type: array, items: {$ref: '#/components/schemas/ObjectSummary'}}
         explorations: {type: array, items: {$ref: '#/components/schemas/SavedExploration'}}
         lists: {type: array, items: {$ref: '#/components/schemas/ObjectList'}}

@@ -18,11 +18,13 @@ import org.springframework.stereotype.Component;
 
 @Component
 final class DashboardPolicy {
-    private static final Set<String> SOURCE_KINDS = Set.of("OBJECT_SET", "EXPLORATION", "OBJECT_LIST", "FUNCTION");
+    private static final Set<String> SOURCE_KINDS = Set.of("DATASET", "OBJECT_SET", "EXPLORATION", "OBJECT_LIST", "FUNCTION");
     private static final Set<String> WIDGET_TYPES = Set.of(
             "METRIC", "LINE", "AREA", "BAR", "STACKED_BAR", "PIE", "DONUT", "SCATTER",
             "OBJECT_TABLE", "PIVOT", "MARKDOWN", "FILTER", "SECTION");
-    private static final Set<String> AGGREGATIONS = Set.of("count", "sum", "avg", "min", "max", "approx_distinct");
+    private static final Set<String> AGGREGATIONS = Set.of(
+            "count", "sum", "avg", "min", "max", "approx_distinct", "sum_per_distinct");
+    private static final Set<String> TIME_GRAINS = Set.of("NONE", "DAY", "WEEK", "MONTH", "QUARTER", "YEAR");
     private static final Set<String> EXPRESSION_FUNCTIONS = Set.of("round", "coalesce", "percent");
     private final ObjectMapper objectMapper;
 
@@ -57,8 +59,9 @@ final class DashboardPolicy {
 
         for (DashboardDataSource source : sources) {
             if (!SOURCE_KINDS.contains(source.kind())) issues.add(error("SOURCE_KIND", "dataSources." + source.id(), "数据源类型不受支持"));
-            if (source.objectTypeId() == null) issues.add(error("OBJECT_TYPE", "dataSources." + source.id(), "数据源必须固定对象类型"));
-            if (!"OBJECT_SET".equals(source.kind()) && (source.referenceId() == null || source.referenceVersion() == null)) {
+            if ("DATASET".equals(source.kind()) && source.datasetId() == null) issues.add(error("DATASET", "dataSources." + source.id(), "Dataset 数据源必须固定 Dataset ID"));
+            if (!"DATASET".equals(source.kind()) && source.objectTypeId() == null) issues.add(error("OBJECT_TYPE", "dataSources." + source.id(), "本体数据源必须固定对象类型"));
+            if (!Set.of("DATASET", "OBJECT_SET").contains(source.kind()) && (source.referenceId() == null || source.referenceVersion() == null)) {
                 issues.add(error("EXACT_VERSION", "dataSources." + source.id(), "引用数据源必须固定已发布资源版本"));
             }
             if ("OBJECT_SET".equals(source.kind()) && (source.query() == null || source.query().isEmpty())) {
@@ -167,6 +170,60 @@ final class DashboardPolicy {
         if (aggregation != null && !AGGREGATIONS.contains(String.valueOf(aggregation))) {
             issues.add(error("AGGREGATION", "widgets." + widget.id(), "聚合函数不受支持"));
         }
+        Object measures = widget.config().get("measures");
+        if (measures instanceof List<?> list) {
+            if (list.isEmpty() || list.size() > 4) {
+                issues.add(error("MEASURE_LIMIT", "widgets." + widget.id(), "图表必须包含 1—4 个指标"));
+            }
+            Set<String> measureIds = new HashSet<>();
+            for (Object item : list) {
+                if (!(item instanceof Map<?, ?> measure)) {
+                    issues.add(error("MEASURE", "widgets." + widget.id(), "指标配置格式无效"));
+                    continue;
+                }
+                String operation = String.valueOf(measure.containsKey("aggregation") ? measure.get("aggregation") : "count");
+                String measureId = String.valueOf(measure.get("id"));
+                if (blank(measure.get("id")) || !measureIds.add(measureId)) {
+                    issues.add(error("MEASURE_ID", "widgets." + widget.id(), "指标必须具有唯一 ID"));
+                }
+                if (!AGGREGATIONS.contains(operation)) {
+                    issues.add(error("AGGREGATION", "widgets." + widget.id(), "指标聚合函数不受支持"));
+                }
+                if (!"count".equals(operation) && blank(measure.get("field"))) {
+                    issues.add(error("MEASURE_FIELD", "widgets." + widget.id(), "非计数指标必须选择字段"));
+                }
+                if ("sum_per_distinct".equals(operation) && blank(measure.get("divisorField"))) {
+                    issues.add(error("DIVISOR_FIELD", "widgets." + widget.id(), "人均指标必须选择分母去重字段"));
+                }
+            }
+        }
+        for (String key : List.of("xTimeGrain", "seriesTimeGrain", "groupTimeGrain")) {
+            Object grain = widget.config().get(key);
+            if (grain != null && !TIME_GRAINS.contains(String.valueOf(grain))) {
+                issues.add(error("TIME_GRAIN", "widgets." + widget.id(), "时间粒度不受支持"));
+            }
+        }
+        Object filters = widget.config().get("filters");
+        if (filters instanceof List<?> list) for (Object item : list) {
+            if (!(item instanceof Map<?, ?> filter)) {
+                issues.add(error("WIDGET_FILTER", "widgets." + widget.id(), "图表筛选必须选择字段并填写值"));
+                continue;
+            }
+            String operator = String.valueOf(filter.get("operator"));
+            boolean fieldComparison = "FIELD_EQUALS".equals(operator);
+            boolean hasValues = filter.get("values") instanceof List<?> values && !values.isEmpty();
+            if (blank(filter.get("field")) || !Set.of("EQUALS", "FIELD_EQUALS", "IN", "NOT_IN").contains(operator)
+                    || fieldComparison && blank(filter.get("comparisonField")) || !fieldComparison && !hasValues) {
+                issues.add(error("WIDGET_FILTER", "widgets." + widget.id(), fieldComparison
+                        ? "字段比较筛选必须选择左右两个字段" : "图表筛选必须选择字段并填写值"));
+            }
+        }
+        if (Set.of("LINE", "AREA", "BAR", "STACKED_BAR", "PIE", "DONUT", "PIVOT").contains(widget.type())
+                && blank(widget.config().get("xField"))
+                && !(widget.config().get("dimensionPropertyIds") instanceof List<?> dimensions && !dimensions.isEmpty())
+                && widget.config().get("dimensionPropertyId") == null) {
+            issues.add(error("DIMENSION", "widgets." + widget.id(), "图表必须选择横轴字段"));
+        }
         Object expression = widget.config().get("expression");
         if (expression != null) {
             String value = String.valueOf(expression);
@@ -176,6 +233,10 @@ final class DashboardPolicy {
                 issues.add(error("CALCULATED_METRIC", "widgets." + widget.id(), "计算指标包含非法表达式、函数或静态除零"));
             }
         }
+    }
+
+    private boolean blank(Object value) {
+        return value == null || String.valueOf(value).isBlank();
     }
 
     private boolean containsUnknownFunction(String expression) {

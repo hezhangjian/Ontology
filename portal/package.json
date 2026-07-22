@@ -17,10 +17,10 @@
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
+    "@ant-design/charts": "^2.6.7",
     "@ant-design/icons": "6.1.0",
     "@xyflow/react": "^12.11.2",
     "antd": "5.27.6",
-    "oidc-client-ts": "3.4.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "zustand": "^5.0.14"

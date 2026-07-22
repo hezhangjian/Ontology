@@ -72,7 +72,7 @@ interface Props {
   navigate: (path: string) => void;
 }
 
-export default function DataConnectionListPage({ accessToken, isAdmin, navigate }: Props) {
+export default function DataConnectionListPage({ accessToken, navigate }: Props) {
   const api = useMemo(() => dataConnectionsApi(accessToken), [accessToken]);
   const initial = useMemo(() => new URLSearchParams(window.location.search), []);
   const [search, setSearch] = useState(initial.get('search') ?? '');
@@ -157,7 +157,7 @@ export default function DataConnectionListPage({ accessToken, isAdmin, navigate 
   function confirmDelete(source: DataSource) {
     Modal.confirm({
       title: `永久删除“${source.name}”？`,
-      content: '仅已停用且没有管道引用和活动运行的连接可删除；历史审计与快照仍会保留。',
+      content: `将同时删除关联的 ${source.pipelineReferenceCount} 个管道及其运行记录。此操作不可撤销。`,
       okButtonProps: { danger: true },
       okText: '永久删除',
       onOk: () => deleteConnection(source),
@@ -204,7 +204,7 @@ export default function DataConnectionListPage({ accessToken, isAdmin, navigate 
               { key: 'edit', label: '编辑配置', onClick: () => navigate(`/data/connections/${source.id}/edit`) },
               { type: 'divider' },
               { key: 'disable', label: source.status === 'DISABLED' ? '恢复连接' : '停用连接', onClick: () => confirmToggle(source) },
-              ...(isAdmin ? [{ key: 'delete', danger: true, label: '永久删除', disabled: source.status !== 'DISABLED' || source.pipelineReferenceCount > 0 || source.activeRunCount > 0, onClick: () => confirmDelete(source) }] : []),
+              { key: 'delete', danger: true, label: '永久删除', onClick: () => confirmDelete(source) },
             ],
           }}
           trigger={['click']}

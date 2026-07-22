@@ -18,7 +18,7 @@ compose-down:
 	docker/scripts/compose.sh --profile '*' down
 
 compose-up:
-	docker/scripts/compose.sh --profile core --profile compute --profile gateway --profile apps --profile maintenance --profile auth --profile observability up -d --wait
+	docker/scripts/compose.sh --profile core --profile compute --profile gateway --profile apps --profile maintenance --profile observability up -d --wait
 
 e2e-platform-foundation:
 	docker/scripts/e2e-verify.sh

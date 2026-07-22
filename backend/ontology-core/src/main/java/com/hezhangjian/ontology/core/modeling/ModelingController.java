@@ -6,11 +6,12 @@ import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 
+import com.hezhangjian.ontology.core.security.ActorIdentity;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -47,6 +48,13 @@ public class ModelingController {
     @GetMapping("/object-types/{id}")
     ResourceView objectType(@PathVariable UUID id) { return requireKind(id, ResourceKind.OBJECT_TYPE); }
 
+    @DeleteMapping("/object-types/{id}")
+    ResponseEntity<Void> deleteObjectType(@PathVariable UUID id, Authentication authentication) {
+        requireKind(id, ResourceKind.OBJECT_TYPE);
+        service.delete(id, actor(authentication));
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/object-types/{id}/drafts")
     @PreAuthorize("hasAnyRole('Builder','Admin')")
     ResponseEntity<ResourceView> createObjectDraft(@PathVariable UUID id, @RequestHeader("If-Match") String ifMatch,
@@ -76,6 +84,13 @@ public class ModelingController {
     @GetMapping("/link-types/{id}")
     ResourceView linkType(@PathVariable UUID id) { return requireKind(id, ResourceKind.LINK_TYPE); }
 
+    @DeleteMapping("/link-types/{id}")
+    ResponseEntity<Void> deleteLinkType(@PathVariable UUID id, Authentication authentication) {
+        requireKind(id, ResourceKind.LINK_TYPE);
+        service.delete(id, actor(authentication));
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/interfaces")
     List<ResourceView> interfaces(@RequestParam(required = false) String search) { return service.list(ResourceKind.INTERFACE, search); }
 
@@ -88,6 +103,13 @@ public class ModelingController {
     @GetMapping("/interfaces/{id}")
     ResourceView interfaceType(@PathVariable UUID id) { return requireKind(id, ResourceKind.INTERFACE); }
 
+    @DeleteMapping("/interfaces/{id}")
+    ResponseEntity<Void> deleteInterface(@PathVariable UUID id, Authentication authentication) {
+        requireKind(id, ResourceKind.INTERFACE);
+        service.delete(id, actor(authentication));
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/actions")
     List<ResourceView> actions(@RequestParam(required = false) String search) { return service.list(ResourceKind.ACTION, search); }
 
@@ -99,6 +121,13 @@ public class ModelingController {
 
     @GetMapping("/actions/{id}")
     ResourceView action(@PathVariable UUID id) { return requireKind(id, ResourceKind.ACTION); }
+
+    @DeleteMapping("/actions/{id}")
+    ResponseEntity<Void> deleteAction(@PathVariable UUID id, Authentication authentication) {
+        requireKind(id, ResourceKind.ACTION);
+        service.delete(id, actor(authentication));
+        return ResponseEntity.noContent().build();
+    }
 
     @PostMapping("/actions/{id}/preview")
     @PreAuthorize("hasAnyRole('Builder','Admin')")
@@ -118,6 +147,13 @@ public class ModelingController {
 
     @GetMapping("/functions/{id}")
     ResourceView function(@PathVariable UUID id) { return requireKind(id, ResourceKind.FUNCTION); }
+
+    @DeleteMapping("/functions/{id}")
+    ResponseEntity<Void> deleteFunction(@PathVariable UUID id, Authentication authentication) {
+        requireKind(id, ResourceKind.FUNCTION);
+        service.delete(id, actor(authentication));
+        return ResponseEntity.noContent().build();
+    }
 
     @PostMapping("/functions/{id}/test")
     @PreAuthorize("hasAnyRole('Builder','Admin')")
@@ -194,14 +230,8 @@ public class ModelingController {
     }
 
     private Actor actor(Authentication authentication) {
-        Jwt jwt = (Jwt) authentication.getPrincipal();
-        String id = first(jwt.getSubject(), jwt.getClaimAsString("preferred_username"), jwt.getClaimAsString("client_id"), authentication.getName());
-        String given = jwt.getClaimAsString("given_name");
-        String family = jwt.getClaimAsString("family_name");
-        String name = (given == null ? "" : given) + (family == null ? "" : family);
-        if (name.isBlank()) name = first(jwt.getClaimAsString("name"), jwt.getClaimAsString("preferred_username"), id);
-        boolean admin = authentication.getAuthorities().stream().anyMatch(authority -> authority.getAuthority().equals("ROLE_Admin"));
-        return new Actor(id, name, admin);
+        ActorIdentity identity = ActorIdentity.from(authentication);
+        return new Actor(identity.id(), identity.name(), identity.admin());
     }
 
     private String first(String... values) {

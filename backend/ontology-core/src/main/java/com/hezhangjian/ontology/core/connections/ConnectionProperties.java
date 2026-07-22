@@ -1,5 +1,6 @@
 package com.hezhangjian.ontology.core.connections;
 
+import java.net.URI;
 import java.time.Duration;
 import java.util.Set;
 
@@ -11,5 +12,12 @@ public record ConnectionProperties(
         int keyVersion,
         Duration testTokenTtl,
         Set<String> allowedPrivateHosts,
-        boolean productionMode) {
+        boolean productionMode,
+        URI localCsvMinioUrl,
+        String localCsvBucket,
+        String localCsvAccessKey,
+        String localCsvSecretKey,
+        int localCsvMaxFiles,
+        long localCsvMaxFileBytes,
+        long localCsvMaxTotalBytes) {
 }

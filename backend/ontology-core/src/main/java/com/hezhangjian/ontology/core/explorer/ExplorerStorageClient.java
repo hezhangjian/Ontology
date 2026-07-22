@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.hezhangjian.ontology.core.explorer.ExplorerModels.Actor;
+import com.hezhangjian.ontology.core.explorer.ExplorerModels.AggregationBucket;
 import com.hezhangjian.ontology.core.explorer.ExplorerModels.FacetBucket;
 import com.hezhangjian.ontology.core.explorer.ExplorerModels.PropertyDefinition;
 import com.hezhangjian.ontology.core.explorer.ExplorerPolicy.ValidatedQuery;
@@ -55,7 +56,7 @@ final class ExplorerStorageClient {
         body.put("track_total_hits", 10000);
         ObjectNode bool = objectMapper.createObjectNode();
         ArrayNode filters = objectMapper.createArrayNode();
-        filters.add(term("object_type", query.type().apiName()));
+        filters.add(term("object_type", query.type().physicalKey()));
         filters.add(visibility(actor));
         JsonNode where = compileWhere(query.request().where(), query.properties());
         if (where != null) {
@@ -120,13 +121,22 @@ final class ExplorerStorageClient {
         return List.copyOf(result);
     }
 
+    long objectCount(String objectType, Actor actor) {
+        ObjectNode bool = objectMapper.createObjectNode();
+        bool.set("filter", objectMapper.createArrayNode().add(term("object_type", objectType)).add(visibility(actor)));
+        ObjectNode body = objectMapper.createObjectNode();
+        body.set("query", objectMapper.createObjectNode().set("bool", bool));
+        return json("POST", searchBase.resolve("platform-ontology-objects/_count"), body,
+                "搜索服务暂时不可用，请稍后重试").path("count").asLong();
+    }
+
     Map<UUID, List<FacetBucket>> facets(ValidatedQuery query, List<UUID> propertyIds, Actor actor) {
         if (propertyIds == null || propertyIds.size() > 10) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "单次最多查询 10 个 Facet");
         }
         ObjectNode body = objectMapper.createObjectNode();
         body.put("size", 0);
-        ArrayNode filters = objectMapper.createArrayNode().add(term("object_type", query.type().apiName())).add(visibility(actor));
+        ArrayNode filters = objectMapper.createArrayNode().add(term("object_type", query.type().physicalKey())).add(visibility(actor));
         JsonNode where = compileWhere(query.request().where(), query.properties());
         if (where != null) filters.add(where);
         body.set("query", objectMapper.createObjectNode().set("bool", objectMapper.createObjectNode().set("filter", filters)));
@@ -149,6 +159,87 @@ final class ExplorerStorageClient {
             result.put(id, List.copyOf(buckets));
         }
         return result;
+    }
+
+    List<AggregationBucket> aggregate(ValidatedQuery query, UUID dimensionPropertyId,
+                                      UUID measurePropertyId, String aggregation, Actor actor) {
+        return aggregate(query, List.of(dimensionPropertyId), measurePropertyId, null, aggregation, actor);
+    }
+
+    List<AggregationBucket> aggregate(ValidatedQuery query, List<UUID> dimensionPropertyIds,
+                                      UUID measurePropertyId, UUID divisorPropertyId,
+                                      String aggregation, Actor actor) {
+        if (dimensionPropertyIds == null || dimensionPropertyIds.isEmpty() || dimensionPropertyIds.size() > 3) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "图表必须选择 1—3 个分组字段");
+        }
+        List<PropertyDefinition> dimensions = dimensionPropertyIds.stream().map(id -> {
+            PropertyDefinition dimension = query.properties().get(id);
+            if (dimension == null || !dimension.filterable() || dimension.sensitive()) {
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "分组字段不存在、不可筛选或无权访问");
+            }
+            return dimension;
+        }).toList();
+        PropertyDefinition measure = measurePropertyId == null ? null : query.properties().get(measurePropertyId);
+        if (!List.of("count", "approx_distinct").contains(aggregation) && (measure == null || measure.sensitive()
+                || !List.of("INTEGER", "LONG", "DECIMAL").contains(measure.valueType()))) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "度量字段必须是可见数值属性");
+        }
+        PropertyDefinition divisor = divisorPropertyId == null ? null : query.properties().get(divisorPropertyId);
+        if ("sum_per_distinct".equals(aggregation) && (divisor == null || divisor.sensitive())) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "去重计数字段不存在或无权访问");
+        }
+        ObjectNode body = objectMapper.createObjectNode();
+        body.put("size", 0);
+        ArrayNode filters = objectMapper.createArrayNode().add(term("object_type", query.type().physicalKey())).add(visibility(actor));
+        JsonNode where = compileWhere(query.request().where(), query.properties());
+        if (where != null) filters.add(where);
+        body.set("query", objectMapper.createObjectNode().set("bool", objectMapper.createObjectNode().set("filter", filters)));
+        ObjectNode grouped = body.putObject("aggs").putObject("grouped");
+        ArrayNode sources = grouped.putObject("composite").put("size", 1000).putArray("sources");
+        for (int index = 0; index < dimensions.size(); index++) {
+            sources.add(objectMapper.createObjectNode().set(
+                    "dimension_" + index,
+                    objectMapper.createObjectNode().set(
+                            "terms",
+                            objectMapper.createObjectNode().put("field", field(dimensions.get(index))))));
+        }
+        if (!"count".equals(aggregation)) {
+            ObjectNode metrics = grouped.putObject("aggs");
+            if ("sum_per_distinct".equals(aggregation)) {
+                metrics.putObject("numerator").set(
+                        "sum", objectMapper.createObjectNode().put("field", field(measure)));
+                metrics.putObject("divisor").set(
+                        "cardinality", objectMapper.createObjectNode().put("field", field(divisor)));
+            } else if ("approx_distinct".equals(aggregation)) {
+                metrics.putObject("metric").set(
+                        "cardinality", objectMapper.createObjectNode().put("field", field(measure)));
+            } else {
+                metrics.putObject("metric").set(
+                        aggregation, objectMapper.createObjectNode().put("field", field(measure)));
+            }
+        }
+        JsonNode response = json("POST", searchBase.resolve("platform-ontology-objects/_search"), body,
+                "搜索服务暂时不可用，分组度量未执行");
+        List<AggregationBucket> buckets = new ArrayList<>();
+        for (JsonNode bucket : response.path("aggregations").path("grouped").path("buckets")) {
+            double metric;
+            if ("count".equals(aggregation)) {
+                metric = bucket.path("doc_count").asDouble();
+            } else if ("sum_per_distinct".equals(aggregation)) {
+                double divisorValue = bucket.path("divisor").path("value").asDouble();
+                metric = divisorValue == 0 ? 0 : bucket.path("numerator").path("value").asDouble() / divisorValue;
+            } else {
+                metric = bucket.path("metric").path("value").asDouble();
+            }
+            Map<String, Object> values = new LinkedHashMap<>();
+            for (int index = 0; index < dimensions.size(); index++) {
+                values.put(
+                        dimensions.get(index).displayName(),
+                        jsonValue(bucket.path("key").path("dimension_" + index)));
+            }
+            buckets.add(new AggregationBucket(values, bucket.path("doc_count").asLong(), metric));
+        }
+        return List.copyOf(buckets);
     }
 
     GraphObject getObject(String objectType, String objectId) {
@@ -287,11 +378,11 @@ final class ExplorerStorageClient {
                 yield objectMapper.createObjectNode().set("range", objectMapper.createObjectNode().set(field, bounds));
             }
             case "starts_with" -> objectMapper.createObjectNode().set("prefix", objectMapper.createObjectNode().put(field, String.valueOf(value)));
-            case "contains_all_words" -> match("and", property.apiName(), value);
-            case "contains_any_word" -> match("or", property.apiName(), value);
+            case "contains_all_words" -> match("and", property.physicalKey(), value);
+            case "contains_any_word" -> match("or", property.physicalKey(), value);
             case "is_empty" -> objectMapper.createObjectNode().set("bool", objectMapper.createObjectNode().set("must_not",
-                    objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("exists", objectMapper.createObjectNode().put("field", "properties." + property.apiName())))));
-            case "is_not_empty" -> objectMapper.createObjectNode().set("exists", objectMapper.createObjectNode().put("field", "properties." + property.apiName()));
+                    objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("exists", objectMapper.createObjectNode().put("field", "properties." + property.physicalKey())))));
+            case "is_not_empty" -> objectMapper.createObjectNode().set("exists", objectMapper.createObjectNode().put("field", "properties." + property.physicalKey()));
             case "recent_days" -> objectMapper.createObjectNode().set("range", objectMapper.createObjectNode().set(field,
                     objectMapper.createObjectNode().put("gte", "now-" + value + "d/d")));
             case "contains_any", "contains_all" -> objectMapper.createObjectNode().set("terms", objectMapper.createObjectNode().set(field, objectMapper.valueToTree(value)));
@@ -320,7 +411,7 @@ final class ExplorerStorageClient {
     }
 
     private String field(PropertyDefinition property) {
-        String base = "properties." + property.apiName();
+        String base = "properties." + property.physicalKey();
         return List.of("STRING", "ENUM", "STRING_ARRAY").contains(property.valueType()) ? base + ".keyword" : base;
     }
 

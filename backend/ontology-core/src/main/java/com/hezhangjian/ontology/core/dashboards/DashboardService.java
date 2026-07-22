@@ -5,12 +5,15 @@ import static com.hezhangjian.ontology.core.dashboards.DashboardModels.*;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hezhangjian.ontology.core.explorer.ExplorerModels;
-import com.hezhangjian.ontology.core.explorer.ExplorerModels.FacetBucket;
+import com.hezhangjian.ontology.core.explorer.ExplorerModels.AggregationBucket;
 import com.hezhangjian.ontology.core.explorer.ExplorerModels.FacetRequest;
 import com.hezhangjian.ontology.core.explorer.ExplorerModels.FacetResult;
 import com.hezhangjian.ontology.core.explorer.ExplorerModels.ObjectSetPage;
 import com.hezhangjian.ontology.core.explorer.ExplorerModels.ObjectSetRequest;
 import com.hezhangjian.ontology.core.explorer.ExplorerService;
+import com.hezhangjian.ontology.core.deletion.ResourceDeletionService;
+import com.hezhangjian.ontology.core.datasets.DatasetModels;
+import com.hezhangjian.ontology.core.datasets.DatasetService;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -42,17 +45,22 @@ public class DashboardService {
     private final ExplorerService explorer;
     private final DashboardTokenCodec tokens;
     private final DashboardProperties properties;
+    private final ResourceDeletionService deletion;
+    private final DatasetService datasets;
     private final Map<String, CacheEntry> cache = new ConcurrentHashMap<>();
 
     public DashboardService(JdbcClient jdbc, ObjectMapper objectMapper, DashboardPolicy policy,
                             ExplorerService explorer, DashboardTokenCodec tokens,
-                            DashboardProperties properties) {
+                            DashboardProperties properties, ResourceDeletionService deletion,
+                            DatasetService datasets) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
         this.policy = policy;
         this.explorer = explorer;
         this.tokens = tokens;
         this.properties = properties;
+        this.deletion = deletion;
+        this.datasets = datasets;
     }
 
     public List<DashboardSummary> list(String keyword, String lifecycle, boolean favoritesOnly, Actor actor) {
@@ -174,18 +182,13 @@ public class DashboardService {
     }
 
     @Transactional
-    public void deleteEmptyDraft(UUID id, Actor actor) {
-        requireAccess(id, actor, "OWNER");
-        DashboardSummary current = summary(id, actor);
-        DashboardDraftView draft = activeDraft(id);
-        if (current.currentVersion() != null || draft == null || draft.definition().widgets().size() > 0
-                || draft.definition().dataSources().size() > 0) {
-            throw conflict("只有从未发布且没有依赖的空草稿可以永久删除");
-        }
-        audit(actor, "DASHBOARD_DELETED", id, "删除空看板草稿", Map.of());
-        jdbc.sql("UPDATE control.dashboards SET active_draft_id=NULL WHERE id=:id").param("id", id).update();
-        jdbc.sql("DELETE FROM control.dashboard_drafts WHERE dashboard_id=:id").param("id", id).update();
-        jdbc.sql("DELETE FROM control.dashboards WHERE id=:id").param("id", id).update();
+    public void delete(UUID id, Actor actor) {
+        int count = jdbc.sql("SELECT count(*) FROM control.dashboards WHERE id=:id")
+                .param("id", id).query(Integer.class).single();
+        if (count == 0) throw notFound("看板不存在");
+        audit(actor, "DASHBOARD_DELETED", id, "永久删除看板及关联记录", Map.of());
+        cache.entrySet().removeIf(entry -> entry.getKey().startsWith(id + ":"));
+        deletion.deleteDashboard(id);
     }
 
     @Transactional
@@ -557,30 +560,45 @@ public class DashboardService {
                     false, queriedAt, queriedAt, correlationId.toString(), null);
         }
         DashboardDataSource source = dataSource(definition, widget.dataSourceId());
+        if ("DATASET".equals(source.kind())) return executeDatasetWidget(source, widget, correlationId, queriedAt);
         ObjectSetRequest query = dataSourceQuery(source, filters, definition, actor);
         ObjectSetPage page = explorer.query(query, explorerActor(actor));
         Object data;
         boolean suppressed = false;
         if ("METRIC".equals(widget.type())) {
-            String aggregation = String.valueOf(widget.config().getOrDefault("aggregation", "count"));
-            data = metric(aggregation, widget.config().get("propertyId"), page);
+            Map<String, Object> measure = firstMeasure(widget);
+            String aggregation = String.valueOf(measure.getOrDefault("aggregation", "count"));
+            Object field = measure.containsKey("field") ? measure.get("field") : widget.config().get("propertyId");
+            data = metric(aggregation, field, page);
         } else if (Set.of("LINE", "AREA", "BAR", "STACKED_BAR", "PIE", "DONUT", "PIVOT").contains(widget.type())) {
-            UUID propertyId = uuid(widget.config().get("dimensionPropertyId"), "图表必须指定稳定维度属性 ID");
-            List<FacetResult> facets = explorer.facets(new FacetRequest(query, List.of(propertyId)), explorerActor(actor));
+            List<UUID> propertyIds = uuids(
+                    objectDimensionFields(widget), widget.config().get("dimensionPropertyId"),
+                    "图表必须选择分组字段");
+            Map<String, Object> measure = firstMeasure(widget);
+            String aggregation = String.valueOf(measure.getOrDefault("aggregation", "count"));
+            Object measureField = measure.containsKey("field") ? measure.get("field") : widget.config().get("measurePropertyId");
+            Object divisorField = measure.containsKey("divisorField") ? measure.get("divisorField") : widget.config().get("divisorPropertyId");
+            UUID measurePropertyId = "count".equals(aggregation) ? null
+                    : uuid(measureField, "非计数组件必须指定稳定度量属性 ID");
+            UUID divisorPropertyId = "sum_per_distinct".equals(aggregation)
+                    ? uuid(divisorField, "人均等比值指标必须选择去重计数字段")
+                    : null;
+            List<AggregationBucket> grouped = explorer.aggregate(
+                    query, propertyIds, measurePropertyId, divisorPropertyId, aggregation, explorerActor(actor));
             List<Map<String, Object>> buckets = new ArrayList<>();
-            if (!facets.isEmpty()) {
-                for (FacetBucket bucket : facets.get(0).buckets()) {
+            for (AggregationBucket bucket : grouped) {
                     Map<String, Object> item = new LinkedHashMap<>();
-                    item.put("label", bucket.value());
+                    item.put("label", bucketLabel(bucket.value()));
+                    item.put("dimensions", bucket.value());
                     if (bucket.count() < properties.suppressionThreshold()) {
                         item.put("value", null); item.put("suppressed", true); suppressed = true;
                     } else {
-                        item.put("value", bucket.count()); item.put("suppressed", false);
+                        item.put("value", bucket.metric()); item.put("suppressed", false);
                     }
                     buckets.add(item);
-                }
             }
-            data = Map.of("buckets", buckets, "dimensionPropertyId", propertyId, "total", page.visibleCount());
+            data = Map.of("buckets", buckets, "dimensionPropertyIds", propertyIds, "aggregation", aggregation,
+                    "total", page.visibleCount());
         } else if ("SCATTER".equals(widget.type())) {
             String x = String.valueOf(widget.config().get("xProperty"));
             String y = String.valueOf(widget.config().get("yProperty"));
@@ -592,6 +610,144 @@ public class DashboardService {
         }
         return new DashboardWidgetResult(widget.id(), "SUCCEEDED", widget.type(), data, false, suppressed,
                 queriedAt, page.indexUpdatedAt(), correlationId.toString(), null);
+    }
+
+    private DashboardWidgetResult executeDatasetWidget(DashboardDataSource source, DashboardWidget widget,
+                                                       UUID correlationId, Instant queriedAt) {
+        if ("OBJECT_TABLE".equals(widget.type())) {
+            DatasetModels.Preview preview = datasets.preview(source.datasetId(), 50, 0);
+            Object data = Map.of("items", preview.rows(), "visibleCount", preview.total(), "columns", preview.columns());
+            return new DashboardWidgetResult(widget.id(), "SUCCEEDED", widget.type(), data, false, false,
+                    queriedAt, queriedAt, correlationId.toString(), null);
+        }
+        List<DatasetModels.Dimension> dimensions = datasetDimensions(widget);
+        if (!"METRIC".equals(widget.type()) && dimensions.isEmpty()) throw invalid("图表必须选择横轴或分组字段");
+        List<DatasetModels.Metric> metrics = datasetMetrics(widget);
+        List<DatasetModels.Filter> filters = datasetFilters(widget);
+        String firstMetric = metrics.get(0).label();
+        DatasetModels.QueryResult query = datasets.query(source.datasetId(), new DatasetModels.QueryRequest(
+                List.of(), dimensions, metrics, filters,
+                "METRIC".equals(widget.type()) ? firstMetric : dimensions.get(0).label(), "ASC", 2000));
+        Object data;
+        if ("METRIC".equals(widget.type())) {
+            Map<String, Object> values = query.rows().isEmpty() ? Map.of() : query.rows().get(0);
+            data = Map.of("value", values.getOrDefault(firstMetric, 0), "values", values,
+                    "metricFields", query.metrics());
+        } else {
+            List<Map<String, Object>> buckets = query.rows().stream().map(row -> {
+                Map<String, Object> item = new LinkedHashMap<>();
+                Map<String, Object> values = new LinkedHashMap<>();
+                dimensions.forEach(dimension -> values.put(dimension.label(), row.get(dimension.label())));
+                item.put("label", values.values().stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(" · ")));
+                item.put("dimensions", values); item.put("value", row.get(firstMetric));
+                item.put("metrics", query.metrics().stream().collect(java.util.stream.Collectors.toMap(
+                        field -> field, row::get, (left, right) -> left, LinkedHashMap::new)));
+                item.put("suppressed", false);
+                return item;
+            }).toList();
+            data = Map.of("buckets", buckets, "dimensionFields", query.dimensions(),
+                    "metricFields", query.metrics(), "rows", query.rows(), "scannedRows", query.scannedRows());
+        }
+        return new DashboardWidgetResult(widget.id(), "SUCCEEDED", widget.type(), data, false, false,
+                queriedAt, queriedAt, correlationId.toString(), null);
+    }
+
+    private String requiredField(Object value, String message) {
+        String field = value == null ? "" : String.valueOf(value);
+        if (field.isBlank()) throw invalid(message);
+        return field;
+    }
+
+    private List<DatasetModels.Dimension> datasetDimensions(DashboardWidget widget) {
+        Map<String, Object> config = widget.config() == null ? Map.of() : widget.config();
+        List<DatasetModels.Dimension> values = new ArrayList<>();
+        addDatasetDimension(values, config.get("xField"), "x", config.get("xTimeGrain"));
+        addDatasetDimension(values, config.get("seriesField"), "series", config.get("seriesTimeGrain"));
+        addDatasetDimension(values, config.get("groupField"), "group", config.get("groupTimeGrain"));
+        if (!values.isEmpty()) return List.copyOf(values);
+        List<String> legacy = stringList(config.get("dimensionPropertyIds"));
+        if (legacy.isEmpty() && config.get("dimensionPropertyId") != null) legacy = List.of(String.valueOf(config.get("dimensionPropertyId")));
+        for (int index = 0; index < legacy.size(); index++) {
+            values.add(new DatasetModels.Dimension(legacy.get(index), index == 0 ? "x" : index == 1 ? "series" : "group", null));
+        }
+        return List.copyOf(values);
+    }
+
+    private void addDatasetDimension(List<DatasetModels.Dimension> values, Object field, String label, Object grain) {
+        String value = field == null ? "" : String.valueOf(field).trim();
+        if (value.isBlank() || values.stream().anyMatch(item -> item.field().equals(value))) return;
+        values.add(new DatasetModels.Dimension(value, label, grain == null ? null : String.valueOf(grain)));
+    }
+
+    private List<DatasetModels.Metric> datasetMetrics(DashboardWidget widget) {
+        Map<String, Object> config = widget.config() == null ? Map.of() : widget.config();
+        List<Map<String, Object>> configured = mapList(config.get("measures"));
+        if (configured.isEmpty()) configured = List.of(config);
+        List<DatasetModels.Metric> values = new ArrayList<>();
+        for (int index = 0; index < configured.size() && index < 4; index++) {
+            Map<String, Object> measure = configured.get(index);
+            String aggregation = String.valueOf(measure.getOrDefault("aggregation", "count"));
+            String operation = switch (aggregation) {
+                case "sum" -> "SUM"; case "avg" -> "AVG"; case "min" -> "MIN"; case "max" -> "MAX";
+                case "approx_distinct" -> "DISTINCT_COUNT"; case "sum_per_distinct" -> "SUM_PER_DISTINCT";
+                default -> "COUNT";
+            };
+            Object rawField = measure.containsKey("field") ? measure.get("field") : measure.get("measurePropertyId");
+            Object rawDivisor = measure.containsKey("divisorField") ? measure.get("divisorField") : measure.get("divisorPropertyId");
+            String field = "count".equals(aggregation) ? null : requiredField(rawField, "请选择指标字段");
+            String divisor = "sum_per_distinct".equals(aggregation) ? requiredField(rawDivisor, "请选择分母去重字段") : null;
+            String id = String.valueOf(measure.getOrDefault("id", index == 0 ? "value" : "value_" + (index + 1)));
+            values.add(new DatasetModels.Metric(operation, field, divisor, id));
+        }
+        if (values.isEmpty()) values.add(new DatasetModels.Metric("COUNT", null, null, "value"));
+        return List.copyOf(values);
+    }
+
+    private List<DatasetModels.Filter> datasetFilters(DashboardWidget widget) {
+        List<DatasetModels.Filter> values = new ArrayList<>();
+        for (Map<String, Object> filter : mapList(widget.config() == null ? null : widget.config().get("filters"))) {
+            String field = String.valueOf(filter.getOrDefault("field", "")).trim();
+            if (field.isBlank()) continue;
+            String operator = String.valueOf(filter.getOrDefault("operator", "EQUALS"));
+            String comparisonField = String.valueOf(filter.getOrDefault("comparisonField", "")).trim();
+            Object rawValues = filter.get("values");
+            List<String> filterValues = rawValues instanceof List<?> list ? list.stream().map(String::valueOf).toList()
+                    : rawValues == null ? List.of() : List.of(String.valueOf(rawValues));
+            values.add(new DatasetModels.Filter(field, operator, filterValues,
+                    comparisonField.isBlank() ? null : comparisonField));
+        }
+        return List.copyOf(values);
+    }
+
+    private List<Map<String, Object>> mapList(Object value) {
+        if (!(value instanceof List<?> list)) return List.of();
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object item : list) if (item instanceof Map<?, ?> map) {
+            Map<String, Object> converted = new LinkedHashMap<>();
+            map.forEach((key, entry) -> converted.put(String.valueOf(key), entry));
+            result.add(converted);
+        }
+        return List.copyOf(result);
+    }
+
+    private Map<String, Object> firstMeasure(DashboardWidget widget) {
+        List<Map<String, Object>> measures = mapList(widget.config() == null ? null : widget.config().get("measures"));
+        return measures.isEmpty() ? (widget.config() == null ? Map.of() : widget.config()) : measures.get(0);
+    }
+
+    private Object objectDimensionFields(DashboardWidget widget) {
+        Map<String, Object> config = widget.config() == null ? Map.of() : widget.config();
+        List<String> values = new ArrayList<>();
+        for (String key : List.of("xField", "seriesField", "groupField")) {
+            Object field = config.get(key);
+            if (field != null && !String.valueOf(field).isBlank() && !values.contains(String.valueOf(field))) values.add(String.valueOf(field));
+        }
+        return values.isEmpty() ? config.get("dimensionPropertyIds") : values;
+    }
+
+    private List<String> stringList(Object value) {
+        if (!(value instanceof List<?> list)) return List.of();
+        return list.stream().map(String::valueOf).filter(item -> !item.isBlank()).limit(3).toList();
     }
 
     private Object metric(String aggregation, Object property, ObjectSetPage page) {
@@ -610,6 +766,24 @@ public class DashboardService {
             default -> throw invalid("聚合函数不受支持");
         };
         return Map.of("value", value, "aggregation", aggregation, "sampleSize", values.size());
+    }
+
+    private String bucketLabel(Object value) {
+        if (value instanceof Map<?, ?> values) {
+            return values.values().stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(" · "));
+        }
+        return String.valueOf(value);
+    }
+
+    private List<UUID> uuids(Object values, Object legacy, String message) {
+        List<UUID> result = new ArrayList<>();
+        if (values instanceof List<?> list) {
+            for (Object value : list) result.add(uuid(value, message));
+        } else if (legacy != null) {
+            result.add(uuid(legacy, message));
+        }
+        if (result.isEmpty() || result.size() > 3) throw invalid(message);
+        return List.copyOf(result);
     }
 
     private ObjectSetRequest dataSourceQuery(DashboardDataSource source, Map<String, Object> filters,
@@ -669,6 +843,7 @@ public class DashboardService {
 
     private void validateSample(DashboardDefinition definition, Actor actor) {
         for (DashboardDataSource source : definition.dataSources()) {
+            if ("DATASET".equals(source.kind())) { datasets.preview(source.datasetId(), 1, 0); continue; }
             ObjectSetRequest query = dataSourceQuery(source, Map.of(), definition, actor);
             explorer.query(new ObjectSetRequest(query.objectTypeId(), query.where(), query.sort(), 25, null, query.columns()), explorerActor(actor));
         }
@@ -786,10 +961,11 @@ public class DashboardService {
         }
         long revision = currentRevision();
         for (DashboardDataSource source : definition.dataSources()) {
-            jdbc.sql("INSERT INTO control.dashboard_data_sources(id,dashboard_id," + scope + ",stable_id,name,source_kind,object_type_id,reference_id,reference_version,query_ast,ontology_revision) "
-                    + "VALUES (:id,:dashboard,:scope,:stable,:name,:kind,CAST(:objectType AS uuid),CAST(:reference AS uuid),:referenceVersion,CAST(:query AS jsonb),:revision)")
+            jdbc.sql("INSERT INTO control.dashboard_data_sources(id,dashboard_id," + scope + ",stable_id,name,source_kind,object_type_id,dataset_id,reference_id,reference_version,query_ast,ontology_revision) "
+                    + "VALUES (:id,:dashboard,:scope,:stable,:name,:kind,CAST(:objectType AS uuid),CAST(:dataset AS uuid),CAST(:reference AS uuid),:referenceVersion,CAST(:query AS jsonb),:revision)")
                     .param("id", UUID.randomUUID()).param("dashboard", dashboardId).param("scope", scopeId).param("stable", source.id())
                     .param("name", source.name()).param("kind", source.kind()).param("objectType", source.objectTypeId())
+                    .param("dataset", source.datasetId())
                     .param("reference", source.referenceId()).param("referenceVersion", source.referenceVersion())
                     .param("query", json(source.query() == null ? Map.of() : source.query()))
                     .param("revision", source.ontologyRevision() == null ? revision : source.ontologyRevision()).update();
@@ -822,6 +998,7 @@ public class DashboardService {
 
     private void persistDependencies(UUID dashboardId, UUID versionId, DashboardDefinition definition, long revision) {
         for (DashboardDataSource source : definition.dataSources()) {
+            if (source.datasetId() != null) insertDependency(dashboardId, versionId, "DATASET", source.datasetId(), null, revision);
             if (source.objectTypeId() != null) insertDependency(dashboardId, versionId, "OBJECT_TYPE", source.objectTypeId(), null, revision);
             if (source.referenceId() != null) insertDependency(dashboardId, versionId, source.kind(), source.referenceId(), source.referenceVersion(), revision);
         }

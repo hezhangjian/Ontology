@@ -12,13 +12,6 @@ routes:
     uri: /api/ontology/*
     priority: 90
     plugins:
-      openid-connect:
-        bearer_only: true
-        client_id: ontology-portal
-        client_secret: unused-for-bearer-only
-        discovery: http://keycloak:8080/realms/ontology/.well-known/openid-configuration
-        realm: ontology
-        use_jwks: true
       proxy-rewrite:
         regex_uri: ["^/api/ontology/(.*)", "/$1"]
     upstream:
@@ -30,13 +23,6 @@ routes:
     uri: /api/bff/*
     priority: 90
     plugins:
-      openid-connect:
-        bearer_only: true
-        client_id: ontology-portal
-        client_secret: unused-for-bearer-only
-        discovery: http://keycloak:8080/realms/ontology/.well-known/openid-configuration
-        realm: ontology
-        use_jwks: true
       proxy-rewrite:
         regex_uri: ["^/api/bff/(.*)", "/$1"]
     upstream:
@@ -48,13 +34,6 @@ routes:
     uri: /api/agent/*
     priority: 90
     plugins:
-      openid-connect:
-        bearer_only: true
-        client_id: ontology-portal
-        client_secret: unused-for-bearer-only
-        discovery: http://keycloak:8080/realms/ontology/.well-known/openid-configuration
-        realm: ontology
-        use_jwks: true
       proxy-rewrite:
         regex_uri: ["^/api/agent/(.*)", "/$1"]
     upstream:
@@ -66,13 +45,6 @@ routes:
     uri: /observability/*
     priority: 80
     plugins:
-      openid-connect:
-        bearer_only: true
-        client_id: ontology-portal
-        client_secret: unused-for-bearer-only
-        discovery: http://keycloak:8080/realms/ontology/.well-known/openid-configuration
-        realm: ontology
-        use_jwks: true
       proxy-rewrite:
         regex_uri: ["^/observability/(.*)", "/$1"]
     upstream:

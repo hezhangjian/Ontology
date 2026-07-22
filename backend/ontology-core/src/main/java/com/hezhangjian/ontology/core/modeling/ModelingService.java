@@ -6,6 +6,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hezhangjian.ontology.core.connections.ConnectionProblem;
+import com.hezhangjian.ontology.core.deletion.ResourceDeletionService;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.sql.Array;
@@ -41,18 +42,21 @@ public class ModelingService {
     private final ModelingInfrastructureProbe infrastructure;
     private final ModelingPolicy policy;
     private final TransactionTemplate transactions;
+    private final ResourceDeletionService deletion;
 
     public ModelingService(JdbcTemplate jdbc, ObjectMapper json,
                            @Qualifier("applicationTaskExecutor") TaskExecutor tasks,
                            ModelingInfrastructureProbe infrastructure,
                            ModelingPolicy policy,
-                           PlatformTransactionManager transactionManager) {
+                           PlatformTransactionManager transactionManager,
+                           ResourceDeletionService deletion) {
         this.jdbc = jdbc;
         this.json = json;
         this.tasks = tasks;
         this.infrastructure = infrastructure;
         this.policy = policy;
         this.transactions = new TransactionTemplate(transactionManager);
+        this.deletion = deletion;
     }
 
     public ModelingSummary summary() {
@@ -115,6 +119,14 @@ public class ModelingService {
                 """;
         return jdbc.query(sql, this::resource, id).stream().findFirst()
                 .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "本体资源不存在"));
+    }
+
+    @Transactional
+    public void delete(UUID id, Actor actor) {
+        ResourceView resource = get(id);
+        audit(actor, "ONTOLOGY_RESOURCE_DELETED", resource.kind().name(), id.toString(),
+                "永久删除本体资源“" + resource.displayName() + "”及关联记录", Map.of());
+        deletion.deleteOntologyResource(id);
     }
 
     public List<PropertyView> properties(UUID objectTypeId) {

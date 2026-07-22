@@ -7,7 +7,6 @@ include:
   - compose/20-event-bus.yml
   - compose/30-compute.yml
   - compose/40-ontology-storage.yml
-  - compose/50-security.yml
   - compose/60-platform.yml
   - compose/70-apps.yml
   - compose/90-observability.yml
@@ -21,14 +20,6 @@ secrets:
     file: ${SECRET_DIR:-./secrets/examples}/connection_master_key
   flink_workload_token:
     file: ${SECRET_DIR:-./secrets/examples}/flink_workload_token
-  demo_admin_password:
-    file: ${SECRET_DIR:-./secrets/examples}/demo_admin_password
-  demo_builder_password:
-    file: ${SECRET_DIR:-./secrets/examples}/demo_builder_password
-  demo_viewer_password:
-    file: ${SECRET_DIR:-./secrets/examples}/demo_viewer_password
-  keycloak_admin_password:
-    file: ${SECRET_DIR:-./secrets/examples}/keycloak_admin_password
   minio_root_password:
     file: ${SECRET_DIR:-./secrets/examples}/minio_root_password
   minio_root_user:
@@ -39,7 +30,6 @@ secrets:
 volumes:
   flink-checkpoints-cache:
   hugegraph-data:
-  keycloak-data:
   minio-data:
   opensearch-data:
   postgres17-data:

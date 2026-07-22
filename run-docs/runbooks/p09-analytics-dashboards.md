@@ -31,6 +31,18 @@ Use `http://localhost:9080` for browser verification. Dashboard requests must re
 - Regenerate expired drilldown tokens. Tokens are signed, short lived, purpose scoped, and caller bound.
 - Use component correlation IDs and query-run metadata to isolate a partial failure; one component failure must not invalidate successful sibling results.
 
+## Build a self-service Dataset chart
+
+Dataset charts do not require an administrator-maintained semantic model. In the widget inspector:
+
+1. Select a raw Dataset field for the horizontal axis. For date-like values, select day, week, month, quarter, or year; bucketing is executed by the server.
+2. Optionally select a series field. Use month on the horizontal axis and leader as the series for trends, or leader on the horizontal axis and month as the series for grouped comparisons.
+3. Add up to four measures. Each measure independently selects count, sum, average, minimum, maximum, distinct count, or sum divided by distinct count. The latter supports per-person metrics by using the person identifier as the denominator field.
+4. Add widget-local field filters when the chart should be fixed to a department, team, or other raw value.
+5. Publish the dashboard. Query execution continues to use the immutable server-side plan; the browser never submits SQL or native infrastructure queries.
+
+Existing dashboards that use `dimensionPropertyIds`, `aggregation`, and `measurePropertyId` remain compatible. New Dataset chart definitions use explicit field roles and a `measures` list.
+
 ## Safe lifecycle operations
 
 Only an Owner can publish, manage permissions, archive, or restore. A published dashboard is archived rather than deleted. Permanent deletion is limited to an empty dashboard that has never been published and has no dependencies. Copying duplicates the definition and dependency references but not permissions, favorites, usage, or cached results.

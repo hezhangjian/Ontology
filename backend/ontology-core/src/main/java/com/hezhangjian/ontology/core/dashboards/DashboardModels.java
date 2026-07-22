@@ -36,7 +36,7 @@ public final class DashboardModels {
 
     public record DashboardPage(UUID id, String name, String description, int order) { }
 
-    public record DashboardDataSource(UUID id, String name, String kind, UUID objectTypeId,
+    public record DashboardDataSource(UUID id, String name, String kind, UUID objectTypeId, UUID datasetId,
                                       UUID referenceId, Integer referenceVersion,
                                       Map<String, Object> query, Long ontologyRevision) { }
 

@@ -6,13 +6,13 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
+import com.hezhangjian.ontology.core.security.ActorIdentity;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -202,13 +202,8 @@ public class ExplorerController {
     }
 
     private Actor actor(Authentication authentication) {
-        Jwt jwt = (Jwt) authentication.getPrincipal();
-        String id = jwt.getSubject() == null ? jwt.getClaimAsString("preferred_username") : jwt.getSubject();
-        String name = jwt.getClaimAsString("name");
-        if (name == null) name = jwt.getClaimAsString("preferred_username");
-        List<String> roles = authentication.getAuthorities().stream().map(authority -> authority.getAuthority())
-                .filter(value -> value.startsWith("ROLE_")).map(value -> value.substring(5)).toList();
-        return new Actor(id, name == null ? id : name, roles);
+        ActorIdentity identity = ActorIdentity.from(authentication);
+        return new Actor(identity.id(), identity.name(), identity.roles());
     }
 
     public record SearchAroundRequest(UUID objectTypeId, String objectId, List<UUID> linkTypeIds,

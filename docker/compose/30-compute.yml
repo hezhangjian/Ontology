@@ -36,6 +36,8 @@ services:
   flink-jobmanager:
     <<: *flink-common
     command: jobmanager
+    ports:
+      - ${BIND_ADDRESS:-0.0.0.0}:8081:8081
     healthcheck:
       test: [CMD-SHELL, curl -fsS http://localhost:8081/overview >/dev/null]
       interval: 10s
