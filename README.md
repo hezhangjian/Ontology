@@ -1,6 +1,6 @@
 # Ontology Platform
 
-Ontology Platform 是一个以“数据—本体—应用—AIP”为闭环的通用本体平台，面向单台 Linux 服务器上的 Docker Compose 部署。完整产品、架构和实施范围以 [plan.md](plan.md) 为准。
+Ontology Platform 是一个以“数据—本体—应用—AIP”为闭环的通用本体平台，面向单台 Linux 服务器上的 Docker Compose 部署。完整产品、架构和实施范围以 [实施计划](docs/plan.md) 为准。
 
 ## 平台基线
 
@@ -34,7 +34,8 @@ make e2e-storage
 ## 目录
 
 - `backend/`：平台 Java 服务、契约和测试支持
-- `docker/`：Compose、镜像、配置和运维脚本
+- `deploy/`：部署配置、验证数据、Secret 示例和运维脚本
+- `docker/`：唯一的 Compose 入口 `docker-compose.yml`
 - `docs/`：ADR、架构、OpenAPI、验证证据和运行手册
 - `examples/`：可重复生成的无敏感样例
 - `portal/`：产品前端

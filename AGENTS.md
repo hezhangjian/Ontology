@@ -5,7 +5,8 @@
 This repository is organized as:
 
 - `backend/` - Java 21 Maven modules for platform services and shared contracts.
-- `docker/` - Docker Compose, image, configuration, and operational scripts.
+- `deploy/` - Deployment configuration, fixtures, secrets examples, and operational scripts.
+- `docker/` - The single Docker Compose entry point.
 - `docs/` - Architecture, ADR, OpenAPI, evidence, and runbook documentation.
 - `examples/` - Reproducible, non-sensitive examples and demo data.
 - `portal/` - React and TypeScript frontend workspace.
@@ -36,6 +37,7 @@ The root `pom.xml` is an aggregator and dependency-management project only. Do n
 - Keep architecture decisions in `docs/adr/` and operational procedures in `docs/runbooks/`.
 - Keep PostgreSQL limited to control-plane data. Business object bodies belong in HugeGraph and their rebuildable search projections belong in OpenSearch.
 - Route browser calls through platform APIs. The portal must not call infrastructure or model-provider APIs directly.
+- Keep `docker/` limited to `docker-compose.yml`; place supporting deployment assets under `deploy/` or the owning module.
 
 ## Verification
 

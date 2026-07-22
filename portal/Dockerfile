@@ -9,6 +9,6 @@ COPY portal/ ./
 RUN pnpm build
 
 FROM ${NGINX_IMAGE}
-COPY docker/config/frontend/nginx.conf /etc/nginx/conf.d/default.conf
+COPY portal/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /workspace/dist /usr/share/nginx/html
 EXPOSE 80

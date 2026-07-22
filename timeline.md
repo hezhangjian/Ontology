@@ -1,6 +1,6 @@
 # Ontology implementation timeline
 
-> 目标：严格按 `plan.md` 的 P00—P17 顺序交付整个系统。每个 Phase 只对应一个 signed-off Conventional Commit；涉及前端的 Phase 必须在 Codex 内置浏览器中完成真实点击测试。
+> 目标：严格按 `docs/plan.md` 的 P00—P17 顺序交付整个系统。每个 Phase 只对应一个 signed-off Conventional Commit；涉及前端的 Phase 必须在 Codex 内置浏览器中完成真实点击测试。
 
 ## 恢复点
 
@@ -36,7 +36,7 @@
 - 完成时间：2026-07-20 14:48 CST
 - Commit：`build(platform): establish project baseline`
 - 范围：
-  - 纳入最新 `plan.md` 并建立本 timeline。
+  - 纳入最新 `docs/plan.md` 并建立本 timeline。
   - 建立 Java 21 / Spring Boot 3.5.3 Maven 聚合与 8 个边界模块，固定 Maven Wrapper 3.9.9。
   - 建立 React 18、TypeScript、Vite、Ant Design 与 pnpm 锁文件的中文产品外壳。
   - 建立唯一 OpenAPI 基线、ADR、架构/证据/runbook 文档入口和仓库说明。
@@ -112,7 +112,7 @@
 - 自动验证：
   - `make verify-fast`：通过；9 个 Maven reactor project、5 个 Java tests、frontend lint/typecheck/build、OpenAPI lint 和全 profile Compose config 全部通过。
   - `make compose-build`：Agent Runtime、BFF、Flink、Maintenance Runner、Ontology Core、Portal 和 Projection Worker 镜像全部成功构建。
-  - `make compose-up` + `docker/scripts/healthcheck.sh`：所有声明健康检查的长期服务 healthy；Maintenance Runner 与无 Web 端口的 Projection Worker 保持 running；两个 bootstrap 服务 completed。
+  - `make compose-up` + `deploy/scripts/healthcheck.sh`：所有声明健康检查的长期服务 healthy；Maintenance Runner 与无 Web 端口的 Projection Worker 保持 running；两个 bootstrap 服务 completed。
   - `make e2e-storage`：在完整镜像重建后重复通过，验证 event/batch 幂等、v2 覆盖与 v1 stale、三 edit 原子事务、关系双写、tombstone、敏感字段过滤、永久错误 DLQ、搜索恢复、alias 重建和 Postgres 数据所有权。
   - `git diff --check`、两个 shell 脚本 `sh -n`：通过。
 - 前端/内置浏览器：P02 没有新增或修改用户界面，按用户规则无需浏览器点击；P00/P01 的认证外壳未改变。
@@ -220,7 +220,7 @@
 - 自动验证：
   - `make verify-fast`：通过；9 个 Maven reactor project、22 个 Java tests、frontend lint/typecheck/build、OpenAPI recommended lint 和全 profile Compose config 全部通过。
   - `make e2e-modeling`：通过；真实验证五类规范资源、多资源审核、Viewer/Builder/Admin、主键与敏感字段规则、Action Preview、Function 权限/版本绑定、OpenSearch 故障下 Saga 保旧 revision、恢复重试、精确 revision Pulsar 投影、敏感字段过滤和审计。
-  - Ontology Core/Portal 镜像重建成功，Flyway V6 已应用且完整依赖服务健康；`git diff --check` 与 `docker/scripts/e2e-modeling.sh` 语法检查通过。
+  - Ontology Core/Portal 镜像重建成功，Flyway V6 已应用且完整依赖服务健康；`git diff --check` 与 `deploy/scripts/e2e-modeling.sh` 语法检查通过。
 - 内置浏览器手测：
   - 使用 Builder OIDC 从全局侧栏进入“本体管理”，核对 Revision 4 概览、资源统计、最近资源、模型关系图和完整内部导航。
   - 点击“新建对象类型”，逐步填写 `BrowserAcceptanceAsset`、来源、主键/标题属性并在复核页确认所有跨步骤字段，保存为 DRAFT 后检查稳定 API 名、物理键、属性、数据映射、索引投影和不可变版本。
@@ -252,7 +252,7 @@
 - 自动验证：
   - `make verify-fast`：通过；Maven reactor、Java tests、frontend lint/typecheck/build、OpenAPI recommended lint 和全 profile Compose config 全部通过。
   - `make e2e-explorer`：通过；真实验证 storage-authorized search/Facet/cursor、HugeGraph detail/relation/degradation、redaction、compare、saved references、signed selection、MinIO export、Action gate、RBAC 和审计。
-  - Ontology Core/Portal 最终镜像重建成功，Flyway V7 已应用且完整依赖服务健康；`git diff --check` 与 `docker/scripts/e2e-explorer.sh` 语法检查通过。
+  - Ontology Core/Portal 最终镜像重建成功，Flyway V7 已应用且完整依赖服务健康；`git diff --check` 与 `deploy/scripts/e2e-explorer.sh` 语法检查通过。
 - 内置浏览器手测：
   - 使用 Viewer OIDC 从全局侧栏进入“对象探索”，核对 5 个对象类型和 HEALTHY 能力；全局搜索精确找到 E2E Employee 且 email 未泄露。
   - 打开 Full 详情，逐项点击属性、关系、Action、Function、活动和来源，确认 Viewer 不显示可执行 Action、投影活动和 revision 5 字段血缘可见。
@@ -286,7 +286,7 @@
 - 自动验证：
   - `make verify-fast`：通过；Maven reactor、26 个 Java tests、frontend lint/typecheck/build、OpenAPI recommended lint 和全 profile Compose config 全部通过。
   - `make e2e-dashboards`：通过；真实验证 ETag 草稿/租约、v1/v2 不可变发布、失败候选保旧版本、权限作用域查询/缓存、筛选、小群体抑制、下钻、收藏、复制、归档/恢复和审计。
-  - Ontology Core/Portal 最终镜像重建成功，Flyway V8 已应用且完整依赖服务健康；`git diff --check` 与 `docker/scripts/e2e-dashboards.sh` 语法检查通过。
+  - Ontology Core/Portal 最终镜像重建成功，Flyway V8 已应用且完整依赖服务健康；`git diff --check` 与 `deploy/scripts/e2e-dashboards.sh` 语法检查通过。
 - 内置浏览器手测：
   - 使用 Builder OIDC 从全局侧栏进入“分析看板”，确认 E2E v2 看板的状态、页面/组件数量、组织可见范围、刷新策略和健康状态，并创建“P09 浏览器手测看板”。
   - 在全屏编辑器选择 Employee revision 5 Object Set，添加指标卡、部门柱状图、对象表格和受限 Markdown；新增并重命名第二页、添加指标，等待 2 秒自动保存后点击“验证”和“发布”。
@@ -300,7 +300,7 @@
   - 看板不能提交 SQL、Gremlin、PPL、原生 OpenSearch DSL、任意 JavaScript/HTML 或 Action；静态说明仅渲染受限 Markdown。
   - 分享看板定义不授予底层数据权限；运行、缓存和下钻都绑定当前调用者，敏感属性和小群体值不进入结果、token、日志或审计正文。
   - HugeGraph 继续保存对象真相，OpenSearch 继续保存可重建投影，PostgreSQL 只保存规范化控制面和有界运行元数据。
-- 下一恢复点：P09 commit 后按用户明确指令停止；P05/P06 已跳过，不进入 P10。如未来继续，应先从干净工作树核对 `plan.md` 与本记录。
+- 下一恢复点：P09 commit 后按用户明确指令停止；P05/P06 已跳过，不进入 P10。如未来继续，应先从干净工作树核对 `docs/plan.md` 与本记录。
 
 ## 后续记录模板
 
@@ -326,7 +326,7 @@
 
 ## 2026-07-21 — Dataset-first 通用平台与 Token 面板验收
 
-- 范围：依据 `111.md` 增加通用 Dataset 控制面、Pipeline `DATASET_OUTPUT`、Dataset 列表/详情/字段映射、Dataset 驱动对象向导和可配置分析面板；Portal 主导航聚焦数据、本体、探索和应用主流程。
+- 范围：依据 `docs/dataset-first.md` 增加通用 Dataset 控制面、Pipeline `DATASET_OUTPUT`、Dataset 列表/详情/字段映射、Dataset 驱动对象向导和可配置分析面板；Portal 主导航聚焦数据、本体、探索和应用主流程。
 - 内置浏览器数据操作：从 `/Users/dijkstra/project/06-shixi/data` 手动选择并上传 `demo-employee-leaders.csv` 与 `demo-token-usage.csv`，创建 `Token 消耗 Dataset-first 验收` 连接（`ff64aed9-0dfd-401f-8af1-91a21138156c`）；从连接详情点击创建 `Token 使用明细宽表管道`（`f3e5e7f2-205e-4d14-aa6a-8407ab2c9921`）。
 - Pipeline 与 Dataset：在 DAG 中依次配置员工工号关联和组长姓名关联，输出稳定字段 `employee_id`、`leader_group_id`、`leader_group_name`、`month`、`total_tokens` 及五级组织字段；点击“生成数据集”得到 `Token 使用组织宽表`（`61eadd47-d22c-456c-ba68-290319fe22e4`），共 6,000 行、18 字段。
 - 本体操作：从同一 Dataset 逐项预览并发布 `人员`（100 个对象、5,900 重复行、0 冲突，Revision 15）、`部门`（5 个对象，Revision 16）、`组长小组`（8 个对象，Revision 17）；发布 `人员属于部门（Dataset）`（Revision 18）和 `人员属于组长小组（Group）`（Revision 19）两条多对一关系。

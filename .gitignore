@@ -6,6 +6,7 @@
 .vscode/**
 !.vscode/extensions.json
 **.iml
+**/*.swp
 
 # AI Agent
 
@@ -28,10 +29,10 @@ dist/
 
 # Environment overrides
 *.local
-docker/env/.env
-docker/secrets/*
-!docker/secrets/examples/
-!docker/secrets/examples/**
+deploy/env/.env
+deploy/secrets/*
+!deploy/secrets/examples/
+!deploy/secrets/examples/**
 
 # Test output
 coverage/

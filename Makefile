@@ -9,37 +9,37 @@ build: frontend-build
 	JAVA_HOME="$(JAVA_HOME)" ./mvnw package -DskipTests
 
 compose-config:
-	docker compose --env-file docker/versions.env --env-file docker/env/.env.example --profile '*' -f docker/docker-compose.yml config --quiet
+	docker compose --env-file deploy/versions.env --env-file deploy/env/.env.example --profile '*' -f docker/docker-compose.yml config --quiet
 
 compose-build:
-	docker/scripts/compose.sh --profile '*' build
+	deploy/scripts/compose.sh --profile '*' build
 
 compose-down:
-	docker/scripts/compose.sh --profile '*' down
+	deploy/scripts/compose.sh --profile '*' down
 
 compose-up:
-	docker/scripts/compose.sh --profile core --profile compute --profile gateway --profile apps --profile maintenance --profile observability up -d --wait
+	deploy/scripts/compose.sh --profile core --profile compute --profile gateway --profile apps --profile maintenance --profile observability up -d --wait
 
 e2e-platform-foundation:
-	docker/scripts/e2e-verify.sh
+	deploy/scripts/e2e-verify.sh
 
 e2e-connections:
-	docker/scripts/e2e-connections.sh
+	deploy/scripts/e2e-connections.sh
 
 e2e-pipelines:
-	docker/scripts/e2e-pipelines.sh
+	deploy/scripts/e2e-pipelines.sh
 
 e2e-modeling:
-	docker/scripts/e2e-modeling.sh
+	deploy/scripts/e2e-modeling.sh
 
 e2e-explorer:
-	docker/scripts/e2e-explorer.sh
+	deploy/scripts/e2e-explorer.sh
 
 e2e-dashboards:
-	docker/scripts/e2e-dashboards.sh
+	deploy/scripts/e2e-dashboards.sh
 
 e2e-storage:
-	docker/scripts/e2e-storage.sh
+	deploy/scripts/e2e-storage.sh
 
 frontend-build:
 	$(PNPM) build
