@@ -58,3 +58,28 @@ services:
       OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
     ports:
       - "5601:5601"
+
+  skywalking-oap:
+    image: apache/skywalking-oap-server:10.4.0
+    depends_on:
+      - opensearch
+    environment:
+      JAVA_OPTS: -Xms256m -Xmx384m
+      SW_CORE_RECORD_DATA_TTL: "7"
+      SW_CORE_METRICS_DATA_TTL: "7"
+      SW_NAMESPACE: skywalking
+      SW_STORAGE: elasticsearch
+      SW_STORAGE_ES_CLUSTER_NODES: opensearch:9200
+      SW_TELEMETRY: prometheus
+    ports:
+      - "11800:11800"
+      - "12800:12800"
+
+  skywalking-ui:
+    image: apache/skywalking-ui:10.4.0
+    depends_on:
+      - skywalking-oap
+    environment:
+      SW_OAP_ADDRESS: http://skywalking-oap:12800
+    ports:
+      - "8082:8080"
