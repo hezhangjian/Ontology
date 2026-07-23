@@ -1,0 +1,132 @@
+openapi: 3.1.0
+info:
+  title: Ontology OpenAPI
+  description: Ontology OpenAPI Specification
+  version: 0.0.1
+servers:
+  - url: http://localhost:4242
+    description: Local development server
+tags:
+  - name: Ontology
+paths:
+  "/v1/ontologies":
+    get:
+      tags:
+        - Ontology
+      summary: List Ontologies
+      operationId: listOntologies
+      responses:
+        "200":
+          description: Visible Ontologies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  "$ref": "#/components/schemas/Ontology"
+    post:
+      tags:
+        - Ontology
+      summary: Create an Ontology
+      operationId: createOntology
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/CreateOntologyReq"
+      responses:
+        "201":
+          description: Created Ontology
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Ontology"
+  "/v1/ontologies/{ontologyId}":
+    get:
+      tags:
+        - Ontology
+      summary: Get an Ontology
+      operationId: getOntology
+      parameters:
+        - in: path
+          name: ontologyId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Ontology
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Ontology"
+    patch:
+      tags:
+        - Ontology
+      summary: Update an Ontology
+      operationId: updateOntology
+      parameters:
+        - in: path
+          name: ontologyId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/UpdateOntologyReq"
+      responses:
+        "200":
+          description: Updated Ontology
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Ontology"
+components:
+  schemas:
+    CreateOntologyReq:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          minLength: 1
+          maxLength: 32
+        description:
+          type: string
+          maxLength: 1024
+    Ontology:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    UpdateOntologyReq:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 32
+        description:
+          type: string
+          maxLength: 1024
