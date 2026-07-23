@@ -36,11 +36,43 @@ public class ModelingPolicy {
         }
     }
 
-    public void validateActionRules(List<Map<String, Object>> rules) {
+    public void validateActionRules(String actionOperation, List<Map<String, Object>> rules) {
+        String contractOperation = upper(actionOperation);
         HashSet<String> writes = new HashSet<>();
         for (Map<String, Object> rule : rules == null ? List.<Map<String, Object>>of() : rules) {
-            String target = Objects.toString(rule.get("targetPropertyId"), "");
-            if (!target.isBlank() && !writes.add(target)) throw problem("ACTION_RULE_CONFLICT", "Action 规则不能对同一属性产生冲突写入");
+            String operation = upper(Objects.toString(
+                    rule.containsKey("operation") ? rule.get("operation") : rule.get("type"),
+                    List.of("LINK", "UNLINK").contains(contractOperation) ? contractOperation : "SET_PROPERTY"));
+            if ("SET_PROPERTY".equals(operation)) {
+                if (!List.of("CREATE", "UPDATE").contains(contractOperation)) {
+                    throw problem("ACTION_RULE_OPERATION_INVALID", contractOperation + " Action 不能写入对象属性");
+                }
+                String target = Objects.toString(rule.get("targetPropertyId"), "");
+                if (target.isBlank()) throw problem("ACTION_PROPERTY_REQUIRED", "SET_PROPERTY 必须指定目标属性");
+                if (!writes.add(target)) throw problem("ACTION_RULE_CONFLICT", "Action 规则不能对同一属性产生冲突写入");
+            } else if (List.of("LINK", "UNLINK").contains(operation)) {
+                if (!operation.equals(contractOperation)) {
+                    throw problem("ACTION_RULE_OPERATION_INVALID", "关系规则必须与 Action 操作一致");
+                }
+                if (Objects.toString(rule.get("relationTypeId"), "").isBlank()) {
+                    throw problem("ACTION_RELATION_REQUIRED", operation + " 必须指定关系类型");
+                }
+            } else {
+                throw problem("ACTION_RULE_UNSUPPORTED", "不支持的 Action 规则：" + operation);
+            }
+        }
+        if (List.of("CREATE", "UPDATE", "LINK", "UNLINK").contains(contractOperation)
+                && (rules == null || rules.isEmpty())) {
+            throw problem("ACTION_RULE_REQUIRED", contractOperation + " Action 至少需要一条声明式规则");
+        }
+    }
+
+    public void validateActionContract(String operation, String approvalPolicy) {
+        if (!List.of("CREATE", "LINK", "RETIRE", "UNLINK", "UPDATE").contains(upper(operation))) {
+            throw problem("ACTION_OPERATION_UNSUPPORTED", "Action 操作类型无效");
+        }
+        if (!List.of("ALWAYS", "CONDITIONAL", "NONE").contains(upper(approvalPolicy))) {
+            throw problem("ACTION_APPROVAL_INVALID", "Action 审批策略无效");
         }
     }
 

@@ -15,6 +15,7 @@ import com.hezhangjian.ontology.core.explorer.ExplorerStorageClient;
 import com.hezhangjian.ontology.core.security.WorkspaceContext;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.math.BigDecimal;
 import java.sql.Array;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -34,9 +35,12 @@ import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
@@ -51,6 +55,7 @@ public class ModelingService {
     private final ResourceDeletionService deletion;
     private final ExplorerStorageClient explorerStorage;
     private final ActionMutationPublisher actionPublisher;
+    private final FunctionRuntimeService functionRuntime;
 
     public ModelingService(JdbcTemplate jdbc, ObjectMapper json,
                            @Qualifier("applicationTaskExecutor") TaskExecutor tasks,
@@ -59,7 +64,8 @@ public class ModelingService {
                            PlatformTransactionManager transactionManager,
                            ResourceDeletionService deletion,
                            ExplorerStorageClient explorerStorage,
-                           ActionMutationPublisher actionPublisher) {
+                           ActionMutationPublisher actionPublisher,
+                           FunctionRuntimeService functionRuntime) {
         this.jdbc = jdbc;
         this.json = json;
         this.tasks = tasks;
@@ -69,18 +75,19 @@ public class ModelingService {
         this.deletion = deletion;
         this.explorerStorage = explorerStorage;
         this.actionPublisher = actionPublisher;
+        this.functionRuntime = functionRuntime;
     }
 
     public ModelingSummary summary() { return summary(OntologyCatalogService.DEFAULT_ONTOLOGY_ID); }
 
     public ModelingSummary summary(UUID ontologyId) {
-        long revision = activeRevision();
-        Instant activated = jdbc.query("SELECT activated_at FROM control.ontology_revisions WHERE revision=?",
-                (row, n) -> instant(row, "activated_at"), revision).stream().findFirst().orElse(null);
-        long openProposals = count("SELECT count(*) FROM control.ontology_proposals WHERE status IN ('DRAFT','VALIDATING','IN_REVIEW','APPROVED','FAILED')");
-        long critical = count("SELECT count(*) FROM control.ontology_health_issues WHERE status='OPEN' AND severity IN ('ERROR','CRITICAL')");
-        long projectionFailures = count("SELECT count(*) FROM control.projection_ledger WHERE status IN ('DEGRADED','DLQ')");
-        long reviews = count("SELECT count(*) FROM control.ontology_proposals WHERE status='IN_REVIEW'");
+        long revision = activeRevision(ontologyId);
+        Instant activated = jdbc.query("SELECT activated_at FROM control.ontology_revisions WHERE ontology_id=? AND revision=?",
+                (row, n) -> instant(row, "activated_at"), ontologyId, revision).stream().findFirst().orElse(null);
+        long openProposals = count(ontologyId, "SELECT count(*) FROM control.ontology_proposals WHERE ontology_id=? AND status IN ('DRAFT','VALIDATING','IN_REVIEW','APPROVED','FAILED')");
+        long critical = count(ontologyId, "SELECT count(*) FROM control.ontology_health_issues WHERE ontology_id=? AND status='OPEN' AND severity IN ('ERROR','CRITICAL')");
+        long projectionFailures = count(ontologyId, "SELECT count(*) FROM control.projection_ledger WHERE ontology_id=? AND status IN ('DEGRADED','DLQ')");
+        long reviews = count(ontologyId, "SELECT count(*) FROM control.ontology_proposals WHERE ontology_id=? AND status='IN_REVIEW'");
         Map<String, Long> counts = new LinkedHashMap<>();
         for (ResourceKind kind : ResourceKind.values()) {
             counts.put(kind.name(), Objects.requireNonNullElse(jdbc.queryForObject(
@@ -255,7 +262,7 @@ public class ModelingService {
             throw problem("PROPOSAL_INVALID", "Proposal 标题和至少一个资源为必填项");
         }
         UUID id = UUID.randomUUID();
-        long baseline = activeRevision();
+        long baseline = activeRevision(ontologyId);
         jdbc.update("""
                 INSERT INTO control.ontology_proposals(id,ontology_id,title,description,status,baseline_revision,created_by,created_by_name)
                 VALUES (?,?,?,?,'DRAFT',?,?,?)
@@ -339,20 +346,26 @@ public class ModelingService {
         return proposal(id);
     }
 
+    @Transactional
     public DeploymentView publish(UUID id, Actor actor) {
         ProposalView proposal = proposal(id);
         requireStatus(proposal, "APPROVED");
         if (proposal.baselineRevision() != activeRevision()) throw problem("PROPOSAL_BASELINE_CONFLICT", "主本体 revision 已变化，请重新校验并人工解决冲突");
+        jdbc.execute("SELECT pg_advisory_xact_lock(700021)");
         long target = Objects.requireNonNull(jdbc.queryForObject("SELECT coalesce(max(revision),0)+1 FROM control.ontology_revisions", Long.class));
+        UUID ontologyId = jdbc.queryForObject(
+                "SELECT ontology_id FROM control.ontology_proposals WHERE id=?", UUID.class, id);
+        jdbc.update("INSERT INTO control.ontology_revisions(revision,ontology_id,status) VALUES (?,?,'DRAFT')",
+                target, ontologyId);
         UUID deploymentId = UUID.randomUUID();
-        jdbc.update("INSERT INTO control.ontology_deployments(id,proposal_id,target_revision,status,current_step) VALUES (?,?,?,'PENDING','LOCK_PROPOSAL')",
-                deploymentId, id, target);
+        jdbc.update("INSERT INTO control.ontology_deployments(id,ontology_id,proposal_id,target_revision,status,current_step) VALUES (?,?,?,?,'PENDING','LOCK_PROPOSAL')",
+                deploymentId, ontologyId, id, target);
         List<String> steps = List.of("LOCK_PROPOSAL", "BUILD_CONTRACT", "DEPLOY_HUGEGRAPH", "MIGRATE_OPENSEARCH", "ACTIVATE_REVISION", "PUBLISH_AUDIT");
         for (int i = 0; i < steps.size(); i++) jdbc.update("INSERT INTO control.ontology_deployment_steps(id,deployment_id,step_order,step_name,status) VALUES (?,?,?,?,'PENDING')",
                 UUID.randomUUID(), deploymentId, i + 1, steps.get(i));
         jdbc.update("UPDATE control.ontology_proposals SET status='PUBLISHING',updated_at=now() WHERE id=?", id);
         audit(actor, "ONTOLOGY_PUBLISH_REQUESTED", "ONTOLOGY_PROPOSAL", id.toString(), "请求发布本体 revision", Map.of("targetRevision", target));
-        tasks.execute(() -> deploy(deploymentId, actor));
+        afterCommit(() -> dispatchDeployment(deploymentId, ontologyId, actor));
         return deployment(deploymentId);
     }
 
@@ -384,10 +397,12 @@ public class ModelingService {
         return jdbc.query("""
                 SELECT h.*,r.display_name resource_name FROM control.ontology_health_issues h
                 LEFT JOIN control.ontology_resources r ON r.id=h.resource_id
+                WHERE h.ontology_id=?
                 ORDER BY CASE h.severity WHEN 'CRITICAL' THEN 1 WHEN 'ERROR' THEN 2 WHEN 'WARNING' THEN 3 ELSE 4 END,h.last_seen_at DESC
                 """, (row, n) -> new HealthIssue(row.getObject("id", UUID.class), row.getString("severity"), row.getString("category"),
                 row.getObject("resource_id", UUID.class), row.getString("resource_name"), row.getString("title"), row.getString("evidence"),
-                row.getString("recommendation"), row.getString("owner_name"), row.getString("status"), instant(row, "first_seen_at"), instant(row, "last_seen_at")));
+                row.getString("recommendation"), row.getString("owner_name"), row.getString("status"), instant(row, "first_seen_at"), instant(row, "last_seen_at")),
+                WorkspaceContext.id());
     }
 
     public List<HistoryEntry> history() {
@@ -396,61 +411,130 @@ public class ModelingService {
                        (SELECT count(*) FROM control.object_types ot WHERE ot.revision=rev.revision) resource_count,
                        p.id proposal_id,p.title proposal_title
                 FROM control.ontology_revisions rev
-                LEFT JOIN control.ontology_proposals p ON p.published_revision=rev.revision
+                LEFT JOIN control.ontology_proposals p ON p.published_revision=rev.revision AND p.ontology_id=rev.ontology_id
+                WHERE rev.ontology_id=?
                 ORDER BY rev.revision DESC
                 """, (row, n) -> new HistoryEntry(row.getLong("revision"), row.getString("status"), instant(row, "activated_at"),
-                instant(row, "created_at"), row.getLong("resource_count"), row.getObject("proposal_id", UUID.class), row.getString("proposal_title")));
+                instant(row, "created_at"), row.getLong("resource_count"), row.getObject("proposal_id", UUID.class), row.getString("proposal_title")),
+                WorkspaceContext.id());
     }
 
     public ActionPreview previewAction(UUID id, ActionPreviewRequest request, Actor actor) {
+        request = request == null ? new ActionPreviewRequest(Map.of(), null, null) : request;
         ResourceView action = get(id);
         if (action.kind() != ResourceKind.ACTION) throw problem("RESOURCE_KIND_INVALID", "目标资源不是 Action");
+        String operation = upper(Objects.toString(action.definition().getOrDefault("operation", "UPDATE")));
         List<Map<String, Object>> rules = castList(action.definition().get("rules"));
-        policy.validateActionRules(rules);
-        if (request == null || request.objectId() == null || request.objectId().isBlank()) {
+        policy.validateActionRules(operation, rules);
+        if (!"CREATE".equals(operation)
+                && (request.objectId() == null || request.objectId().isBlank())) {
             throw problem("ACTION_OBJECT_REQUIRED", "Action Preview 必须指定目标对象");
         }
         UUID targetTypeId = UUID.fromString(Objects.toString(action.definition().get("targetObjectTypeId")));
         ResourceView targetType = get(targetTypeId);
-        var current = explorerStorage.getObject(targetType.physicalKey(), request.objectId());
-        if (request.objectVersion() != null && request.objectVersion() != current.version()) {
+        var current = "CREATE".equals(operation) ? null
+                : explorerStorage.getObject(targetType.physicalKey(), request.objectId());
+        if (current != null && request.objectVersion() != null && request.objectVersion() != current.version()) {
             throw problem("ACTION_OBJECT_VERSION_CONFLICT", "目标对象已发生变化，请重新预览");
         }
         Map<String, Object> parameters = request.parameters() == null ? Map.of() : request.parameters();
         validateActionParameters(action, parameters);
-        ObjectNode next = current.payload().deepCopy();
-        List<Map<String, Object>> visibleDiff = new ArrayList<>();
-        for (Map<String, Object> rule : rules) {
-            if (!"SET_PROPERTY".equals(upper(Objects.toString(rule.get("type"), "SET_PROPERTY")))) {
-                throw problem("ACTION_RULE_UNSUPPORTED", "当前执行器只允许声明式 SET_PROPERTY 规则");
-            }
-            UUID propertyId = UUID.fromString(Objects.toString(rule.get("targetPropertyId")));
-            PropertyView property = targetType.properties().stream().filter(value -> value.id().equals(propertyId)).findFirst()
-                    .orElseThrow(() -> problem("ACTION_PROPERTY_INVALID", "Action 引用了不存在的目标属性"));
-            Object value = actionValue(rule, parameters);
-            JsonNode before = next.get(property.physicalKey());
-            next.set(property.physicalKey(), json.valueToTree(value));
-            Map<String, Object> change = new LinkedHashMap<>();
-            change.put("propertyId", property.id());
-            change.put("property", property.displayName());
-            change.put("before", property.sensitive() ? "••••" : jsonValue(before));
-            change.put("after", property.sensitive() ? "••••" : value);
-            visibleDiff.add(change);
+        if (!conditionMatches(castMap(action.definition().get("submitCondition")),
+                current == null ? null : current.payload(), parameters)) {
+            throw problem("ACTION_SUBMISSION_CONDITION_FAILED", "当前对象或参数不满足 Action 提交条件");
         }
+        ObjectNode next = current == null ? json.createObjectNode() : current.payload().deepCopy();
+        List<Map<String, Object>> visibleDiff = new ArrayList<>();
+        List<Map<String, Object>> edits = new ArrayList<>();
+        if (List.of("CREATE", "UPDATE").contains(operation)) {
+            for (Map<String, Object> rule : rules) {
+                UUID propertyId = UUID.fromString(Objects.toString(rule.get("targetPropertyId")));
+                PropertyView property = targetType.properties().stream()
+                        .filter(value -> value.id().equals(propertyId)).findFirst()
+                        .orElseThrow(() -> problem("ACTION_PROPERTY_INVALID", "Action 引用了不存在的目标属性"));
+                Object value = actionValue(rule, parameters);
+                JsonNode before = next.get(property.physicalKey());
+                next.set(property.physicalKey(), json.valueToTree(value));
+                Map<String, Object> change = new LinkedHashMap<>();
+                change.put("operation", "SET_PROPERTY");
+                change.put("propertyId", property.id());
+                change.put("property", property.displayName());
+                change.put("before", property.sensitive() ? "••••" : jsonValue(before));
+                change.put("after", property.sensitive() ? "••••" : value);
+                visibleDiff.add(change);
+            }
+            String objectId = actionObjectId(request, parameters, targetType, next);
+            visibleDiff.forEach(change -> {
+                change.put("targetTypeId", targetType.id());
+                change.put("targetId", objectId);
+            });
+            if ("CREATE".equals(operation)) {
+                visibleDiff.addFirst(new LinkedHashMap<>(Map.of(
+                        "operation", "CREATE_OBJECT",
+                        "targetTypeId", targetType.id(),
+                        "targetId", objectId)));
+            }
+            Map<String, Object> edit = new LinkedHashMap<>();
+            edit.put("operation", "CREATE".equals(operation) ? "object.create" : "object.update");
+            edit.put("objectTypeId", targetType.physicalKey());
+            edit.put("objectId", objectId);
+            edit.put("expectedVersion", current == null ? null : current.version());
+            edit.put("properties", next);
+            edits.add(edit);
+        } else if ("RETIRE".equals(operation)) {
+            edits.add(new LinkedHashMap<>(Map.of(
+                    "operation", "object.delete",
+                    "objectTypeId", targetType.physicalKey(),
+                    "objectId", request.objectId(),
+                    "expectedVersion", current.version(),
+                    "properties", Map.of())));
+            visibleDiff.add(Map.of("operation", "RETIRE_OBJECT", "targetTypeId", targetType.id(),
+                    "targetId", request.objectId()));
+        } else {
+            for (Map<String, Object> rule : rules) {
+                ResourceView relation = get(UUID.fromString(Objects.toString(rule.get("relationTypeId"))));
+                if (relation.kind() != ResourceKind.LINK_TYPE) {
+                    throw problem("ACTION_RELATION_INVALID", "Action 关系规则引用的不是关系类型");
+                }
+                ResourceView sourceType = get(UUID.fromString(
+                        Objects.toString(relation.definition().get("leftObjectTypeId"))));
+                ResourceView destinationType = get(UUID.fromString(
+                        Objects.toString(relation.definition().get("rightObjectTypeId"))));
+                String sourceId = actionEndpoint(rule, "source", parameters, request.objectId());
+                String targetId = actionEndpoint(rule, "target", parameters, request.objectId());
+                String relationId = actionEndpoint(rule, "relation", parameters,
+                        fingerprint(relation.physicalKey() + ":" + sourceId + ":" + targetId));
+                Map<String, Object> edit = new LinkedHashMap<>();
+                edit.put("operation", "LINK".equals(operation) ? "relation.create" : "relation.delete");
+                edit.put("relationTypeId", relation.physicalKey());
+                edit.put("relationId", relationId);
+                edit.put("sourceObjectTypeId", sourceType.physicalKey());
+                edit.put("sourceObjectId", sourceId);
+                edit.put("targetObjectTypeId", destinationType.physicalKey());
+                edit.put("targetObjectId", targetId);
+                edit.put("expectedVersion", request.objectVersion());
+                edit.put("properties", rule.getOrDefault("properties", Map.of()));
+                edits.add(edit);
+                visibleDiff.add(Map.of("operation", operation, "targetTypeId", relation.id(),
+                        "targetId", relationId, "sourceObjectId", sourceId,
+                        "targetObjectId", targetId));
+            }
+        }
+        boolean approvalRequired = approvalRequired(action, current == null ? null : current.payload(), parameters);
         Instant expires = Instant.now().plus(10, ChronoUnit.MINUTES);
         UUID previewId = UUID.randomUUID();
         String token = previewId + "." + UUID.randomUUID();
-        Map<String, Object> edit = Map.of("operation", "object.update", "objectTypeId", targetType.physicalKey(),
-                "objectId", request.objectId(), "expectedVersion", current.version(), "properties", next);
         jdbc.update("""
-                INSERT INTO control.action_previews(id,action_id,action_version,actor_id,object_id,expected_version,
-                  parameters,edits,token_hash,expires_at)
-                VALUES (?,?,?,?,?,?,?::jsonb,?::jsonb,?,?)
-                """, previewId, id, action.version(), actor.id(), request.objectId(), current.version(),
-                writeJson(parameters), writeJson(List.of(edit)), fingerprint(token), Timestamp.from(expires));
-        return new ActionPreview(id, token, expires, List.of(edit),
-                "ALWAYS".equals(action.definition().get("approvalPolicy")) ? List.of("Resource Owner") : List.of(),
-                Map.of("changes", visibleDiff, "parameterCount", parameters.size(), "previewId", previewId));
+                INSERT INTO control.action_previews(
+                  id,ontology_id,action_id,action_version,actor_id,object_id,expected_version,
+                  parameters,edits,token_hash,expires_at,approval_required)
+                VALUES (?,?,?,?,?,?,?,?::jsonb,?::jsonb,?,?,?)
+                """, previewId, WorkspaceContext.id(), id, action.version(), actor.id(),
+                request == null ? null : request.objectId(), current == null ? null : current.version(),
+                writeJson(parameters), writeJson(edits), fingerprint(token), Timestamp.from(expires),
+                approvalRequired);
+        return new ActionPreview(previewId, id, action.version(), token, expires, visibleDiff,
+                approvalRequired);
     }
 
     @Transactional
@@ -465,64 +549,180 @@ public class ModelingService {
         PreviewRecord preview = jdbc.query("""
                 SELECT * FROM control.action_previews WHERE action_id=? AND actor_id=? AND token_hash=?
                 """, (row, number) -> new PreviewRecord(row.getObject("id", UUID.class), row.getInt("action_version"),
-                row.getString("edits"), instant(row, "expires_at"), instant(row, "consumed_at")),
+                row.getString("edits"), row.getBoolean("approval_required"),
+                instant(row, "expires_at"), instant(row, "consumed_at")),
                 actionId, actor.id(), fingerprint(request.previewToken())).stream().findFirst()
                 .orElseThrow(() -> problem("ACTION_PREVIEW_INVALID", "Preview Token 无效或不属于当前用户"));
         if (preview.consumedAt() != null || preview.expiresAt().isBefore(Instant.now())) {
             throw problem("ACTION_PREVIEW_EXPIRED", "Preview Token 已使用或过期，请重新预览");
         }
         List<Map<String, Object>> rawEdits = readJson(preview.edits(), new TypeReference<>() { });
-        List<MutationEdit> edits = rawEdits.stream().map(edit -> new MutationEdit(
-                Objects.toString(edit.get("operation")), Objects.toString(edit.get("objectTypeId")),
-                Objects.toString(edit.get("objectId")), ((Number) edit.get("expectedVersion")).longValue(),
-                null, null, null, null, null, null, json.valueToTree(edit.get("properties")))).toList();
         UUID executionId = UUID.randomUUID();
         String correlationId = "action:" + executionId;
+        String initialStatus = preview.approvalRequired() ? "PENDING_APPROVAL" : "SUBMITTED";
         jdbc.update("""
-                INSERT INTO control.action_executions(id,preview_id,action_id,actor_id,actor_name,idempotency_key,
-                  correlation_id,status) VALUES (?,?,?,?,?,?,?,'SUBMITTED')
-                """, executionId, preview.id(), actionId, actor.id(), actor.name(), request.idempotencyKey(), correlationId);
+                INSERT INTO control.action_executions(
+                  id,ontology_id,preview_id,action_id,action_version,actor_id,actor_name,
+                  idempotency_key,correlation_id,trace_id,status)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                """, executionId, WorkspaceContext.id(), preview.id(), actionId, preview.actionVersion(),
+                actor.id(), actor.name(), request.idempotencyKey(), correlationId,
+                UUID.randomUUID().toString(), initialStatus);
         jdbc.update("UPDATE control.action_previews SET consumed_at=now() WHERE id=?", preview.id());
-        OntologyMutationBatch batch = new OntologyMutationBatch(UUID.randomUUID(), activeRevision(), actionId.toString(),
-                (long) preview.actionVersion(), preview.id().toString(), request.idempotencyKey(), actor.id(),
-                Instant.now(), correlationId, edits);
-        try {
-            actionPublisher.publish(batch);
-            jdbc.update("UPDATE control.action_executions SET status='PROJECTING' WHERE id=?", executionId);
+        if (!preview.approvalRequired()) {
+            publishMutation(actionId, executionId, preview, request.idempotencyKey(), actor.id());
             audit(actor, "ACTION_EXECUTED", "ACTION", actionId.toString(), "提交本体 Action Mutation",
-                    Map.of("executionId", executionId, "editCount", edits.size()));
-        } catch (RuntimeException failure) {
-            jdbc.update("UPDATE control.action_executions SET status='FAILED',safe_error=? WHERE id=?",
-                    "Action Mutation 提交失败", executionId);
-            throw failure;
+                    Map.of("executionId", executionId, "editCount", rawEdits.size()));
+        } else {
+            audit(actor, "ACTION_APPROVAL_REQUESTED", "ACTION", actionId.toString(),
+                    "Action 等待 Resource Owner 审批", Map.of("executionId", executionId));
         }
+        return actionExecution(executionId, actor);
+    }
+
+    @Transactional
+    public ActionExecution reviewAction(UUID executionId, ActionReviewRequest request, Actor actor) {
+        String decision = switch (upper(request == null ? null : request.decision())) {
+            case "APPROVE", "APPROVED" -> "APPROVED";
+            case "REJECT", "REJECTED" -> "REJECTED";
+            default -> "";
+        };
+        if (!List.of("APPROVED", "REJECTED").contains(decision)) {
+            throw problem("ACTION_REVIEW_INVALID", "审批决定必须为 APPROVED 或 REJECTED");
+        }
+        String comment = request == null ? "" : Objects.toString(request.comment(), "").trim();
+        if (comment.isBlank() || comment.length() > 4000) {
+            throw problem("ACTION_REVIEW_COMMENT_INVALID", "审批意见必须为 1—4000 个字符");
+        }
+        ActionExecution execution = jdbc.query(
+                "SELECT * FROM control.action_executions WHERE id=? AND ontology_id=? FOR UPDATE",
+                (row, number) -> actionExecution(row), executionId, WorkspaceContext.id()).stream().findFirst()
+                .orElseThrow(() -> problem("ACTION_EXECUTION_NOT_FOUND", "Action Execution 不存在"));
+        if (!"PENDING_APPROVAL".equals(execution.status())) {
+            String existingDecision = jdbc.query("""
+                    SELECT decision FROM control.action_execution_reviews
+                    WHERE execution_id=? AND reviewer_id=?
+                    """, (row, number) -> row.getString(1), executionId, actor.id())
+                    .stream().findFirst().orElse(null);
+            if (decision.equals(existingDecision)) return actionExecution(executionId, actor);
+            throw problem("ACTION_REVIEW_STATE_INVALID", "只有等待审批的 Action 才能审核");
+        }
+        ResourceView action = get(execution.actionTypeId());
+        if (!actor.admin() && !actor.id().equals(action.ownerId())) {
+            throw problem("ACTION_REVIEW_FORBIDDEN", "只有本体管理员或 Action Resource Owner 可以审批");
+        }
+        if (actor.id().equals(execution.submittedBy())) {
+            throw problem("ACTION_SELF_APPROVAL_FORBIDDEN", "Action 提交者不能审批自己的请求");
+        }
+        jdbc.update("""
+                INSERT INTO control.action_execution_reviews(
+                  id,execution_id,decision,comment,reviewer_id,reviewer_name)
+                VALUES (?,?,?,?,?,?)
+                """, UUID.randomUUID(), executionId, decision, comment, actor.id(), actor.name());
+        if ("REJECTED".equals(decision)) {
+            jdbc.update("""
+                    UPDATE control.action_executions
+                    SET status='REJECTED',completed_at=now() WHERE id=?
+                    """, executionId);
+            audit(actor, "ACTION_REJECTED", "ACTION", action.id().toString(),
+                    "拒绝 Action Execution", Map.of("executionId", executionId));
+            return actionExecution(executionId, actor);
+        }
+        PreviewRecord preview = jdbc.query("""
+                SELECT * FROM control.action_previews WHERE id=?
+                """, (row, number) -> new PreviewRecord(row.getObject("id", UUID.class),
+                row.getInt("action_version"), row.getString("edits"),
+                row.getBoolean("approval_required"), instant(row, "expires_at"),
+                instant(row, "consumed_at")), execution.previewId()).getFirst();
+        String idempotencyKey = jdbc.queryForObject(
+                "SELECT idempotency_key FROM control.action_executions WHERE id=?",
+                String.class, executionId);
+        publishMutation(action.id(), executionId, preview, idempotencyKey, execution.submittedBy());
+        audit(actor, "ACTION_APPROVED", "ACTION", action.id().toString(),
+                "批准并提交 Action Mutation", Map.of("executionId", executionId));
         return actionExecution(executionId, actor);
     }
 
     public ActionExecution actionExecution(UUID id, Actor actor) {
         ActionExecution execution = jdbc.query("""
-                SELECT * FROM control.action_executions WHERE id=? AND (actor_id=? OR ?)
-                """, (row, number) -> actionExecution(row), id, actor.id(), actor.admin()).stream().findFirst()
+                SELECT e.* FROM control.action_executions e
+                JOIN control.ontology_resources a ON a.id=e.action_id
+                WHERE e.id=? AND e.ontology_id=?
+                  AND (e.actor_id=? OR ? OR a.owner_id=?)
+                """, (row, number) -> actionExecution(row), id, WorkspaceContext.id(),
+                actor.id(), actor.admin(), actor.id()).stream().findFirst()
                 .orElseThrow(() -> problem("ACTION_EXECUTION_NOT_FOUND", "Action Execution 不存在或无权访问"));
         return refreshExecution(execution);
     }
 
-    public FunctionTestResult testFunction(UUID id, FunctionTestRequest request) {
+    public List<ActionExecution> actionExecutions(String status, Actor actor) {
+        String normalized = upper(status);
+        if (!normalized.isBlank() && !List.of(
+                "PENDING_APPROVAL", "SUBMITTED", "PROJECTING", "SUCCEEDED",
+                "DEGRADED", "FAILED", "REJECTED").contains(normalized)) {
+            throw problem("ACTION_EXECUTION_STATUS_INVALID", "Action Execution 状态无效");
+        }
+        List<ActionExecution> executions = jdbc.query("""
+                SELECT e.* FROM control.action_executions e
+                JOIN control.ontology_resources a ON a.id=e.action_id
+                WHERE e.ontology_id=?
+                  AND (?='' OR e.status=?)
+                  AND (e.actor_id=? OR ? OR a.owner_id=?)
+                ORDER BY e.submitted_at DESC
+                LIMIT 200
+                """, (row, number) -> actionExecution(row), WorkspaceContext.id(),
+                normalized, normalized, actor.id(), actor.admin(), actor.id());
+        return executions.stream().map(this::refreshExecution).toList();
+    }
+
+    public FunctionExecution testFunction(UUID id, FunctionTestRequest request, Actor actor) {
         long started = System.nanoTime();
         ResourceView function = get(id);
         if (function.kind() != ResourceKind.FUNCTION) throw problem("RESOURCE_KIND_INVALID", "目标资源不是 Function");
         Map<String, Object> dsl = castMap(function.definition().get("queryDsl"));
         policy.validateFunctionDsl(dsl);
-        List<UUID> dependencies = values(function.definition().get("dependencyIds")).stream().map(String::valueOf).map(UUID::fromString).toList();
-        Object result = Map.of("rows", List.of(), "explain", "Caller-scoped read-only DSL validated", "inputs", request == null ? Map.of() : map(request.inputs()));
-        return new FunctionTestResult(id, "v" + function.version(), value((String) function.definition().get("outputType"), "TABLE"),
-                result, Math.max(1, (System.nanoTime() - started) / 1_000_000), dependencies, true);
+        Object result = functionRuntime.execute(dsl, request == null ? Map.of() : map(request.inputs()), actor);
+        return new FunctionExecution(UUID.randomUUID(), id, function.version(), activeRevision(), result,
+                Math.max(1, (System.nanoTime() - started) / 1_000_000), UUID.randomUUID().toString());
+    }
+
+    @Scheduled(fixedDelay = 5_000, initialDelay = 5_000)
+    public void recoverPendingDeployments() {
+        jdbc.query("""
+                SELECT id,ontology_id FROM control.ontology_deployments
+                WHERE status='PENDING' ORDER BY created_at LIMIT 20
+                """, (row, number) -> Map.entry(
+                row.getObject("id", UUID.class), row.getObject("ontology_id", UUID.class)))
+                .forEach(deployment -> dispatchDeployment(deployment.getKey(), deployment.getValue(),
+                        new Actor("platform-recovery", "Platform Recovery", true)));
+    }
+
+    private void afterCommit(Runnable work) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            work.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                work.run();
+            }
+        });
+    }
+
+    private void dispatchDeployment(UUID deploymentId, UUID ontologyId, Actor actor) {
+        tasks.execute(() -> WorkspaceContext.run(ontologyId, () -> deploy(deploymentId, actor)));
     }
 
     private void deploy(UUID deploymentId, Actor actor) {
+        int claimed = jdbc.update("""
+                UPDATE control.ontology_deployments
+                SET status='RUNNING',started_at=coalesce(started_at,now())
+                WHERE id=? AND status='PENDING'
+                """, deploymentId);
+        if (claimed == 0) return;
         DeploymentView deployment = deployment(deploymentId);
         try {
-            jdbc.update("UPDATE control.ontology_deployments SET status='RUNNING',started_at=now() WHERE id=?", deploymentId);
             completeStep(deploymentId, 1, () -> {
                 ProposalView proposal = proposal(deployment.proposalId());
                 if (!"PUBLISHING".equals(proposal.status())) throw new IllegalStateException("Proposal lock was lost");
@@ -543,10 +743,10 @@ public class ModelingService {
             jdbc.update("UPDATE control.ontology_deployments SET status='FAILED',safe_error=?,completed_at=now() WHERE id=?", safeError, deploymentId);
             jdbc.update("UPDATE control.ontology_proposals SET status='FAILED',updated_at=now() WHERE id=?", deployment.proposalId());
             jdbc.update("""
-                    INSERT INTO control.ontology_health_issues(id,issue_key,severity,category,title,evidence,recommendation,owner_name)
-                    VALUES (?,?,'CRITICAL','DEPLOYMENT','本体发布失败',?,'修复外部依赖后从 Proposal 重试','Platform Admin')
-                    ON CONFLICT (issue_key) DO UPDATE SET evidence=excluded.evidence,last_seen_at=now(),status='OPEN'
-                    """, UUID.randomUUID(), "deployment:" + deployment.proposalId(), safeError);
+                    INSERT INTO control.ontology_health_issues(id,ontology_id,issue_key,severity,category,title,evidence,recommendation,owner_name)
+                    VALUES (?,?,?,'CRITICAL','DEPLOYMENT','本体发布失败',?,'修复外部依赖后从 Proposal 重试','Platform Admin')
+                    ON CONFLICT (ontology_id,issue_key) DO UPDATE SET evidence=excluded.evidence,last_seen_at=now(),status='OPEN'
+                    """, UUID.randomUUID(), WorkspaceContext.id(), "deployment:" + deployment.proposalId(), safeError);
         }
     }
 
@@ -568,8 +768,6 @@ public class ModelingService {
 
     private void buildSnapshot(DeploymentView deployment) {
         transactions.executeWithoutResult(status -> {
-            jdbc.execute("SELECT pg_advisory_xact_lock(700022)");
-            jdbc.update("INSERT INTO control.ontology_revisions(revision,status) VALUES (?,'DRAFT')", deployment.targetRevision());
             long active = activeRevision();
             jdbc.update("INSERT INTO control.object_types(revision,type_id,display_name,active) SELECT ?,type_id,display_name,active FROM control.object_types WHERE revision=?", deployment.targetRevision(), active);
             jdbc.update("INSERT INTO control.object_properties(revision,type_id,property_id,value_type,required,searchable,sensitive) SELECT ?,type_id,property_id,value_type,required,searchable,sensitive FROM control.object_properties WHERE revision=?", deployment.targetRevision(), active);
@@ -608,8 +806,10 @@ public class ModelingService {
         transactions.executeWithoutResult(status -> {
             jdbc.execute("SELECT pg_advisory_xact_lock(700022)");
             if (activeRevision() != proposal(deployment.proposalId()).baselineRevision()) throw new IllegalStateException("Ontology revision changed during deployment");
-            jdbc.update("UPDATE control.ontology_revisions SET status='RETIRED' WHERE status='ACTIVE'");
-            jdbc.update("UPDATE control.ontology_revisions SET status='ACTIVE',activated_at=now() WHERE revision=?", deployment.targetRevision());
+            jdbc.update("UPDATE control.ontology_revisions SET status='RETIRED' WHERE ontology_id=? AND status='ACTIVE'",
+                    WorkspaceContext.id());
+            jdbc.update("UPDATE control.ontology_revisions SET status='ACTIVE',activated_at=now() WHERE ontology_id=? AND revision=?",
+                    WorkspaceContext.id(), deployment.targetRevision());
             jdbc.update("""
                     UPDATE control.ontology_resource_versions v SET lifecycle='PUBLISHED',published_revision=?,published_at=now()
                     FROM control.ontology_proposal_tasks t WHERE t.proposal_id=? AND t.resource_version_id=v.id
@@ -623,7 +823,8 @@ public class ModelingService {
                     """, deployment.targetRevision(), deployment.proposalId());
             jdbc.update("UPDATE control.ontology_proposal_tasks SET status='PUBLISHED' WHERE proposal_id=?", deployment.proposalId());
             jdbc.update("UPDATE control.ontology_proposals SET status='PUBLISHED',published_revision=?,updated_at=now() WHERE id=?", deployment.targetRevision(), deployment.proposalId());
-            jdbc.update("UPDATE control.ontology_health_issues SET status='RESOLVED',last_seen_at=now() WHERE issue_key=?", "deployment:" + deployment.proposalId());
+            jdbc.update("UPDATE control.ontology_health_issues SET status='RESOLVED',last_seen_at=now() WHERE ontology_id=? AND issue_key=?",
+                    WorkspaceContext.id(), "deployment:" + deployment.proposalId());
         });
     }
 
@@ -721,11 +922,21 @@ public class ModelingService {
     private void insertActionVersion(UUID resourceId, UUID versionId, ResourceDraftRequest request) {
         ResourceView target = get(WorkspaceContext.id(), Objects.requireNonNull(request.targetObjectTypeId(), "targetObjectTypeId"));
         if (target.kind() != ResourceKind.OBJECT_TYPE) throw problem("ACTION_TARGET_INVALID", "Action 目标必须是对象类型");
-        policy.validateActionRules(list(request.rules()));
+        String operation = value(request.operation(), "UPDATE");
+        String approvalPolicy = value(request.approvalPolicy(), "NONE");
+        policy.validateActionContract(operation, approvalPolicy);
+        policy.validateActionRules(operation, list(request.rules()));
+        Map<String, Object> submitCondition = map(request.submitCondition());
+        if ("CONDITIONAL".equals(upper(approvalPolicy))
+                && !submitCondition.containsKey("approvalWhen")
+                && !submitCondition.containsKey("approvalCondition")) {
+            throw problem("ACTION_APPROVAL_CONDITION_REQUIRED",
+                    "CONDITIONAL 审批策略必须声明 approvalWhen 条件");
+        }
         jdbc.update("INSERT INTO control.action_types(resource_id,target_object_type_id) VALUES (?,?)", resourceId, target.id());
         jdbc.update("INSERT INTO control.action_type_versions(version_id,resource_id,operation,approval_policy,rules,submit_condition) VALUES (?,?,?,?,?::jsonb,?::jsonb)",
-                versionId, resourceId, upper(value(request.operation(), "UPDATE")), upper(value(request.approvalPolicy(), "NONE")),
-                writeJson(list(request.rules())), writeJson(map(request.submitCondition())));
+                versionId, resourceId, upper(value(request.operation(), "UPDATE")), upper(approvalPolicy),
+                writeJson(list(request.rules())), writeJson(submitCondition));
         insertParameters("action_parameters", "action_version_id", versionId, request.parameters());
     }
 
@@ -849,17 +1060,141 @@ public class ModelingService {
     }
 
     private Object actionValue(Map<String, Object> rule, Map<String, Object> parameters) {
-        String parameter = Objects.toString(rule.get("valueFrom"), "");
+        String parameter = Objects.toString(rule.containsKey("valueFrom")
+                ? rule.get("valueFrom") : rule.get("valueFromParameter"), "");
         if (!parameter.isBlank()) {
             if (!parameters.containsKey(parameter)) throw problem("ACTION_PARAMETER_REQUIRED", "缺少 Action 参数：" + parameter);
             return parameters.get(parameter);
         }
         if (rule.containsKey("value")) return rule.get("value");
+        if (rule.containsKey("literalValue")) return rule.get("literalValue");
         throw problem("ACTION_RULE_VALUE_REQUIRED", "SET_PROPERTY 规则需要 value 或 valueFrom");
     }
 
     private Object jsonValue(JsonNode value) {
         return value == null || value.isNull() ? "" : json.convertValue(value, Object.class);
+    }
+
+    private String actionObjectId(ActionPreviewRequest request, Map<String, Object> parameters,
+                                  ResourceView targetType, ObjectNode payload) {
+        if (request != null && request.objectId() != null && !request.objectId().isBlank()) {
+            return request.objectId();
+        }
+        Object explicit = parameters.get("objectId");
+        if (explicit != null && !String.valueOf(explicit).isBlank()) return String.valueOf(explicit);
+        PropertyView primary = targetType.properties().stream().filter(PropertyView::primaryKey)
+                .findFirst().orElseThrow(() -> problem("ACTION_PRIMARY_KEY_MISSING",
+                        "CREATE Action 的目标对象类型没有主键"));
+        JsonNode value = payload.get(primary.physicalKey());
+        if (value == null || value.isNull() || value.asText().isBlank()) {
+            throw problem("ACTION_OBJECT_ID_REQUIRED", "CREATE Action 必须通过 objectId 或主键规则生成稳定对象 ID");
+        }
+        return value.asText();
+    }
+
+    private String actionEndpoint(Map<String, Object> rule, String endpoint,
+                                  Map<String, Object> parameters, String fallback) {
+        for (String parameterKey : List.of(endpoint + "ObjectIdFrom", endpoint + "IdFrom",
+                endpoint + "IdFromParameter")) {
+            String parameter = Objects.toString(rule.get(parameterKey), "");
+            if (!parameter.isBlank()) {
+                Object value = parameters.get(parameter);
+                if (value == null || String.valueOf(value).isBlank()) {
+                    throw problem("ACTION_ENDPOINT_REQUIRED", "缺少关系端点参数：" + parameter);
+                }
+                return String.valueOf(value);
+            }
+        }
+        for (String literalKey : List.of(endpoint + "ObjectId", endpoint + "Id")) {
+            String value = Objects.toString(rule.get(literalKey), "");
+            if (!value.isBlank()) return value;
+        }
+        if (fallback != null && !fallback.isBlank()) return fallback;
+        throw problem("ACTION_ENDPOINT_REQUIRED", "关系 " + endpoint + " 端点不能为空");
+    }
+
+    private boolean approvalRequired(ResourceView action, JsonNode current,
+                                     Map<String, Object> parameters) {
+        String policyName = upper(Objects.toString(
+                action.definition().getOrDefault("approvalPolicy", "NONE")));
+        if ("ALWAYS".equals(policyName)) return true;
+        if (!"CONDITIONAL".equals(policyName)) return false;
+        Map<String, Object> submitCondition = castMap(action.definition().get("submitCondition"));
+        Object condition = submitCondition.containsKey("approvalWhen")
+                ? submitCondition.get("approvalWhen") : submitCondition.get("approvalCondition");
+        return conditionMatches(castMap(condition), current, parameters);
+    }
+
+    private boolean conditionMatches(Map<String, Object> condition, JsonNode current,
+                                     Map<String, Object> parameters) {
+        if (condition == null || condition.isEmpty()) return true;
+        if (condition.get("submitWhen") instanceof Map<?, ?> nested) {
+            return conditionMatches(castMap(nested), current, parameters);
+        }
+        if (condition.get("all") instanceof List<?> all) {
+            return all.stream().allMatch(value -> conditionMatches(castMap(value), current, parameters));
+        }
+        if (condition.get("any") instanceof List<?> any) {
+            return any.stream().anyMatch(value -> conditionMatches(castMap(value), current, parameters));
+        }
+        String field = Objects.toString(condition.get("field"), "");
+        String parameter = Objects.toString(condition.get("parameter"), "");
+        if (field.isBlank() && parameter.isBlank()) return true;
+        Object actual = !parameter.isBlank() ? parameters.get(parameter)
+                : current == null ? null : jsonValue(current.get(field));
+        Object expected = condition.containsKey("valueFromParameter")
+                ? parameters.get(Objects.toString(condition.get("valueFromParameter"))) : condition.get("value");
+        return switch (upper(Objects.toString(condition.getOrDefault("operator", "EQUALS")))) {
+            case "CONTAINS" -> actual != null && String.valueOf(actual).contains(String.valueOf(expected));
+            case "GREATER_THAN" -> actionDecimal(actual).compareTo(actionDecimal(expected)) > 0;
+            case "IN" -> condition.get("values") instanceof List<?> values
+                    && values.stream().anyMatch(value -> Objects.equals(String.valueOf(value), String.valueOf(actual)));
+            case "IS_NOT_NULL" -> actual != null;
+            case "IS_NULL" -> actual == null;
+            case "LESS_THAN" -> actionDecimal(actual).compareTo(actionDecimal(expected)) < 0;
+            case "NOT_EQUALS" -> !Objects.equals(String.valueOf(actual), String.valueOf(expected));
+            default -> Objects.equals(String.valueOf(actual), String.valueOf(expected));
+        };
+    }
+
+    private void publishMutation(UUID actionId, UUID executionId, PreviewRecord preview,
+                                 String idempotencyKey, String requestedBy) {
+        List<Map<String, Object>> rawEdits = readJson(preview.edits(), new TypeReference<>() { });
+        List<MutationEdit> edits = rawEdits.stream().map(this::mutationEdit).toList();
+        String correlationId = jdbc.queryForObject(
+                "SELECT correlation_id FROM control.action_executions WHERE id=?",
+                String.class, executionId);
+        OntologyMutationBatch batch = new OntologyMutationBatch(
+                UUID.randomUUID(), WorkspaceContext.id(), activeRevision(), actionId.toString(),
+                (long) preview.actionVersion(), preview.id().toString(), idempotencyKey,
+                requestedBy, Instant.now(), correlationId, edits);
+        actionPublisher.enqueue(executionId, batch);
+        jdbc.update("UPDATE control.action_executions SET status='SUBMITTED' WHERE id=?",
+                executionId);
+    }
+
+    private BigDecimal actionDecimal(Object value) {
+        try {
+            return new BigDecimal(String.valueOf(value));
+        } catch (NumberFormatException failure) {
+            throw problem("ACTION_CONDITION_TYPE_INVALID", "Action 条件要求数值参数");
+        }
+    }
+
+    private MutationEdit mutationEdit(Map<String, Object> edit) {
+        Object expected = edit.get("expectedVersion");
+        return new MutationEdit(
+                Objects.toString(edit.get("operation"), null),
+                Objects.toString(edit.get("objectTypeId"), null),
+                Objects.toString(edit.get("objectId"), null),
+                expected instanceof Number number ? number.longValue() : null,
+                Objects.toString(edit.get("relationTypeId"), null),
+                Objects.toString(edit.get("relationId"), null),
+                Objects.toString(edit.get("sourceObjectTypeId"), null),
+                Objects.toString(edit.get("sourceObjectId"), null),
+                Objects.toString(edit.get("targetObjectTypeId"), null),
+                Objects.toString(edit.get("targetObjectId"), null),
+                json.valueToTree(edit.getOrDefault("properties", Map.of())));
     }
 
     private ActionExecution refreshExecution(ActionExecution execution) {
@@ -885,8 +1220,10 @@ public class ModelingService {
 
     private ActionExecution actionExecution(ResultSet row) throws SQLException {
         return new ActionExecution(row.getObject("id", UUID.class), row.getObject("action_id", UUID.class),
-                row.getObject("preview_id", UUID.class), row.getString("status"), row.getString("correlation_id"),
-                row.getString("safe_error"), instant(row, "submitted_at"), instant(row, "completed_at"));
+                row.getInt("action_version"), row.getObject("preview_id", UUID.class),
+                row.getString("status"), row.getString("actor_id"), row.getString("correlation_id"),
+                row.getString("trace_id"), row.getString("safe_error"),
+                instant(row, "submitted_at"), instant(row, "completed_at"));
     }
 
     private ResourceDraftRequest withStableApi(ResourceDraftRequest value, String apiName) {
@@ -906,12 +1243,21 @@ public class ModelingService {
     }
 
     private long activeRevision() {
-        Long value = jdbc.queryForObject("SELECT max(revision) FROM control.ontology_revisions WHERE status='ACTIVE'", Long.class);
+        return activeRevision(WorkspaceContext.id());
+    }
+
+    private long activeRevision(UUID ontologyId) {
+        Long value = jdbc.queryForObject(
+                "SELECT max(revision) FROM control.ontology_revisions WHERE ontology_id=? AND status='ACTIVE'",
+                Long.class, ontologyId);
         if (value == null) throw new IllegalStateException("Active ontology revision is missing");
         return value;
     }
 
     private long count(String sql) { return Objects.requireNonNullElse(jdbc.queryForObject(sql, Long.class), 0L); }
+    private long count(UUID ontologyId, String sql) {
+        return Objects.requireNonNullElse(jdbc.queryForObject(sql, Long.class, ontologyId), 0L);
+    }
 
     private void audit(Actor actor, String action, String type, String id, String summary, Map<String, ?> diff) {
         jdbc.update("""
@@ -963,5 +1309,6 @@ public class ModelingService {
     private List<String> strings(Array array) throws SQLException { return array == null ? List.of() : List.of((String[]) array.getArray()); }
     private String safeFailure(Exception failure) { String message = failure.getMessage() == null ? failure.getClass().getSimpleName() : failure.getMessage(); return message.substring(0, Math.min(900, message.length())); }
     private ConnectionProblem problem(String code, String message) { return new ConnectionProblem(code, message); }
-    private record PreviewRecord(UUID id, int actionVersion, String edits, Instant expiresAt, Instant consumedAt) { }
+    private record PreviewRecord(UUID id, int actionVersion, String edits, boolean approvalRequired,
+                                 Instant expiresAt, Instant consumedAt) { }
 }

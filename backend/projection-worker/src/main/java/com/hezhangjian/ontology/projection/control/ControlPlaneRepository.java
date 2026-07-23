@@ -19,10 +19,11 @@ public class ControlPlaneRepository {
         this.jdbc = jdbc;
     }
 
-    public boolean revisionExists(long revision) {
+    public boolean revisionExists(UUID ontologyId, long revision) {
         Integer count = jdbc.queryForObject(
-                "SELECT count(*) FROM control.ontology_revisions WHERE revision = ?",
+                "SELECT count(*) FROM control.ontology_revisions WHERE ontology_id = ? AND revision = ?",
                 Integer.class,
+                ontologyId,
                 revision);
         return count != null && count == 1;
     }
@@ -67,6 +68,7 @@ public class ControlPlaneRepository {
             String eventType,
             String topic,
             String messageId,
+            UUID ontologyId,
             long ontologyRevision,
             String entityKey,
             long entityVersion,
@@ -74,15 +76,16 @@ public class ControlPlaneRepository {
         jdbc.update(
                 """
                 INSERT INTO control.projection_ledger
-                    (event_id, event_type, topic, message_id, ontology_revision,
+                    (event_id, event_type, topic, message_id, ontology_id, ontology_revision,
                      entity_key, entity_version, correlation_id, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED')
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED')
                 ON CONFLICT (event_id) DO NOTHING
                 """,
                 eventId,
                 eventType,
                 topic,
                 messageId,
+                ontologyId,
                 ontologyRevision,
                 entityKey,
                 entityVersion,
@@ -194,6 +197,7 @@ public class ControlPlaneRepository {
     public ProjectionOperation registerOperation(
             UUID batchId,
             String idempotencyKey,
+            UUID ontologyId,
             long ontologyRevision,
             String requestedBy,
             String correlationId,
@@ -201,13 +205,14 @@ public class ControlPlaneRepository {
         jdbc.update(
                 """
                 INSERT INTO control.projection_operations
-                    (operation_id, idempotency_key, ontology_revision, requested_by,
+                    (operation_id, idempotency_key, ontology_id, ontology_revision, requested_by,
                      correlation_id, edit_count, status)
-                VALUES (?, ?, ?, ?, ?, ?, 'RECEIVED')
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'RECEIVED')
                 ON CONFLICT (idempotency_key) DO NOTHING
                 """,
                 batchId,
                 idempotencyKey,
+                ontologyId,
                 ontologyRevision,
                 requestedBy,
                 correlationId,
@@ -235,11 +240,12 @@ public class ControlPlaneRepository {
         jdbc.update(
                 """
                 INSERT INTO control.index_rebuild_jobs
-                    (rebuild_id, requested_by, correlation_id, status, requested_at)
-                VALUES (?, ?, ?, 'RECEIVED', ?)
+                    (rebuild_id, ontology_id, requested_by, correlation_id, status, requested_at)
+                VALUES (?, ?, ?, ?, 'RECEIVED', ?)
                 ON CONFLICT (rebuild_id) DO NOTHING
                 """,
                 command.rebuildId(),
+                command.ontologyId(),
                 command.requestedBy(),
                 command.correlationId(),
                 Timestamp.from(command.requestedAt()));

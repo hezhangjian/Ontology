@@ -7,7 +7,6 @@ import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -18,19 +17,24 @@ import java.util.UUID;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.flink.api.common.state.ListState;
+import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.runtime.state.FunctionInitializationContext;
+import org.apache.flink.runtime.state.FunctionSnapshotContext;
+import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
 import org.apache.flink.util.Collector;
 
-final class PipelineTransform extends RichFlatMapFunction<String, String> {
+final class PipelineTransform extends RichFlatMapFunction<String, String> implements CheckpointedFunction {
     private final String correlationId;
     private final Map<String, Object> graph;
     private final String previewNodeId;
     private final Map<String, Object> source;
     private transient ObjectMapper json;
     private transient List<Map<String, Object>> orderedNodes;
-    private transient Set<String> deduplicationKeys;
     private transient long datasetRowNumber;
+    private transient ListState<Long> rowNumberState;
 
     PipelineTransform(Map<String, Object> graph, Map<String, Object> source, String correlationId) {
         this(graph, source, correlationId, null);
@@ -48,8 +52,6 @@ final class PipelineTransform extends RichFlatMapFunction<String, String> {
     public void open(Configuration parameters) {
         json = new ObjectMapper();
         orderedNodes = topologicalNodes();
-        deduplicationKeys = new HashSet<>();
-        datasetRowNumber = 0;
     }
 
     @Override
@@ -62,15 +64,10 @@ final class PipelineTransform extends RichFlatMapFunction<String, String> {
             int outputCount = outputs.size();
             switch (type) {
                 case "CAST" -> row = cast(row, config);
-                case "DEDUPLICATE" -> { if (!deduplicate(row, config)) return; }
                 case "DERIVE" -> row = derive(row, config);
                 case "FILTER" -> { if (!matches(row, config)) return; }
-                case "JOIN" -> {
-                    row = join(row, config);
-                    if (row == null) return;
-                }
-                case "ONTOLOGY_OBJECT" -> outputs.add(objectEvent(row, node, config));
-                case "ONTOLOGY_RELATION" -> outputs.add(relationEvent(row, node, config));
+                case "OBJECT_OUTPUT" -> outputs.add(objectEvent(row, node, config));
+                case "LINK_OUTPUT" -> outputs.add(relationEvent(row, node, config));
                 case "DATASET_OUTPUT" -> outputs.add(datasetEvent(row, node, config));
                 case "QUALITY" -> { if (!qualityPasses(row, config) && "STOP".equals(config.get("failureAction"))) throw new IllegalStateException("Quality gate rejected a record"); }
                 case "RULE_TRANSFORM" -> {
@@ -234,29 +231,9 @@ final class PipelineTransform extends RichFlatMapFunction<String, String> {
         };
     }
 
-    private boolean deduplicate(Map<String, Object> row, Map<String, Object> config) {
-        List<String> keys = config.get("keys") instanceof List<?> values ? values.stream().map(this::text).toList() : List.of();
-        if (keys.isEmpty()) return true;
-        return deduplicationKeys.add(keys.stream().map(key -> text(row.get(key))).toList().toString());
-    }
-
     private boolean qualityPasses(Map<String, Object> row, Map<String, Object> config) {
         String field = text(config.get("field"));
         return !"NOT_NULL".equals(config.get("rule")) || row.get(field) != null;
-    }
-
-    private Map<String, Object> join(Map<String, Object> row, Map<String, Object> config) {
-        String leftKey = text(config.get("leftKey"));
-        String rightKey = text(config.get("rightKey"));
-        String expected = text(row.get(leftKey));
-        Map<String, Object> match = listOfMaps(config.get("lookupRows")).stream()
-                .filter(candidate -> Objects.equals(expected, text(candidate.get(rightKey))))
-                .findFirst().orElse(null);
-        if (match == null) return "INNER".equals(textOr(config.get("joinType"), "LEFT")) ? null : row;
-        String prefix = textOr(config.get("lookupPrefix"), "辅助_");
-        Map<String, Object> result = new LinkedHashMap<>(row);
-        match.forEach((field, value) -> result.put(result.containsKey(field) ? prefix + field : field, value));
-        return result;
     }
 
     private Map<String, Object> objectEvent(Map<String, Object> row, Map<String, Object> node, Map<String, Object> config) throws Exception {
@@ -319,13 +296,36 @@ final class PipelineTransform extends RichFlatMapFunction<String, String> {
         });
         String rowHash = hash(json.writeValueAsBytes(payload));
         long rowNumber = ++datasetRowNumber;
+        int subtask;
+        try {
+            subtask = getRuntimeContext().getIndexOfThisSubtask();
+        } catch (IllegalStateException outsideFlinkRuntime) {
+            subtask = 0;
+        }
         Map<String, Object> event = envelope("dataset.row", node,
-                text(config.get("datasetId")) + ":" + rowNumber, rowHash + ":" + rowNumber);
+                text(config.get("datasetId")) + ":" + subtask + ":" + rowNumber,
+                rowHash + ":" + subtask + ":" + rowNumber);
         event.put("dataset_id", text(config.get("datasetId")));
         event.put("dataset_name", text(config.get("datasetName")));
         event.put("payload", payload);
         event.put("row_number", rowNumber);
+        event.put("source_subtask", subtask);
         return event;
+    }
+
+    @Override
+    public void snapshotState(FunctionSnapshotContext context) throws Exception {
+        rowNumberState.clear();
+        rowNumberState.add(datasetRowNumber);
+    }
+
+    @Override
+    public void initializeState(FunctionInitializationContext context) throws Exception {
+        rowNumberState = context.getOperatorStateStore()
+                .getListState(new ListStateDescriptor<>("dataset-row-number", Long.class));
+        if (context.isRestored()) {
+            for (Long value : rowNumberState.get()) datasetRowNumber = Math.max(datasetRowNumber, value);
+        }
     }
 
     private Map<String, Object> envelope(String eventType, Map<String, Object> node, String key, String rowHash) {
@@ -338,6 +338,7 @@ final class PipelineTransform extends RichFlatMapFunction<String, String> {
         event.put("flink_job_id", flinkJobId());
         event.put("occurred_at", Instant.now().toString());
         event.put("ontology_revision", number(source.get("ontologyRevision"), 1));
+        event.put("ontology_id", source.get("ontologyId"));
         event.put("producer", "ontology-flink-job");
         event.put("schema_version", 1);
         event.put("source", Map.of("asset_id", source.get("assetId"), "data_source_id", source.get("connectionId"), "pipeline_run_id", source.get("runId")));

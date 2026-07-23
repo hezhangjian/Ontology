@@ -22,7 +22,7 @@ class PipelineGraphValidatorTest {
                         node("select-1", "SELECT", Map.of("fields", List.of(
                                 Map.of("source", "employee_id", "target", "id"),
                                 Map.of("source", "name", "target", "display_name")))),
-                        node("output-1", "ONTOLOGY_OBJECT", Map.of(
+                        node("output-1", "OBJECT_OUTPUT", Map.of(
                                 "idField", "id", "mappings", Map.of("displayName", "display_name"),
                                 "objectTypeId", "Employee"))),
                 List.of(edge("e1", "source-1", "select-1"), edge("e2", "select-1", "output-1")));
@@ -40,7 +40,7 @@ class PipelineGraphValidatorTest {
         PipelineGraph graph = graph(
                 List.of(node("source-1", "SOURCE", Map.of()),
                         node("select-1", "SELECT", Map.of("fields", List.of(Map.of("source", "removed")))),
-                        node("output-1", "ONTOLOGY_OBJECT", Map.of("idField", "employee_id", "objectTypeId", "Employee"))),
+                        node("output-1", "OBJECT_OUTPUT", Map.of("idField", "employee_id", "objectTypeId", "Employee"))),
                 List.of(edge("e1", "source-1", "select-1"), edge("e2", "select-1", "output-1"),
                         edge("e3", "output-1", "select-1")));
 
@@ -55,7 +55,7 @@ class PipelineGraphValidatorTest {
         PipelineGraph graph = graph(
                 List.of(node("source-1", "SOURCE", Map.of()),
                         node("select-1", "SELECT", Map.of("fields", List.of(Map.of("source", "removed")))),
-                        node("output-1", "ONTOLOGY_OBJECT", Map.of("idField", "employee_id", "objectTypeId", "Employee"))),
+                        node("output-1", "OBJECT_OUTPUT", Map.of("idField", "employee_id", "objectTypeId", "Employee"))),
                 List.of(edge("e1", "source-1", "select-1"), edge("e2", "select-1", "output-1")));
 
         ValidationResult result = validator.validate(graph, PipelineMode.BATCH, sourceSchema);
@@ -66,39 +66,54 @@ class PipelineGraphValidatorTest {
     }
 
     @Test
-    void requiresWindowBeforeStreamingAggregate() {
+    void acceptsStreamingWindowAggregateWithNativeOperators() {
         PipelineGraph graph = graph(
-                List.of(node("source-1", "SOURCE", Map.of()), node("aggregate-1", "AGGREGATE", Map.of()),
-                        node("output-1", "ONTOLOGY_OBJECT", Map.of("idField", "employee_id", "objectTypeId", "Employee"))),
-                List.of(edge("e1", "source-1", "aggregate-1"), edge("e2", "aggregate-1", "output-1")));
+                List.of(node("source-1", "SOURCE", Map.of()),
+                        node("window-1", "WINDOW", Map.of(
+                                "windowSizeMs", 60_000, "windowType", "TUMBLING")),
+                        node("aggregate-1", "AGGREGATE", Map.of(
+                                "aggregation", "COUNT", "groupBy", List.of(),
+                                "outputField", "employee_count")),
+                        node("output-1", "DATASET_OUTPUT", Map.of(
+                                "datasetName", "Counts", "fieldSelectionMode", "ALL"))),
+                List.of(edge("e1", "source-1", "window-1"),
+                        edge("e2", "window-1", "aggregate-1"),
+                        edge("e3", "aggregate-1", "output-1")));
 
         ValidationResult result = validator.validate(graph, PipelineMode.STREAMING, sourceSchema);
 
-        assertThat(result.valid()).isFalse();
-        assertThat(result.issues()).extracting(ValidationIssue::id).contains("aggregate.window.aggregate-1");
+        assertThat(result.valid()).isTrue();
+        assertThat(result.normalizedGraph().nodes().stream()
+                .filter(node -> node.id().equals("aggregate-1")).findFirst().orElseThrow()
+                .outputSchema()).extracting(FieldSchema::name)
+                .contains("employee_count", "_window_start", "_window_end");
     }
 
     @Test
-    void validatesLookupJoinAndCompoundObjectIdentity() {
+    void acceptsTwoInputJoinAndMultipleOutputs() {
         PipelineGraph graph = graph(
                 List.of(node("source-1", "SOURCE", Map.of()),
+                        node("source-2", "SOURCE", Map.of("sourceSchema", List.of(
+                                Map.of("name", "employee_id", "type", "STRING"),
+                                Map.of("name", "leader", "type", "STRING")))),
                         node("join-1", "JOIN", Map.of(
                                 "joinType", "LEFT",
                                 "leftKey", "employee_id",
-                                "lookupAssetId", "8b4a16f2-3fc6-4aca-a32c-7618ce4b2311",
-                                "lookupConnectionId", "8b4a16f2-3fc6-4aca-a32c-7618ce4b2312",
-                                "lookupFields", List.of(Map.of("name", "leader", "type", "STRING")),
-                                "rightKey", "leader")),
-                        node("output-1", "ONTOLOGY_OBJECT", Map.of(
-                                "idFields", List.of("employee_id", "leader"), "objectTypeId", "Employee"))),
-                List.of(edge("e1", "source-1", "join-1"), edge("e2", "join-1", "output-1")));
+                                "rightKey", "employee_id",
+                                "windowSizeMs", 60_000)),
+                        node("output-1", "OBJECT_OUTPUT", Map.of(
+                                "idFields", List.of("employee_id"), "objectTypeId", "Employee")),
+                        node("output-2", "DATASET_OUTPUT", Map.of(
+                                "datasetName", "Joined", "fieldSelectionMode", "ALL"))),
+                List.of(edge("e1", "source-1", "join-1"),
+                        edge("e2", "source-2", "join-1"),
+                        edge("e3", "join-1", "output-1"),
+                        edge("e4", "join-1", "output-2")));
 
         ValidationResult result = validator.validate(graph, PipelineMode.BATCH, sourceSchema);
 
         assertThat(result.valid()).isTrue();
-        PipelineNode join = result.normalizedGraph().nodes().stream()
-                .filter(node -> node.id().equals("join-1")).findFirst().orElseThrow();
-        assertThat(join.outputSchema()).extracting(FieldSchema::name).containsExactly("employee_id", "name", "leader");
+        assertThat(result.impact()).containsEntry("outputs", 2L);
     }
 
     @Test

@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -127,12 +128,16 @@ public class PipelineRuntimeCoordinator {
         config.put("pipelineId", preview.get("pipelineId"));
         config.put("pipelineMode", preview.get("mode"));
         config.put("ontologyRevision", activeOntologyRevision());
+        config.put("ontologyId", WorkspaceContext.id().toString());
         config.put("preview", true);
         config.put("runId", request.previewId());
         config.put("subscription", "ontology-preview-" + request.previewId());
         jdbc.update("UPDATE control.pipeline_preview_runs SET status='RUNNING' WHERE id=?", request.previewId());
+        PipelineGraph runtimeGraph = runtimeGraph((PipelineGraph) preview.get("graph"));
         return new PreviewExchangeResponse(request.previewId(), material.type().name(), config, material.credential(),
-                runtimeGraph((PipelineGraph) preview.get("graph")), (RuntimeSettings) preview.get("runtime"),
+                sourceGrants(runtimeGraph, sourceId, (UUID) preview.get("sourceAssetId"),
+                        request.previewId(), String.valueOf(preview.get("mode")), true),
+                runtimeGraph, (RuntimeSettings) preview.get("runtime"),
                 "preview:" + request.previewId(), String.valueOf(preview.get("nodeId")), (int) preview.get("rowLimit"),
                 (Instant) preview.get("expiresAt"));
     }
@@ -151,13 +156,13 @@ public class PipelineRuntimeCoordinator {
         Set<String> sensitiveFields = new HashSet<>(jdbc.queryForList(
                 "SELECT name FROM control.data_source_asset_fields WHERE asset_id=? AND sensitive=true", String.class,
                 pipeline.sourceAssetId()));
-        if (graph != null) graph.nodes().stream().filter(node -> node.type().equals("ONTOLOGY_OBJECT")).forEach(node -> {
+        if (graph != null) graph.nodes().stream().filter(node -> node.type().equals("OBJECT_OUTPUT")).forEach(node -> {
             String objectType = String.valueOf(node.config().getOrDefault("objectTypeId", ""));
             Map<String, Object> mappings = node.config().get("mappings") instanceof Map<?, ?> raw
                     ? raw.entrySet().stream().collect(java.util.stream.Collectors.toMap(
                             entry -> String.valueOf(entry.getKey()), entry -> entry.getValue())) : Map.of();
-            jdbc.queryForList("SELECT property_id FROM control.object_properties WHERE revision=(SELECT max(revision) FROM control.ontology_revisions WHERE status='ACTIVE') AND type_id=? AND sensitive=true",
-                    String.class, objectType).forEach(property -> {
+            jdbc.queryForList("SELECT property_id FROM control.object_properties WHERE revision=(SELECT revision FROM control.ontology_revisions WHERE ontology_id=? AND status='ACTIVE') AND type_id=? AND sensitive=true",
+                    String.class, WorkspaceContext.id(), objectType).forEach(property -> {
                         sensitiveFields.add(property);
                         Object mapped = mappings.get(property);
                         if (mapped != null) sensitiveFields.add(String.valueOf(mapped));
@@ -371,14 +376,18 @@ public class PipelineRuntimeCoordinator {
         config.put("pipelineMode", grant.get("pipelineMode"));
         config.put("pipelineVersion", grant.get("pipelineVersion"));
         config.put("ontologyRevision", activeOntologyRevision());
+        config.put("ontologyId", WorkspaceContext.id().toString());
         config.put("runId", request.runId());
         config.put("subscription", "ontology-" + grant.get("pipelineId") + "-" + grant.get("pipelineVersion"));
         jdbc.update("UPDATE control.workload_credential_grants SET exchanged_at=now() WHERE id=?", grant.get("grantId"));
         event(request.runId(), "CREDENTIAL_EXCHANGED", "STARTING", "Flink 工作负载已交换短期运行凭据", Map.of("scopeHash", grant.get("scopeHash")));
         @SuppressWarnings("unchecked") Map<String, Object> ir = (Map<String, Object>) grant.get("pipelineIr");
         RuntimeSettings runtime = json.convertValue(ir.get("runtime"), RuntimeSettings.class);
+        PipelineGraph runtimeGraph = runtimeGraph((PipelineGraph) grant.get("graph"), (UUID) grant.get("pipelineId"));
         return new WorkloadExchangeResponse((UUID) grant.get("grantId"), request.runId(), material.type().name(), config,
-                material.credential(), runtimeGraph((PipelineGraph) grant.get("graph"), (UUID) grant.get("pipelineId")), runtime, properties.platformTopic(),
+                material.credential(), sourceGrants(runtimeGraph, sourceId, (UUID) grant.get("sourceAssetId"),
+                        request.runId(), String.valueOf(grant.get("pipelineMode")), false),
+                runtimeGraph, runtime, properties.platformTopic(),
                 String.valueOf(grant.get("correlationId")), expiresAt);
     }
 
@@ -389,32 +398,21 @@ public class PipelineRuntimeCoordinator {
     private PipelineGraph runtimeGraph(PipelineGraph graph, UUID owningPipelineId) {
         if (graph == null) return null;
         List<PipelineNode> nodes = graph.nodes().stream().map(node -> {
-            if (node.type().equals("JOIN")) {
-                Map<String, Object> config = new LinkedHashMap<>(node.config());
-                UUID connectionId = uuid(config.get("lookupConnectionId"));
-                UUID assetId = uuid(config.get("lookupAssetId"));
-                if (connectionId != null && assetId != null) {
-                    var preview = connections.runtimePreview(connectionId, assetId, 1000);
-                    if (preview.truncated()) {
-                        throw new ConnectionProblem("LOOKUP_ASSET_TOO_LARGE", "辅助数据超过 1000 行，请先过滤或换用更小的辅助表");
-                    }
-                    config.put("lookupRows", preview.rows());
-                }
-                return new PipelineNode(node.id(), node.type(), node.name(), node.position(), config,
-                        node.inputSchema(), node.outputSchema(), node.invalidReasons());
-            }
             if (node.type().equals("DATASET_OUTPUT")) {
                 Map<String, Object> config = new LinkedHashMap<>(node.config());
                 UUID pipelineId = owningPipelineId;
                 if (pipelineId != null) {
-                    UUID datasetId = jdbc.query("SELECT id FROM control.datasets WHERE pipeline_id=? ORDER BY updated_at DESC LIMIT 1",
-                            (row, number) -> row.getObject(1, UUID.class), pipelineId).stream().findFirst().orElse(null);
+                    UUID datasetId = jdbc.query("""
+                            SELECT id FROM control.datasets
+                            WHERE pipeline_id=? AND output_node_id=?
+                            """, (row, number) -> row.getObject(1, UUID.class),
+                            pipelineId, node.id()).stream().findFirst().orElse(null);
                     if (datasetId != null) config.put("datasetId", datasetId.toString());
                 }
                 return new PipelineNode(node.id(), node.type(), node.name(), node.position(), config,
                         node.inputSchema(), node.outputSchema(), node.invalidReasons());
             }
-            if (node.type().equals("ONTOLOGY_RELATION")) {
+            if (node.type().equals("LINK_OUTPUT")) {
                 Map<String, Object> config = new LinkedHashMap<>(node.config());
                 RelationBinding relation = relationType(String.valueOf(config.getOrDefault("relationTypeId", "")));
                 config.put("relationTypeId", relation.physicalKey());
@@ -423,7 +421,7 @@ public class PipelineRuntimeCoordinator {
                 return new PipelineNode(node.id(), node.type(), node.name(), node.position(), config,
                         node.inputSchema(), node.outputSchema(), node.invalidReasons());
             }
-            if (!node.type().equals("ONTOLOGY_OBJECT")) return node;
+            if (!node.type().equals("OBJECT_OUTPUT")) return node;
             Map<String, Object> config = new LinkedHashMap<>(node.config());
             TypeBinding type = objectType(String.valueOf(config.getOrDefault("objectTypeId", "")));
             config.put("objectTypeId", type.physicalKey());
@@ -453,6 +451,41 @@ public class PipelineRuntimeCoordinator {
                     node.inputSchema(), node.outputSchema(), node.invalidReasons());
         }).toList();
         return new PipelineGraph(nodes, graph.edges());
+    }
+
+    private Map<String, RuntimeSourceGrant> sourceGrants(
+            PipelineGraph graph, UUID defaultConnectionId, UUID defaultAssetId,
+            UUID workloadId, String mode, boolean preview) {
+        Map<String, RuntimeSourceGrant> result = new LinkedHashMap<>();
+        for (PipelineNode node : graph.nodes()) {
+            if (!node.type().equals("SOURCE")) continue;
+            UUID connectionId = Objects.requireNonNullElse(uuid(node.config().get("connectionId")),
+                    defaultConnectionId);
+            UUID assetId = Objects.requireNonNullElse(uuid(node.config().get("assetId")), defaultAssetId);
+            RuntimeMaterial material = connections.runtimeMaterial(connectionId);
+            String assetPath = jdbc.query("""
+                    SELECT full_path FROM control.data_source_assets
+                    WHERE id=? AND data_source_id=? AND status<>'UNAVAILABLE' AND permission_status='READABLE'
+                    """, (row, number) -> row.getString(1), assetId, connectionId).stream().findFirst()
+                    .orElseThrow(() -> new ConnectionProblem("PIPELINE_SOURCE_UNAVAILABLE",
+                            "源节点引用的数据资产不可用：" + node.name()));
+            Map<String, Object> sourceConfig = new LinkedHashMap<>(material.config());
+            sourceConfig.put("assetId", assetId);
+            sourceConfig.put("assetPath", assetPath);
+            sourceConfig.put("connectionId", connectionId);
+            sourceConfig.put("consumerGroup", "ontology-" + workloadId + "-" + node.id());
+            sourceConfig.put("offsetPolicy", Objects.toString(
+                    node.config().getOrDefault("offsetPolicy", "EARLIEST")).toUpperCase(Locale.ROOT));
+            sourceConfig.put("ontologyId", WorkspaceContext.id().toString());
+            sourceConfig.put("ontologyRevision", activeOntologyRevision());
+            sourceConfig.put("pipelineMode", mode);
+            sourceConfig.put("preview", preview);
+            sourceConfig.put("runId", workloadId);
+            sourceConfig.put("subscription", "ontology-" + workloadId + "-" + node.id());
+            result.put(node.id(), new RuntimeSourceGrant(
+                    material.type().name(), sourceConfig, material.credential()));
+        }
+        return result;
     }
 
     private UUID uuid(Object value) {
@@ -530,7 +563,9 @@ public class PipelineRuntimeCoordinator {
     }
 
     private long activeOntologyRevision() {
-        Long revision = jdbc.queryForObject("SELECT revision FROM control.ontology_revisions WHERE status='ACTIVE'", Long.class);
+        Long revision = jdbc.queryForObject(
+                "SELECT revision FROM control.ontology_revisions WHERE ontology_id=? AND status='ACTIVE'",
+                Long.class, WorkspaceContext.id());
         return revision == null ? 1 : revision;
     }
 
@@ -631,7 +666,7 @@ public class PipelineRuntimeCoordinator {
 
     private UUID workspaceForRun(UUID runId) {
         return jdbc.query("""
-                SELECT p.workspace_id FROM control.pipeline_runs r
+                SELECT p.ontology_id FROM control.pipeline_runs r
                 JOIN control.pipelines p ON p.id=r.pipeline_id WHERE r.id=?
                 """, (row, number) -> row.getObject(1, UUID.class), runId).stream().findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "管道运行不存在"));
@@ -639,7 +674,7 @@ public class PipelineRuntimeCoordinator {
 
     private UUID workspaceForPreview(UUID previewId) {
         return jdbc.query("""
-                SELECT p.workspace_id FROM control.pipeline_preview_runs pr
+                SELECT p.ontology_id FROM control.pipeline_preview_runs pr
                 JOIN control.pipelines p ON p.id=pr.pipeline_id WHERE pr.id=?
                 """, (row, number) -> row.getObject(1, UUID.class), previewId).stream().findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "管道预览不存在"));
@@ -678,7 +713,7 @@ public class PipelineRuntimeCoordinator {
     }
 
     private void synchronize(PipelineRun run) {
-        UUID workspaceId = jdbc.queryForObject("SELECT workspace_id FROM control.pipelines WHERE id=?",
+        UUID workspaceId = jdbc.queryForObject("SELECT ontology_id FROM control.pipelines WHERE id=?",
                 UUID.class, run.pipelineId());
         if (workspaceId != null) WorkspaceContext.run(workspaceId, () -> synchronizeInWorkspace(run));
     }

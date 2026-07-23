@@ -35,6 +35,7 @@ final class RuntimeClient {
                 Map.of("jobSignature", jobSignature(), "runId", runId));
         return new RuntimeSpec(
                 String.valueOf(response.get("sourceType")), map(response.get("sourceConfig")), strings(response.get("credential")),
+                sourceSpecs(response.get("sources")),
                 map(response.get("graph")), map(response.get("runtime")), String.valueOf(response.get("targetTopic")),
                 String.valueOf(response.get("correlationId")));
     }
@@ -44,6 +45,7 @@ final class RuntimeClient {
                 Map.of("jobSignature", jobSignature(), "previewId", previewId));
         RuntimeSpec runtime = new RuntimeSpec(
                 String.valueOf(response.get("sourceType")), map(response.get("sourceConfig")), strings(response.get("credential")),
+                sourceSpecs(response.get("sources")),
                 map(response.get("graph")), map(response.get("runtime")), "", String.valueOf(response.get("correlationId")));
         return new PreviewSpec(runtime, String.valueOf(response.get("nodeId")), integer(response.get("limit"), 100));
     }
@@ -123,8 +125,28 @@ final class RuntimeClient {
     }
 
     record RuntimeSpec(String sourceType, Map<String, Object> sourceConfig, Map<String, String> credential,
+                       Map<String, SourceSpec> sources,
                        Map<String, Object> graph, Map<String, Object> runtime, String targetTopic,
-                       String correlationId) { }
+                       String correlationId) {
+        RuntimeSpec forSource(String nodeId) {
+            SourceSpec source = sources.get(nodeId);
+            return source == null ? this : new RuntimeSpec(source.sourceType(), source.sourceConfig(),
+                    source.credential(), sources, graph, runtime, targetTopic, correlationId);
+        }
+    }
 
     record PreviewSpec(RuntimeSpec runtime, String nodeId, int limit) { }
+
+    record SourceSpec(String sourceType, Map<String, Object> sourceConfig,
+                      Map<String, String> credential) { }
+
+    private Map<String, SourceSpec> sourceSpecs(Object value) {
+        Map<String, SourceSpec> result = new LinkedHashMap<>();
+        if (value instanceof Map<?, ?> raw) raw.forEach((key, item) -> {
+            Map<String, Object> source = map(item);
+            result.put(String.valueOf(key), new SourceSpec(String.valueOf(source.get("sourceType")),
+                    map(source.get("sourceConfig")), strings(source.get("credential"))));
+        });
+        return result;
+    }
 }

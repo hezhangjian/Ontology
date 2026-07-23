@@ -9,6 +9,7 @@ import java.util.UUID;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record OntologyMutationBatch(
         UUID batchId,
+        UUID ontologyId,
         long ontologyRevision,
         String actionTypeId,
         Long actionVersion,

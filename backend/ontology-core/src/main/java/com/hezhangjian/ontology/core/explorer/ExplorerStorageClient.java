@@ -9,6 +9,7 @@ import com.hezhangjian.ontology.core.explorer.ExplorerModels.AggregationBucket;
 import com.hezhangjian.ontology.core.explorer.ExplorerModels.FacetBucket;
 import com.hezhangjian.ontology.core.explorer.ExplorerModels.PropertyDefinition;
 import com.hezhangjian.ontology.core.explorer.ExplorerPolicy.ValidatedQuery;
+import com.hezhangjian.ontology.core.security.WorkspaceContext;
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
@@ -56,6 +57,7 @@ public final class ExplorerStorageClient {
         body.put("track_total_hits", 10000);
         ObjectNode bool = objectMapper.createObjectNode();
         ArrayNode filters = objectMapper.createArrayNode();
+        filters.add(term("ontology_id", WorkspaceContext.id().toString()));
         filters.add(term("object_type", query.type().physicalKey()));
         filters.add(visibility(actor));
         JsonNode where = compileWhere(query.request().where(), query.properties());
@@ -97,7 +99,8 @@ public final class ExplorerStorageClient {
         body.put("size", size);
         body.put("track_total_hits", 10000);
         ObjectNode bool = objectMapper.createObjectNode();
-        bool.set("filter", objectMapper.createArrayNode().add(visibility(actor)));
+        bool.set("filter", objectMapper.createArrayNode()
+                .add(term("ontology_id", WorkspaceContext.id().toString())).add(visibility(actor)));
         if (text == null || text.isBlank()) {
             bool.set("must", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("match_all", objectMapper.createObjectNode())));
         } else {
@@ -123,7 +126,9 @@ public final class ExplorerStorageClient {
 
     long objectCount(String objectType, Actor actor) {
         ObjectNode bool = objectMapper.createObjectNode();
-        bool.set("filter", objectMapper.createArrayNode().add(term("object_type", objectType)).add(visibility(actor)));
+        bool.set("filter", objectMapper.createArrayNode()
+                .add(term("ontology_id", WorkspaceContext.id().toString()))
+                .add(term("object_type", objectType)).add(visibility(actor)));
         ObjectNode body = objectMapper.createObjectNode();
         body.set("query", objectMapper.createObjectNode().set("bool", bool));
         return json("POST", searchBase.resolve("platform-ontology-objects/_count"), body,
@@ -136,7 +141,9 @@ public final class ExplorerStorageClient {
         }
         ObjectNode body = objectMapper.createObjectNode();
         body.put("size", 0);
-        ArrayNode filters = objectMapper.createArrayNode().add(term("object_type", query.type().physicalKey())).add(visibility(actor));
+        ArrayNode filters = objectMapper.createArrayNode()
+                .add(term("ontology_id", WorkspaceContext.id().toString()))
+                .add(term("object_type", query.type().physicalKey())).add(visibility(actor));
         JsonNode where = compileWhere(query.request().where(), query.properties());
         if (where != null) filters.add(where);
         body.set("query", objectMapper.createObjectNode().set("bool", objectMapper.createObjectNode().set("filter", filters)));
@@ -190,7 +197,9 @@ public final class ExplorerStorageClient {
         }
         ObjectNode body = objectMapper.createObjectNode();
         body.put("size", 0);
-        ArrayNode filters = objectMapper.createArrayNode().add(term("object_type", query.type().physicalKey())).add(visibility(actor));
+        ArrayNode filters = objectMapper.createArrayNode()
+                .add(term("ontology_id", WorkspaceContext.id().toString()))
+                .add(term("object_type", query.type().physicalKey())).add(visibility(actor));
         JsonNode where = compileWhere(query.request().where(), query.properties());
         if (where != null) filters.add(where);
         body.set("query", objectMapper.createObjectNode().set("bool", objectMapper.createObjectNode().set("filter", filters)));
@@ -242,10 +251,44 @@ public final class ExplorerStorageClient {
         return List.copyOf(buckets);
     }
 
+    double metric(ValidatedQuery query, UUID measurePropertyId, String aggregation, Actor actor) {
+        PropertyDefinition measure = measurePropertyId == null ? null : query.properties().get(measurePropertyId);
+        if (!"count".equals(aggregation) && (measure == null || measure.sensitive())) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "度量字段不存在或无权访问");
+        }
+        if (!List.of("approx_distinct", "avg", "count", "max", "min", "sum").contains(aggregation)) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "聚合函数不受支持");
+        }
+        if (!List.of("count", "approx_distinct").contains(aggregation)
+                && !List.of("INTEGER", "LONG", "DECIMAL").contains(measure.valueType())) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "度量字段必须是数值属性");
+        }
+        ObjectNode body = objectMapper.createObjectNode();
+        body.put("size", 0);
+        ArrayNode filters = objectMapper.createArrayNode()
+                .add(term("ontology_id", WorkspaceContext.id().toString()))
+                .add(term("object_type", query.type().physicalKey())).add(visibility(actor));
+        JsonNode where = compileWhere(query.request().where(), query.properties());
+        if (where != null) filters.add(where);
+        body.set("query", objectMapper.createObjectNode().set(
+                "bool", objectMapper.createObjectNode().set("filter", filters)));
+        if (!"count".equals(aggregation)) {
+            String engineAggregation = "approx_distinct".equals(aggregation) ? "cardinality" : aggregation;
+            body.putObject("aggs").putObject("metric").set(
+                    engineAggregation, objectMapper.createObjectNode().put("field", field(measure)));
+        }
+        JsonNode response = json("POST", searchBase.resolve("platform-ontology-objects/_search"), body,
+                "搜索服务暂时不可用，度量未执行");
+        return "count".equals(aggregation)
+                ? response.path("hits").path("total").path("value").asDouble()
+                : response.path("aggregations").path("metric").path("value").asDouble();
+    }
+
     public GraphObject getObject(String objectType, String objectId) {
         String labelId = objectLabelId();
         String key = Base64.getUrlEncoder().withoutPadding()
-                .encodeToString((objectType + "\u0000" + objectId).getBytes(StandardCharsets.UTF_8));
+                .encodeToString((WorkspaceContext.id() + ":" + objectType + "\u0000" + objectId)
+                        .getBytes(StandardCharsets.UTF_8));
         String graphId = labelId + ":" + key;
         URI uri = graphBase.resolve("graph/vertices/" + encodeJson(graphId) + "?label=ontology_object");
         HttpResult result = exchange("GET", uri, null);

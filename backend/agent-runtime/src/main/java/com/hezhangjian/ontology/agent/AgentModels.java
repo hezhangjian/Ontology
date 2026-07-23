@@ -14,7 +14,7 @@ final class AgentModels {
     record ToolTrace(String id, String name, Map<String, Object> arguments, Object result, boolean mutationPreview) { }
     record CreateConversationRequest(String title) { }
     record SendMessageRequest(String content) { }
-    record ConfirmActionRequest(UUID actionId, String previewToken, String idempotencyKey) { }
+    record ConfirmActionRequest(UUID actionTypeId, String previewToken) { }
     record AgentReply(Conversation conversation, Message message) { }
     record StreamEvent(String type, Object data) { }
 }

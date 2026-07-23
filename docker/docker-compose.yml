@@ -316,6 +316,7 @@ services:
       minio_root_password: ${MINIO_ROOT_PASSWORD:-ontology-minio-password}
       minio_root_user: ${MINIO_ROOT_USER:-ontology-minio}
       postgres_password: ${POSTGRES_PASSWORD:-ontology-postgres-password}
+      SECURITY_LOCAL_USER_ENABLED: "true"
       SW_AGENT_COLLECTOR_BACKEND_SERVICES: skywalking-oap:11800
       SW_AGENT_NAME: ontology-core
     healthcheck:
@@ -383,6 +384,7 @@ services:
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
       ONTOLOGY_CORE_URL: http://ontology-core:8000
       postgres_password: ${POSTGRES_PASSWORD:-ontology-postgres-password}
+      SECURITY_LOCAL_USER_ENABLED: "true"
       SW_AGENT_COLLECTOR_BACKEND_SERVICES: skywalking-oap:11800
       SW_AGENT_NAME: agent-runtime
     healthcheck:
@@ -404,6 +406,7 @@ services:
       ontology-core:
         condition: service_healthy
     environment:
+      SECURITY_LOCAL_USER_ENABLED: "true"
       SW_AGENT_COLLECTOR_BACKEND_SERVICES: skywalking-oap:11800
       SW_AGENT_NAME: bff
     healthcheck:
@@ -539,16 +542,18 @@ configs:
               phase: rewrite
               functions:
                 - return function(conf, ctx) ngx.status = 200; ngx.say("ok"); return ngx.exit(200) end
-        - id: ontology-api
-          uri: /api/ontology/*
-          priority: 90
+        - id: agent-api
+          uri: /api/v1/*
+          priority: 95
+          vars:
+            - [uri, "~~", "^/api/v1/ontologies/[^/]+/agents/[^/]+/conversations(?:/.*)?$"]
           plugins:
             proxy-rewrite:
-              regex_uri: ["^/api/ontology/(.*)", "/$$1"]
+              regex_uri: ["^/api/(.*)", "/$$1"]
           upstream:
             type: roundrobin
             nodes:
-              ontology-core:8000: 1
+              agent-runtime:8002: 1
         - id: bff-api
           uri: /api/bff/*
           priority: 90
@@ -559,16 +564,16 @@ configs:
             type: roundrobin
             nodes:
               bff:8001: 1
-        - id: agent-api
-          uri: /api/agent/*
+        - id: ontology-api
+          uri: /api/v1/*
           priority: 90
           plugins:
             proxy-rewrite:
-              regex_uri: ["^/api/agent/(.*)", "/$$1"]
+              regex_uri: ["^/api/(.*)", "/$$1"]
           upstream:
             type: roundrobin
             nodes:
-              agent-runtime:8002: 1
+              ontology-core:8000: 1
         - id: observability-ui
           uri: /observability/*
           priority: 80

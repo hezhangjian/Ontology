@@ -145,7 +145,13 @@ public class ExplorerService {
         return new AggregateResponse(type.id(), type.ontologyRevision(), query.fingerprint(), Instant.now(), buckets);
     }
 
-    ObjectDetail object(UUID objectTypeId, String objectId, Actor actor) {
+    public double metric(ObjectSetRequest request, UUID measurePropertyId, String aggregation, Actor actor) {
+        ObjectTypeDefinition type = type(request.objectTypeId());
+        ValidatedQuery query = policy.validate(request, type);
+        return storage.metric(query, measurePropertyId, aggregation, actor);
+    }
+
+    public ObjectDetail object(UUID objectTypeId, String objectId, Actor actor) {
         ObjectTypeDefinition type = type(objectTypeId);
         GraphObject graph = storage.getObject(type.physicalKey(), objectId);
         ObjectDetail detail = detail(graph, type);
@@ -153,7 +159,7 @@ public class ExplorerService {
         return detail;
     }
 
-    LinkPage links(UUID objectTypeId, String objectId, LinkRequest request, Actor actor) {
+    public LinkPage links(UUID objectTypeId, String objectId, LinkRequest request, Actor actor) {
         ObjectTypeDefinition sourceType = type(objectTypeId);
         GraphObject graph = storage.getObject(sourceType.physicalKey(), objectId);
         int size = request == null || request.pageSize() == null ? 25 : Math.min(request.pageSize(), 100);
@@ -174,15 +180,16 @@ public class ExplorerService {
         List<Capability> actions = actor.roles().contains("Viewer") && !actor.builder() ? List.of() : jdbc.sql("""
                 SELECT r.id,r.api_name,r.display_name,r.active_version
                 FROM control.ontology_resources r JOIN control.action_types a ON a.resource_id=r.id
-                WHERE a.target_object_type_id=:type AND r.active_version IS NOT NULL AND r.tombstoned=false
+                WHERE a.target_object_type_id=:type AND r.ontology_id=:ontology
+                  AND r.active_version IS NOT NULL AND r.tombstoned=false
                 ORDER BY r.display_name
-                """).param("type", objectTypeId).query((rs, row) -> new Capability(
+                """).param("type", objectTypeId).param("ontology", WorkspaceContext.id()).query((rs, row) -> new Capability(
                 rs.getObject("id", UUID.class), "ACTION", rs.getString("display_name"),
                 rs.getString("api_name"), rs.getInt("active_version"), true, true)).list();
         List<Capability> functions = jdbc.sql("""
                 SELECT id,api_name,display_name,active_version FROM control.ontology_resources
-                WHERE kind='FUNCTION' AND active_version IS NOT NULL AND tombstoned=false ORDER BY display_name
-                """).query((rs, row) -> new Capability(rs.getObject("id", UUID.class), "FUNCTION",
+                WHERE ontology_id=:ontology AND kind='FUNCTION' AND active_version IS NOT NULL AND tombstoned=false ORDER BY display_name
+                """).param("ontology", WorkspaceContext.id()).query((rs, row) -> new Capability(rs.getObject("id", UUID.class), "FUNCTION",
                 rs.getString("display_name"), rs.getString("api_name"), rs.getInt("active_version"), true, false)).list();
         return new CapabilityResponse(actions, functions,
                 List.of("分析看板", "数据血缘", actor.builder() ? "本体管理" : "AIP"));
@@ -191,11 +198,11 @@ public class ExplorerService {
     List<ActivityItem> activity(UUID objectTypeId, String objectId, Actor actor) {
         ObjectTypeDefinition type = type(objectTypeId);
         storage.getObject(type.physicalKey(), objectId);
-        String entityKey = "object:" + type.apiName() + ":" + objectId;
+        String entityKey = WorkspaceContext.id() + ":object:" + type.physicalKey() + ":" + objectId;
         return jdbc.sql("""
                 SELECT status,correlation_id,updated_at,entity_version FROM control.projection_ledger
-                WHERE entity_key=:key ORDER BY updated_at DESC LIMIT 50
-                """).param("key", entityKey).query((rs, row) -> new ActivityItem("PROJECTION",
+                WHERE ontology_id=:ontology AND entity_key=:key ORDER BY updated_at DESC LIMIT 50
+                """).param("ontology", WorkspaceContext.id()).param("key", entityKey).query((rs, row) -> new ActivityItem("PROJECTION",
                 rs.getString("status"), "对象投影版本 " + rs.getLong("entity_version"), "Projection Worker",
                 rs.getString("correlation_id"), rs.getTimestamp("updated_at").toInstant())).list();
     }
@@ -620,7 +627,7 @@ public class ExplorerService {
         return jdbc.sql("""
                 SELECT r.id,r.api_name,r.physical_key,r.display_name,r.maturity,COALESCE(ar.revision,1) ontology_revision
                 FROM control.ontology_resources r
-                CROSS JOIN LATERAL (SELECT revision FROM control.ontology_revisions WHERE status='ACTIVE') ar
+                CROSS JOIN LATERAL (SELECT revision FROM control.ontology_revisions WHERE ontology_id=:workspace AND status='ACTIVE') ar
                 WHERE r.id=:id AND r.ontology_id=:workspace AND r.kind='OBJECT_TYPE' AND r.active_version IS NOT NULL AND r.tombstoned=false
                 """).param("id", id).param("workspace", WorkspaceContext.id()).query((rs, row) -> new ObjectTypeDefinition(rs.getObject("id", UUID.class),
                         rs.getString("api_name"), rs.getString("physical_key"), rs.getString("display_name"), rs.getString("maturity"),
@@ -632,7 +639,7 @@ public class ExplorerService {
         return jdbc.sql("""
                 SELECT r.id,r.api_name,r.physical_key,r.display_name,r.maturity,ar.revision ontology_revision
                 FROM control.ontology_resources r
-                CROSS JOIN LATERAL (SELECT revision FROM control.ontology_revisions WHERE status='ACTIVE') ar
+                CROSS JOIN LATERAL (SELECT revision FROM control.ontology_revisions WHERE ontology_id=:workspace AND status='ACTIVE') ar
                 WHERE r.ontology_id=:workspace AND r.kind='OBJECT_TYPE' AND r.active_version IS NOT NULL AND r.tombstoned=false
                 ORDER BY r.promoted DESC,r.display_name
                 """).param("workspace", WorkspaceContext.id()).query((rs, row) -> new ObjectTypeDefinition(rs.getObject("id", UUID.class),
@@ -785,7 +792,9 @@ public class ExplorerService {
         return new ExportJobView(id, rs.getString("status"), rs.getString("format"), rs.getLong("row_count"),
                 rs.getString("content_hash"), rs.getString("safe_error"), rs.getTimestamp("created_at").toInstant(),
                 instant(rs, "completed_at"), rs.getTimestamp("expires_at").toInstant(),
-                "SUCCEEDED".equals(rs.getString("status")) ? "/ontology/v1/explorer/export-jobs/" + id + "/download" : null);
+                "SUCCEEDED".equals(rs.getString("status"))
+                        ? "/v1/ontologies/" + WorkspaceContext.id() + "/export-jobs/" + id + "/download"
+                        : null);
     }
 
     private Instant instant(ResultSet rs, String column) throws SQLException {
@@ -793,7 +802,8 @@ public class ExplorerService {
     }
 
     private long activeRevision() {
-        return jdbc.sql("SELECT revision FROM control.ontology_revisions WHERE status='ACTIVE'").query(Long.class).single();
+        return jdbc.sql("SELECT revision FROM control.ontology_revisions WHERE ontology_id=:ontology AND status='ACTIVE'")
+                .param("ontology", WorkspaceContext.id()).query(Long.class).single();
     }
 
     private String perspective(String value) {

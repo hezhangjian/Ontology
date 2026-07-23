@@ -86,19 +86,22 @@ public final class ModelingModels {
 
     public record ActionPreviewRequest(Map<String, Object> parameters, String objectId, Long objectVersion) { }
 
-    public record ActionPreview(UUID actionId, String previewToken, Instant expiresAt,
-                                List<Map<String, Object>> edits, List<String> requiredApprovals,
-                                Map<String, Object> diff) { }
+    public record ActionPreview(UUID id, UUID actionTypeId, int actionVersion, String token,
+                                Instant expiresAt, List<Map<String, Object>> changes,
+                                boolean approvalRequired) { }
 
     public record ActionExecuteRequest(String previewToken, String idempotencyKey) { }
 
-    public record ActionExecution(UUID id, UUID actionId, UUID previewId, String status,
-                                  String correlationId, String safeError,
+    public record ActionReviewRequest(String decision, String comment) { }
+
+    public record ActionExecution(UUID id, UUID actionTypeId, int actionVersion, UUID previewId,
+                                  String status, String submittedBy, String correlationId,
+                                  String traceId, String safeError,
                                   Instant submittedAt, Instant completedAt) { }
 
     public record FunctionTestRequest(Map<String, Object> inputs) { }
 
-    public record FunctionTestResult(UUID functionId, String versionBinding, String outputType,
-                                     Object result, long durationMs, List<UUID> dependencies,
-                                     boolean callerPermissionsApplied) { }
+    public record FunctionExecution(UUID id, UUID functionId, int functionVersion,
+                                    long ontologyRevision, Object result, long durationMs,
+                                    String traceId) { }
 }

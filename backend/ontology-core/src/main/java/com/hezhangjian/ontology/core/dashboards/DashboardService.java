@@ -79,13 +79,13 @@ public class DashboardService {
                 FROM control.dashboards d
                 LEFT JOIN control.dashboard_versions v ON v.id=d.current_version_id
                 LEFT JOIN control.dashboard_drafts dr ON dr.id=d.active_draft_id
-                WHERE d.workspace_id=:workspace AND (:search='' OR lower(d.name) LIKE '%'||:search||'%' OR lower(d.description) LIKE '%'||:search||'%')
+                WHERE d.ontology_id=:ontology AND (:search='' OR lower(d.name) LIKE '%'||:search||'%' OR lower(d.description) LIKE '%'||:search||'%')
                   AND (:status='' OR d.lifecycle=:status)
                   AND (:favorites=false OR EXISTS(SELECT 1 FROM control.dashboard_favorites f WHERE f.dashboard_id=d.id AND f.user_id=:actor))
                   AND (d.owner_id=:actor OR d.visibility IN ('TEAM','ORGANIZATION')
                        OR EXISTS(SELECT 1 FROM control.dashboard_permissions p WHERE p.dashboard_id=d.id AND p.subject_type='USER' AND p.subject_id=:actor))
                 ORDER BY d.updated_at DESC,d.id
-                """).param("workspace", WorkspaceContext.id()).param("actor", actor.id()).param("search", search).param("status", status)
+                """).param("ontology", WorkspaceContext.id()).param("actor", actor.id()).param("search", search).param("status", status)
                 .param("favorites", favoritesOnly).query(this::summary).list();
     }
 
@@ -99,9 +99,9 @@ public class DashboardService {
         UUID draftId = UUID.randomUUID();
         DashboardDefinition definition = blankDefinition();
         jdbc.sql("""
-                INSERT INTO control.dashboards(id,workspace_id,name,description,owner_id,owner_name,visibility,lifecycle,refresh_policy,tags,active_draft_id)
-                VALUES (:id,:workspace,:name,:description,:owner,:ownerName,:visibility,'DRAFT',:refresh,CAST(:tags AS text[]),NULL)
-                """).param("id", dashboardId).param("workspace", WorkspaceContext.id()).param("name", name).param("description", text(request.description(), 4000))
+                INSERT INTO control.dashboards(id,ontology_id,name,description,owner_id,owner_name,visibility,lifecycle,refresh_policy,tags,active_draft_id)
+                VALUES (:id,:ontology,:name,:description,:owner,:ownerName,:visibility,'DRAFT',:refresh,CAST(:tags AS text[]),NULL)
+                """).param("id", dashboardId).param("ontology", WorkspaceContext.id()).param("name", name).param("description", text(request.description(), 4000))
                 .param("owner", actor.id()).param("ownerName", actor.name()).param("visibility", visibility)
                 .param("refresh", refresh).param("tags", pgArray(request.tags())).update();
         jdbc.sql("""
@@ -570,7 +570,10 @@ public class DashboardService {
             Map<String, Object> measure = firstMeasure(widget);
             String aggregation = String.valueOf(measure.getOrDefault("aggregation", "count"));
             Object field = measure.containsKey("field") ? measure.get("field") : widget.config().get("propertyId");
-            data = metric(aggregation, field, page);
+            UUID measurePropertyId = "count".equals(aggregation) || field == null
+                    ? null : uuid(field, "度量必须指定有效属性");
+            double value = explorer.metric(query, measurePropertyId, aggregation, explorerActor(actor));
+            data = Map.of("value", value, "aggregation", aggregation, "scope", "FULL_OBJECT_SET");
         } else if (Set.of("LINE", "AREA", "BAR", "STACKED_BAR", "PIE", "DONUT", "PIVOT").contains(widget.type())) {
             List<UUID> propertyIds = uuids(
                     objectDimensionFields(widget), widget.config().get("dimensionPropertyId"),
@@ -749,24 +752,6 @@ public class DashboardService {
     private List<String> stringList(Object value) {
         if (!(value instanceof List<?> list)) return List.of();
         return list.stream().map(String::valueOf).filter(item -> !item.isBlank()).limit(3).toList();
-    }
-
-    private Object metric(String aggregation, Object property, ObjectSetPage page) {
-        if ("count".equals(aggregation)) return Map.of("value", page.visibleCount(), "aggregation", "count");
-        if (property == null) throw invalid("度量必须指定属性");
-        String key = String.valueOf(property);
-        List<Double> values = page.items().stream().map(item -> item.properties().get(key))
-                .filter(Number.class::isInstance).map(Number.class::cast).map(Number::doubleValue).toList();
-        if (values.isEmpty()) return Map.of("value", 0, "aggregation", aggregation, "empty", true);
-        double value = switch (aggregation) {
-            case "sum" -> values.stream().mapToDouble(Double::doubleValue).sum();
-            case "avg" -> values.stream().mapToDouble(Double::doubleValue).average().orElse(0);
-            case "min" -> values.stream().mapToDouble(Double::doubleValue).min().orElse(0);
-            case "max" -> values.stream().mapToDouble(Double::doubleValue).max().orElse(0);
-            case "approx_distinct" -> values.stream().distinct().count();
-            default -> throw invalid("聚合函数不受支持");
-        };
-        return Map.of("value", value, "aggregation", aggregation, "sampleSize", values.size());
     }
 
     private String bucketLabel(Object value) {
@@ -1014,8 +999,8 @@ public class DashboardService {
     }
 
     private String requireAccess(UUID id, Actor actor, String required) {
-        AccessRow row = jdbc.sql("SELECT owner_id,visibility FROM control.dashboards WHERE id=:id AND workspace_id=:workspace")
-                .param("id", id).param("workspace", WorkspaceContext.id()).query((rs, index) -> new AccessRow(rs.getString("owner_id"), rs.getString("visibility")))
+        AccessRow row = jdbc.sql("SELECT owner_id,visibility FROM control.dashboards WHERE id=:id AND ontology_id=:ontology")
+                .param("id", id).param("ontology", WorkspaceContext.id()).query((rs, index) -> new AccessRow(rs.getString("owner_id"), rs.getString("visibility")))
                 .optional().orElseThrow(() -> notFound("看板不存在"));
         String role;
         if (row.ownerId().equals(actor.id())) role = "OWNER";
@@ -1062,7 +1047,8 @@ public class DashboardService {
     }
 
     private long currentRevision() {
-        return jdbc.sql("SELECT revision FROM control.ontology_revisions WHERE status='ACTIVE'")
+        return jdbc.sql("SELECT revision FROM control.ontology_revisions WHERE ontology_id=:ontology AND status='ACTIVE'")
+                .param("ontology", WorkspaceContext.id())
                 .query(Long.class).optional().orElseThrow(() -> conflict("没有活动本体 revision"));
     }
 

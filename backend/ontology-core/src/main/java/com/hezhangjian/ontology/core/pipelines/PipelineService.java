@@ -73,7 +73,7 @@ public class PipelineService {
             default -> "p.updated_at DESC";
         };
         String where = """
-                WHERE p.workspace_id=? AND (lower(p.name) LIKE ? OR lower(coalesce(p.description,'')) LIKE ?)
+                WHERE p.ontology_id=? AND (lower(p.name) LIKE ? OR lower(coalesce(p.description,'')) LIKE ?)
                   AND (?='' OR p.mode=?) AND (?='' OR p.lifecycle=?)
                   AND (?='' OR p.run_status=?) AND (?='' OR p.owner_id=?)
                 """;
@@ -84,9 +84,9 @@ public class PipelineService {
                 WorkspaceContext.id(), pattern, pattern, empty(mode), empty(mode), empty(lifecycle), empty(lifecycle),
                 empty(runStatus), empty(runStatus), empty(owner), empty(owner));
         Map<String, Integer> counts = new LinkedHashMap<>();
-        jdbc.query("SELECT lifecycle,count(*) FROM control.pipelines WHERE workspace_id=? GROUP BY lifecycle ORDER BY lifecycle",
+        jdbc.query("SELECT lifecycle,count(*) FROM control.pipelines WHERE ontology_id=? GROUP BY lifecycle ORDER BY lifecycle",
                 (org.springframework.jdbc.core.RowCallbackHandler) row -> counts.put(row.getString(1), row.getInt(2)), WorkspaceContext.id());
-        counts.put("ALL", Objects.requireNonNull(jdbc.queryForObject("SELECT count(*) FROM control.pipelines WHERE workspace_id=?", Integer.class, WorkspaceContext.id())));
+        counts.put("ALL", Objects.requireNonNull(jdbc.queryForObject("SELECT count(*) FROM control.pipelines WHERE ontology_id=?", Integer.class, WorkspaceContext.id())));
         return new PipelinePage(items, safePage, safeSize, total == null ? 0 : total, counts,
                 Map.of("lifecycle", empty(lifecycle), "mode", empty(mode), "owner", empty(owner),
                         "runStatus", empty(runStatus), "search", empty(search), "sort", empty(sort)));
@@ -119,7 +119,7 @@ public class PipelineService {
         try {
             jdbc.update("""
                     INSERT INTO control.pipelines(id,name,normalized_name,description,template,data_source_id,source_asset_id,
-                      mode,status,lifecycle,run_status,target_summary,schedule_summary,owner_id,owner_name,created_at,updated_at,workspace_id)
+                      mode,status,lifecycle,run_status,target_summary,schedule_summary,owner_id,owner_name,created_at,updated_at,ontology_id)
                     VALUES (?,?,?,?,?,?,?,?,'DRAFT','DRAFT','NEVER_RUN',?,'MANUAL',?,?,?,?,?)
                     """, id, request.name().trim(), normalize(request.name()), safeDescription(request.description()), template,
                     request.dataSourceId(), request.sourceAssetId(), request.mode().name(), targetSummary(graph),
@@ -139,7 +139,7 @@ public class PipelineService {
     }
 
     public Pipeline get(UUID id) {
-        List<Pipeline> pipelines = jdbc.query(PIPELINE_SELECT + " WHERE p.id=? AND p.workspace_id=?", this::mapPipeline, id, WorkspaceContext.id());
+        List<Pipeline> pipelines = jdbc.query(PIPELINE_SELECT + " WHERE p.id=? AND p.ontology_id=?", this::mapPipeline, id, WorkspaceContext.id());
         if (pipelines.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "管道不存在");
         Pipeline value = pipelines.getFirst();
         PipelineDraft draft = jdbc.query("SELECT * FROM control.pipeline_drafts WHERE pipeline_id=?", this::mapDraft, id)
@@ -466,21 +466,21 @@ public class PipelineService {
 
     private PipelineGraph enrichLookupSchemas(PipelineGraph graph) {
         List<PipelineNode> nodes = graph.nodes().stream().map(node -> {
-            if (!node.type().equals("JOIN")) return node;
+            if (!node.type().equals("SOURCE")) return node;
             Map<String, Object> config = new LinkedHashMap<>(node.config());
-            UUID connectionId = uuid(config.get("lookupConnectionId"));
-            UUID assetId = uuid(config.get("lookupAssetId"));
+            UUID connectionId = uuid(config.get("connectionId"));
+            UUID assetId = uuid(config.get("assetId"));
             if (connectionId == null || assetId == null) return node;
             Integer count = jdbc.queryForObject("""
                     SELECT count(*) FROM control.data_source_assets
                     WHERE id=? AND data_source_id=? AND status<>'UNAVAILABLE' AND permission_status='READABLE'
                     """, Integer.class, assetId, connectionId);
             if (count == null || count == 0) {
-                config.put("lookupFields", List.of());
+                config.put("sourceSchema", List.of());
             } else {
                 List<Map<String, Object>> fields = sourceSchema(assetId).stream().map(field -> Map.<String, Object>of(
                         "name", field.name(), "nullable", field.nullable(), "sensitive", field.sensitive(), "type", field.type())).toList();
-                config.put("lookupFields", fields);
+                config.put("sourceSchema", fields);
             }
             return new PipelineNode(node.id(), node.type(), node.name(), node.position(), config,
                     node.inputSchema(), node.outputSchema(), node.invalidReasons());
@@ -537,10 +537,10 @@ public class PipelineService {
     private void indexDependencies(Pipeline pipeline, UUID versionId, PipelineGraph graph) {
         addDependency(versionId, "DATA_SOURCE", pipeline.dataSourceId().toString(), pipeline.dataSourceName(), "source-1", Map.of());
         addDependency(versionId, "DATA_ASSET", pipeline.sourceAssetId().toString(), pipeline.sourceAssetName(), "source-1", Map.of());
-        for (PipelineNode node : graph.nodes()) if (node.type().equals("ONTOLOGY_OBJECT")) {
-            addDependency(versionId, "ONTOLOGY_OBJECT", String.valueOf(node.config().get("objectTypeId")), node.name(), node.id(), node.config());
-        } else if (node.type().equals("ONTOLOGY_RELATION")) {
-            addDependency(versionId, "ONTOLOGY_RELATION", String.valueOf(node.config().get("relationTypeId")), node.name(), node.id(), node.config());
+        for (PipelineNode node : graph.nodes()) if (node.type().equals("OBJECT_OUTPUT")) {
+            addDependency(versionId, "OBJECT_OUTPUT", String.valueOf(node.config().get("objectTypeId")), node.name(), node.id(), node.config());
+        } else if (node.type().equals("LINK_OUTPUT")) {
+            addDependency(versionId, "LINK_OUTPUT", String.valueOf(node.config().get("relationTypeId")), node.name(), node.id(), node.config());
         } else if (node.type().equals("DATASET_OUTPUT")) {
             addDependency(versionId, "DATASET", String.valueOf(node.config().get("datasetName")), node.name(), node.id(), node.config());
         }

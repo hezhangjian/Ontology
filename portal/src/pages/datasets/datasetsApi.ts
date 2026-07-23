@@ -2,10 +2,10 @@ import { ApiProblem } from '../data-connections/services/dataConnections';
 import type { Dataset, DatasetFilter, DatasetMetric, DatasetPage, DatasetPreview, DatasetQueryResult, MappingPreview } from './types';
 import { activeOntologyId } from '../../features/ontology/ontologyContext';
 
-const base = '/api/ontology/v1';
+const base = () => `/api/v1/ontologies/${activeOntologyId()}`;
 export function datasetsApi(accessToken: string) {
   async function request<T>(path: string, init: RequestInit = {}) {
-    const response = await fetch(`${base}${path}`, { ...init, headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', 'X-Ontology-Id': activeOntologyId(), 'X-Workspace-Id': activeOntologyId(), ...init.headers } });
+    const response = await fetch(`${base()}${path}`, { ...init, headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', ...init.headers } });
     if (!response.ok) { const problem = await response.json().catch(() => ({ detail: '请求失败' })) as { detail?: string; requestId?: string }; throw new ApiProblem(problem.detail ?? '请求失败', problem.requestId, response.status); }
     if (response.status === 204) return undefined as T;
     return response.json() as Promise<T>;

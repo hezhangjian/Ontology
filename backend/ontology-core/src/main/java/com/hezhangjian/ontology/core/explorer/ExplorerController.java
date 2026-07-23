@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/v1")
+@RequestMapping("/v1/ontologies/{ontologyId}")
 @PreAuthorize("hasAnyRole('Viewer','Builder','Admin')")
 public class ExplorerController {
     private final ExplorerService service;
@@ -67,35 +67,35 @@ public class ExplorerController {
         return service.compare(request, actor(authentication));
     }
 
-    @PostMapping("/object-sets/selection-tokens")
+    @PostMapping("/selection-tokens")
     ResponseEntity<SelectionTokenView> selection(@RequestBody SelectionRequest request, Authentication authentication) {
         return ResponseEntity.status(201).body(service.selection(request, actor(authentication)));
     }
 
-    @GetMapping("/objects/{objectTypeId}/{objectId}")
+    @GetMapping("/object-types/{objectTypeId}/objects/{objectId}")
     ObjectDetail object(@PathVariable UUID objectTypeId, @PathVariable String objectId, Authentication authentication) {
         return service.object(objectTypeId, objectId, actor(authentication));
     }
 
-    @GetMapping("/objects/{objectTypeId}/{objectId}/capabilities")
+    @GetMapping("/object-types/{objectTypeId}/objects/{objectId}/capabilities")
     CapabilityResponse capabilities(@PathVariable UUID objectTypeId, @PathVariable String objectId,
                                     Authentication authentication) {
         return service.capabilities(objectTypeId, objectId, actor(authentication));
     }
 
-    @PostMapping("/objects/{objectTypeId}/{objectId}/links")
+    @PostMapping("/object-types/{objectTypeId}/objects/{objectId}/links")
     LinkPage links(@PathVariable UUID objectTypeId, @PathVariable String objectId,
                    @RequestBody(required = false) LinkRequest request, Authentication authentication) {
         return service.links(objectTypeId, objectId, request, actor(authentication));
     }
 
-    @GetMapping("/objects/{objectTypeId}/{objectId}/activity")
+    @GetMapping("/object-types/{objectTypeId}/objects/{objectId}/activity")
     List<ActivityItem> activity(@PathVariable UUID objectTypeId, @PathVariable String objectId,
                                 Authentication authentication) {
         return service.activity(objectTypeId, objectId, actor(authentication));
     }
 
-    @GetMapping("/objects/{objectTypeId}/{objectId}/provenance")
+    @GetMapping("/object-types/{objectTypeId}/objects/{objectId}/provenance")
     ProvenanceView provenance(@PathVariable UUID objectTypeId, @PathVariable String objectId,
                               Authentication authentication) {
         return service.provenance(objectTypeId, objectId, actor(authentication));
@@ -108,7 +108,8 @@ public class ExplorerController {
     ResponseEntity<ExplorationView> createExploration(@RequestBody ExplorationRequest request,
                                                       Authentication authentication) {
         ExplorationView value = service.createExploration(request, actor(authentication));
-        return ResponseEntity.created(URI.create("/v1/explorations/" + value.id())).body(value);
+        return ResponseEntity.created(URI.create("/v1/ontologies/" + com.hezhangjian.ontology.core.security.WorkspaceContext.id()
+                + "/explorations/" + value.id())).body(value);
     }
 
     @GetMapping("/explorations/{id}")
@@ -139,7 +140,8 @@ public class ExplorerController {
     @PostMapping("/object-lists")
     ResponseEntity<ObjectListView> createList(@RequestBody ObjectListRequest request, Authentication authentication) {
         ObjectListView value = service.createList(request, actor(authentication));
-        return ResponseEntity.created(URI.create("/v1/object-lists/" + value.id())).body(value);
+        return ResponseEntity.created(URI.create("/v1/ontologies/" + com.hezhangjian.ontology.core.security.WorkspaceContext.id()
+                + "/object-lists/" + value.id())).body(value);
     }
 
     @GetMapping("/object-lists/{id}")
@@ -159,7 +161,7 @@ public class ExplorerController {
         return service.removeListItems(id, request, actor(authentication));
     }
 
-    @PostMapping("/export-jobs")
+    @PostMapping("/exports")
     ResponseEntity<ExportJobView> export(@RequestBody ExportRequest request, Authentication authentication) {
         return ResponseEntity.accepted().body(service.export(request, actor(authentication)));
     }

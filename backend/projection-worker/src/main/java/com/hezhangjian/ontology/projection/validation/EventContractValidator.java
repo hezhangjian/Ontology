@@ -24,7 +24,9 @@ public class EventContractValidator {
     public ValidatedEvent validate(OntologyEventEnvelope event) {
         require(event.eventId() != null, "event_id is required");
         require(event.schemaVersion() == SUPPORTED_SCHEMA_VERSION, "Unsupported schema_version");
-        require(event.ontologyRevision() > 0 && repository.revisionExists(event.ontologyRevision()),
+        require(event.ontologyId() != null, "ontology_id is required");
+        require(event.ontologyRevision() > 0
+                        && repository.revisionExists(event.ontologyId(), event.ontologyRevision()),
                 "Unknown ontology_revision");
         require(event.occurredAt() != null, "occurred_at is required");
         require(StringUtils.hasText(event.producer()), "producer is required");
@@ -50,7 +52,7 @@ public class EventContractValidator {
             require(payload != null && payload.isObject(), "payload must be an object");
             validateProperties((ObjectNode) payload, contract);
         }
-        return new ValidatedEvent(event, entityKey("object", event.objectType(), event.objectId()),
+        return new ValidatedEvent(event, entityKey(event.ontologyId().toString(), "object", event.objectType(), event.objectId()),
                 event.objectVersion(), filterSearchable(event.ontologyRevision(), event.objectType(), payload), deleted, false);
     }
 
@@ -67,7 +69,7 @@ public class EventContractValidator {
         require(StringUtils.hasText(event.targetObjectId()), "target_object_id is required");
         require(event.payload() == null || event.payload().isObject(), "payload must be an object");
         return new ValidatedEvent(event,
-                entityKey("relation", event.relationType(), event.relationId()),
+                entityKey(event.ontologyId().toString(), "relation", event.relationType(), event.relationId()),
                 event.relationVersion(),
                 event.payload(),
                 "relation.delete".equals(event.eventType()),
@@ -125,8 +127,8 @@ public class EventContractValidator {
         return searchable;
     }
 
-    private String entityKey(String kind, String type, String id) {
-        return kind + ":" + type + ":" + id;
+    private String entityKey(String ontologyId, String kind, String type, String id) {
+        return ontologyId + ":" + kind + ":" + type + ":" + id;
     }
 
     private void require(boolean condition, String message) {

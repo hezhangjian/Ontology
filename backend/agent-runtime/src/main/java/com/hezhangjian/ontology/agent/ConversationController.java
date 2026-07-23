@@ -22,7 +22,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 @RestController
-@RequestMapping("/v1/conversations")
+@RequestMapping("/v1/ontologies/{ontologyId}/agents/{agentId}/conversations")
 final class ConversationController {
     private final AgentService agents;
     private final ConversationStore conversations;
@@ -32,25 +32,27 @@ final class ConversationController {
         this.agents = agents; this.conversations = conversations; this.tools = tools;
     }
 
-    @GetMapping List<Conversation> list(@RequestHeader("X-Ontology-Id") String ontologyId) {
+    @GetMapping List<Conversation> list(@PathVariable String ontologyId) {
         return conversations.list(ontologyId);
     }
 
     @PostMapping ResponseEntity<Conversation> create(@RequestBody(required = false) CreateConversationRequest request,
-                                                     @RequestHeader("X-Ontology-Id") String ontologyId) {
+                                                     @PathVariable String ontologyId,
+                                                     @PathVariable UUID agentId) {
         Conversation value = conversations.create(ontologyId, request == null ? null : request.title());
-        return ResponseEntity.created(URI.create("/v1/conversations/" + value.id())).body(value);
+        return ResponseEntity.created(URI.create("/v1/ontologies/" + ontologyId + "/agents/" + agentId
+                + "/conversations/" + value.id())).body(value);
     }
 
     @GetMapping("/{id}") Conversation get(@PathVariable UUID id,
-                                           @RequestHeader("X-Ontology-Id") String ontologyId) {
+                                           @PathVariable String ontologyId) {
         return conversations.get(id, ontologyId);
     }
 
     @PostMapping(value = "/{id}/messages", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     Flux<ServerSentEvent<StreamEvent>> send(@PathVariable UUID id, @RequestBody SendMessageRequest request,
                                             @RequestHeader(value = "Authorization", required = false) String authorization,
-                                            @RequestHeader("X-Ontology-Id") String ontologyId,
+                                            @PathVariable String ontologyId,
                                             ServerHttpResponse response) {
         response.getHeaders().setCacheControl("no-cache");
         response.getHeaders().add("X-Accel-Buffering", "no");
@@ -67,13 +69,14 @@ final class ConversationController {
         }));
     }
 
-    @PostMapping("/{id}/confirm-action")
+    @PostMapping("/{id}/action-confirmations")
     Mono<Object> confirmAction(@PathVariable UUID id, @RequestBody ConfirmActionRequest request,
                                @RequestHeader(value = "Authorization", required = false) String authorization,
-                               @RequestHeader("X-Ontology-Id") String ontologyId) {
+                               @RequestHeader("Idempotency-Key") String idempotencyKey,
+                               @PathVariable String ontologyId) {
         return Mono.fromCallable(() -> {
             conversations.get(id, ontologyId);
-            return tools.confirmAction(Map.of("actionId", request.actionId(), "idempotencyKey", request.idempotencyKey(),
+            return tools.confirmAction(Map.of("actionId", request.actionTypeId(), "idempotencyKey", idempotencyKey,
                     "previewToken", request.previewToken()), new OntologyToolClient.RequestContext(authorization, ontologyId));
         }).subscribeOn(Schedulers.boundedElastic());
     }
@@ -81,7 +84,7 @@ final class ConversationController {
     @PostMapping("/{id}/confirm-rule-transform")
     Mono<Object> confirmRuleTransform(@PathVariable UUID id, @RequestBody Map<String, Object> request,
                                       @RequestHeader(value = "Authorization", required = false) String authorization,
-                                      @RequestHeader("X-Ontology-Id") String ontologyId) {
+                                      @PathVariable String ontologyId) {
         return Mono.fromCallable(() -> {
             conversations.get(id, ontologyId);
             return tools.confirmRuleTransform(request, new OntologyToolClient.RequestContext(authorization, ontologyId));

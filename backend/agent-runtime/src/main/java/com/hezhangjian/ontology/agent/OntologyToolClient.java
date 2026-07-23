@@ -24,22 +24,22 @@ final class OntologyToolClient {
 
     Object execute(String name, Map<String, Object> arguments, RequestContext context) {
         return switch (name) {
-            case "aggregate_objects" -> post("/v1/object-sets/aggregate", aggregateBody(arguments), context);
-            case "facet_objects" -> post("/v1/object-sets/facets", Map.of(
+            case "aggregate_objects" -> post("/object-sets/aggregate", aggregateBody(arguments), context);
+            case "facet_objects" -> post("/object-sets/facets", Map.of(
                     "propertyIds", list(arguments.get("propertyIds")), "query", query(arguments)), context);
-            case "get_object" -> get("/v1/objects/" + required(arguments, "objectTypeId") + "/"
+            case "get_object" -> get("/object-types/" + required(arguments, "objectTypeId") + "/objects/"
                     + encode(required(arguments, "objectId")), context);
-            case "get_pipeline" -> get("/v1/pipelines/" + required(arguments, "pipelineId"), context);
+            case "get_pipeline" -> get("/pipelines/" + required(arguments, "pipelineId"), context);
             case "execute_function" -> executeFunction(arguments, context);
-            case "list_actions" -> get("/v1/modeling/actions", context);
-            case "list_functions" -> get("/v1/modeling/functions", context);
-            case "list_link_types" -> get("/v1/modeling/link-types", context);
-            case "list_object_types" -> compactObjectTypes(get("/v1/modeling/object-types", context));
-            case "list_pipelines" -> get("/v1/pipelines?page=0&size=100", context);
-            case "preview_action" -> post("/v1/modeling/actions/" + required(arguments, "actionId") + "/preview",
+            case "list_actions" -> get("/action-types", context);
+            case "list_functions" -> get("/functions", context);
+            case "list_link_types" -> get("/link-types", context);
+            case "list_object_types" -> compactObjectTypes(get("/object-types", context));
+            case "list_pipelines" -> get("/pipelines?page=0&size=100", context);
+            case "preview_action" -> post("/action-types/" + required(arguments, "actionId") + "/previews",
                     previewActionBody(arguments), context);
-            case "query_objects" -> compactQuery(post("/v1/object-sets/query", query(arguments), context), arguments);
-            case "traverse_relations" -> post("/v1/object-sets/search-around", Map.of(
+            case "query_objects" -> compactQuery(post("/object-sets/query", query(arguments), context), arguments);
+            case "traverse_relations" -> post("/object-sets/search-around", Map.of(
                     "linkTypeIds", list(arguments.get("linkTypeIds")),
                     "objectId", required(arguments, "objectId"),
                     "objectTypeId", required(arguments, "objectTypeId"), "pageSize", 100), context);
@@ -49,14 +49,14 @@ final class OntologyToolClient {
     }
 
     Object confirmAction(Map<String, Object> request, RequestContext context) {
-        return post("/v1/modeling/actions/" + required(request, "actionId") + "/execute", Map.of(
+        return post("/action-types/" + required(request, "actionId") + "/executions", Map.of(
                 "idempotencyKey", required(request, "idempotencyKey"),
                 "previewToken", required(request, "previewToken")), context);
     }
 
     @SuppressWarnings("unchecked")
     Object confirmRuleTransform(Map<String, Object> proposal, RequestContext context) {
-        Map<String, Object> pipeline = (Map<String, Object>) get("/v1/pipelines/" + required(proposal, "pipelineId"), context);
+        Map<String, Object> pipeline = (Map<String, Object>) get("/pipelines/" + required(proposal, "pipelineId"), context);
         Map<String, Object> draft = map(pipeline.get("draft"));
         Map<String, Object> graph = map(draft.get("graph"));
         List<Map<String, Object>> nodes = json.convertValue(graph.get("nodes"), new TypeReference<>() { });
@@ -93,7 +93,7 @@ final class OntologyToolClient {
         updatedEdges.remove(old);
         updatedEdges.add(Map.of("id", "edge-" + java.util.UUID.randomUUID(), "source", old.get("source"), "target", ruleNodeId));
         updatedEdges.add(Map.of("id", "edge-" + java.util.UUID.randomUUID(), "source", ruleNodeId, "target", beforeNodeId));
-        Object updated = patch("/v1/pipelines/" + required(proposal, "pipelineId") + "/draft",
+        Object updated = patch("/pipelines/" + required(proposal, "pipelineId") + "/draft",
                 Map.of("graph", Map.of("edges", updatedEdges, "nodes", updatedNodes)),
                 Map.of("If-Match", String.valueOf(draft.get("etag"))), context);
         return Map.of("pipeline", updated, "ruleNodeId", ruleNodeId, "status", "DRAFT_UPDATED");
@@ -109,24 +109,8 @@ final class OntologyToolClient {
 
     private Object executeFunction(Map<String, Object> arguments, RequestContext context) {
         String functionId = required(arguments, "functionId");
-        Map<String, Object> function = map(get("/v1/modeling/functions/" + functionId, context));
-        Map<String, Object> definition = map(function.get("definition"));
-        Map<String, Object> dsl = map(definition.get("queryDsl"));
-        Map<String, Object> inputs = map(arguments.get("inputs"));
-        Map<String, Object> outputs = new LinkedHashMap<>();
-        for (Object rawStep : list(dsl.get("steps"))) {
-            Map<String, Object> step = map(rawStep);
-            String id = required(step, "id");
-            String tool = required(step, "tool");
-            if (!List.of("aggregate_objects", "facet_objects", "get_object", "query_objects", "traverse_relations").contains(tool)) {
-                throw new IllegalArgumentException("Function DSL tool is not read-only or supported: " + tool);
-            }
-            Map<String, Object> resolved = map(resolve(step.get("arguments"), inputs, outputs));
-            outputs.put(id, execute(tool, resolved, context));
-        }
-        Object result = dsl.containsKey("result") ? resolve(dsl.get("result"), inputs, outputs) : outputs;
-        return Map.of("functionId", functionId, "functionVersion", function.get("version"),
-                "name", function.get("displayName"), "result", result, "steps", outputs);
+        return post("/functions/" + functionId + "/executions",
+                Map.of("inputs", map(arguments.get("inputs"))), context);
     }
 
     private Object resolve(Object value, Map<String, Object> inputs, Map<String, Object> outputs) {
@@ -269,7 +253,10 @@ final class OntologyToolClient {
 
     private Map<String, Object> previewActionBody(Map<String, Object> arguments) {
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("objectId", required(arguments, "objectId"));
+        if (arguments.get("objectId") != null
+                && !String.valueOf(arguments.get("objectId")).isBlank()) {
+            result.put("objectId", arguments.get("objectId"));
+        }
         if (arguments.get("objectVersion") != null) result.put("objectVersion", arguments.get("objectVersion"));
         result.put("parameters", map(arguments.get("parameters")));
         return result;
@@ -280,8 +267,8 @@ final class OntologyToolClient {
     private Object patch(String path, Object body, Map<String, String> headers, RequestContext context) { return request("PATCH", path, body, headers, context); }
 
     private Object request(String method, String path, Object body, Map<String, String> headers, RequestContext context) {
-        WebClient.RequestBodySpec request = web.method(org.springframework.http.HttpMethod.valueOf(method)).uri(path)
-                .header("X-Ontology-Id", context.ontologyId()).header("X-Workspace-Id", context.ontologyId());
+        String scopedPath = "/v1/ontologies/" + context.ontologyId() + path;
+        WebClient.RequestBodySpec request = web.method(org.springframework.http.HttpMethod.valueOf(method)).uri(scopedPath);
         if (context.authorization() != null && !context.authorization().isBlank()) request.header(HttpHeaders.AUTHORIZATION, context.authorization());
         headers.forEach(request::header);
         WebClient.ResponseSpec response = (body == null ? request.retrieve() : request.bodyValue(body).retrieve())

@@ -75,6 +75,7 @@ public final class PipelineModels {
 
     public record PreviewExchangeResponse(UUID previewId, String sourceType,
                                           Map<String, Object> sourceConfig, Map<String, String> credential,
+                                          Map<String, RuntimeSourceGrant> sources,
                                           PipelineGraph graph, RuntimeSettings runtime, String correlationId,
                                           String nodeId, int limit, Instant expiresAt) { }
 
@@ -129,8 +130,12 @@ public final class PipelineModels {
 
     public record WorkloadExchangeResponse(UUID grantId, UUID runId, String sourceType,
                                            Map<String, Object> sourceConfig, Map<String, String> credential,
+                                           Map<String, RuntimeSourceGrant> sources,
                                            PipelineGraph graph, RuntimeSettings runtime, String targetTopic,
                                            String correlationId, Instant expiresAt) { }
+
+    public record RuntimeSourceGrant(String sourceType, Map<String, Object> sourceConfig,
+                                     Map<String, String> credential) { }
 
     public record RuntimeProgressRequest(String phase, long readCount, long writtenCount,
                                          long rejectedCount, String message,

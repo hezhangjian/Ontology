@@ -14,9 +14,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
-@RequestMapping("/v1")
+@RequestMapping("/v1/ontologies/{ontologyId}")
 @PreAuthorize("hasAnyRole('Builder','Admin')")
 public class PipelineController {
     private final PipelineService service;
@@ -51,7 +51,8 @@ public class PipelineController {
     @PostMapping("/pipelines")
     ResponseEntity<Pipeline> create(@RequestBody CreatePipelineRequest request, Authentication authentication) {
         Pipeline created = service.create(request, actor(authentication));
-        return ResponseEntity.created(URI.create("/v1/pipelines/" + created.id())).eTag(Long.toString(created.draft().etag())).body(created);
+        return ResponseEntity.created(URI.create("/v1/ontologies/" + com.hezhangjian.ontology.core.security.WorkspaceContext.id()
+                + "/pipelines/" + created.id())).eTag(Long.toString(created.draft().etag())).body(created);
     }
 
     @GetMapping("/pipelines/{id}")
@@ -61,7 +62,13 @@ public class PipelineController {
         return ResponseEntity.ok().eTag(Long.toString(etag)).body(pipeline);
     }
 
-    @PatchMapping("/pipelines/{id}/draft")
+    @GetMapping("/pipelines/{id}/draft")
+    ResponseEntity<PipelineDraft> draft(@PathVariable UUID id) {
+        PipelineDraft draft = service.get(id).draft();
+        return ResponseEntity.ok().eTag(Long.toString(draft.etag())).body(draft);
+    }
+
+    @PutMapping("/pipelines/{id}/draft")
     ResponseEntity<Pipeline> updateDraft(@PathVariable UUID id, @RequestHeader("If-Match") String ifMatch,
                                          @RequestBody UpdateDraftRequest request, Authentication authentication) {
         Pipeline pipeline = service.updateDraft(id, parseVersion(ifMatch), request, actor(authentication));
@@ -71,13 +78,14 @@ public class PipelineController {
     @PostMapping("/pipelines/{id}/duplicate")
     ResponseEntity<Pipeline> duplicate(@PathVariable UUID id, Authentication authentication) {
         Pipeline copy = service.duplicate(id, actor(authentication));
-        return ResponseEntity.created(URI.create("/v1/pipelines/" + copy.id())).eTag(Long.toString(copy.draft().etag())).body(copy);
+        return ResponseEntity.created(URI.create("/v1/ontologies/" + com.hezhangjian.ontology.core.security.WorkspaceContext.id()
+                + "/pipelines/" + copy.id())).eTag(Long.toString(copy.draft().etag())).body(copy);
     }
 
     @PostMapping("/pipelines/{id}/validate")
     ValidationResult validate(@PathVariable UUID id) { return service.validate(id); }
 
-    @PostMapping("/pipelines/{id}/preview")
+    @PostMapping("/pipelines/{id}/previews")
     ResponseEntity<PreviewRun> preview(@PathVariable UUID id, @RequestBody PreviewRequest request,
                                        Authentication authentication) {
         return ResponseEntity.accepted().body(service.preview(id, request, actor(authentication)));
@@ -116,7 +124,7 @@ public class PipelineController {
         return service.decide(id, proposalId, false, request, actor(authentication));
     }
 
-    @PostMapping("/pipelines/{id}/publish")
+    @PostMapping("/pipelines/{id}/versions")
     PipelineVersion publish(@PathVariable UUID id, @RequestBody PublishRequest request,
                             Authentication authentication) {
         return service.publish(id, request, actor(authentication));
@@ -129,7 +137,7 @@ public class PipelineController {
         return service.rollback(id, request, actor(authentication));
     }
 
-    @PostMapping("/pipelines/{id}/run")
+    @PostMapping("/pipelines/{id}/runs")
     ResponseEntity<PipelineRun> run(@PathVariable UUID id, Authentication authentication) {
         return ResponseEntity.accepted().body(service.run(id, actor(authentication)));
     }
@@ -139,13 +147,13 @@ public class PipelineController {
         return ResponseEntity.accepted().body(service.start(id, actor(authentication)));
     }
 
-    @PostMapping("/pipelines/{id}/stop")
+    @PostMapping("/pipeline-runs/{id}/stop")
     ResponseEntity<PipelineRun> stop(@PathVariable UUID id, @RequestBody(required = false) SavepointRequest request,
                                      Authentication authentication) {
         return ResponseEntity.accepted().body(service.stop(id, request, actor(authentication)));
     }
 
-    @PostMapping("/pipelines/{id}/savepoint")
+    @PostMapping("/pipeline-runs/{id}/savepoints")
     ResponseEntity<PipelineRun> savepoint(@PathVariable UUID id, Authentication authentication) {
         return ResponseEntity.accepted().body(service.savepoint(id, actor(authentication)));
     }
@@ -197,7 +205,7 @@ public class PipelineController {
     @GetMapping("/pipeline-runs/{runId}/metrics")
     Map<String, Object> metrics(@PathVariable UUID runId) { return service.runDetail(runId).metrics(); }
 
-    @PostMapping("/pipeline-runs/{runId}/cancel")
+    @DeleteMapping("/pipeline-runs/{runId}")
     ResponseEntity<PipelineRun> cancel(@PathVariable UUID runId, Authentication authentication) {
         return ResponseEntity.accepted().body(service.cancel(runId, actor(authentication)));
     }

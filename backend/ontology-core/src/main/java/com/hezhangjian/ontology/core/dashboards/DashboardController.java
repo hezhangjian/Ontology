@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/v1")
+@RequestMapping("/v1/ontologies/{ontologyId}")
 @PreAuthorize("hasAnyRole('Viewer','Builder','Admin')")
 public class DashboardController {
     private final DashboardService service;
@@ -44,7 +44,8 @@ public class DashboardController {
     @PreAuthorize("hasAnyRole('Builder','Admin')")
     ResponseEntity<DashboardDetail> create(@RequestBody DashboardCreateRequest request, Authentication authentication) {
         DashboardDetail value = service.create(request, actor(authentication));
-        return ResponseEntity.created(URI.create("/v1/dashboards/" + value.summary().id())).body(value);
+        return ResponseEntity.created(URI.create("/v1/ontologies/" + com.hezhangjian.ontology.core.security.WorkspaceContext.id()
+                + "/dashboards/" + value.summary().id())).body(value);
     }
 
     @GetMapping("/dashboards/{id}")
@@ -68,7 +69,8 @@ public class DashboardController {
     @PreAuthorize("hasAnyRole('Builder','Admin')")
     ResponseEntity<DashboardDetail> copy(@PathVariable UUID id, Authentication authentication) {
         DashboardDetail value = service.copy(id, actor(authentication));
-        return ResponseEntity.created(URI.create("/v1/dashboards/" + value.summary().id())).body(value);
+        return ResponseEntity.created(URI.create("/v1/ontologies/" + com.hezhangjian.ontology.core.security.WorkspaceContext.id()
+                + "/dashboards/" + value.summary().id())).body(value);
     }
 
     @PostMapping("/dashboards/{id}/archive")
@@ -111,7 +113,7 @@ public class DashboardController {
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("/dashboards/{id}/validate")
+    @PostMapping("/dashboards/{id}/validation")
     DashboardValidationResult validate(@PathVariable UUID id, Authentication authentication) {
         return service.validate(id, actor(authentication));
     }

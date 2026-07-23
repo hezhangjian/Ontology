@@ -17,7 +17,7 @@ export default function PipelineCanvas({ graph, nodeTypes, onChange, onSelect }:
     initialHeight: 48,
     initialWidth: 160,
     position: node.position,
-    type: node.type === 'SOURCE' ? 'input' : node.type.startsWith('ONTOLOGY_') || node.type === 'DATASET_OUTPUT' ? 'output' : 'default',
+    type: node.type === 'SOURCE' ? 'input' : ['DATASET_OUTPUT', 'LINK_OUTPUT', 'OBJECT_OUTPUT'].includes(node.type) ? 'output' : 'default',
   }));
   const edges: Edge[] = graph.edges.map((edge) => ({ ...edge, animated: false }));
 
@@ -26,7 +26,8 @@ export default function PipelineCanvas({ graph, nodeTypes, onChange, onSelect }:
     if (graphChanges.length === 0) return;
     const updated = applyNodeChanges(graphChanges, nodes);
     const removed = new Set(graphChanges.filter((change) => change.type === 'remove').map((change) => change.id));
-    if (graph.nodes.some((node) => removed.has(node.id) && node.type === 'SOURCE')) return;
+    const remainingSources = graph.nodes.filter((node) => node.type === 'SOURCE' && !removed.has(node.id)).length;
+    if (remainingSources === 0) return;
     const nextNodes = graph.nodes
       .filter((node) => !removed.has(node.id))
       .map((node) => ({ ...node, position: updated.find((item) => item.id === node.id)?.position ?? node.position }));

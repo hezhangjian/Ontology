@@ -117,3 +117,17 @@ export interface HistoryEntry {
   proposalId?: string;
   proposalTitle?: string;
 }
+
+export interface ActionExecution {
+  id: string;
+  actionTypeId: string;
+  actionVersion: number;
+  previewId: string;
+  status: 'PENDING_APPROVAL' | 'SUBMITTED' | 'PROJECTING' | 'SUCCEEDED' | 'DEGRADED' | 'FAILED' | 'REJECTED';
+  submittedBy: string;
+  submittedAt: string;
+  completedAt?: string;
+  correlationId: string;
+  traceId: string;
+  safeError?: string;
+}

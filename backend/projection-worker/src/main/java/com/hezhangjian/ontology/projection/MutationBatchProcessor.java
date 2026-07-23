@@ -28,6 +28,7 @@ public class MutationBatchProcessor {
         ProjectionOperation operation = repository.registerOperation(
                 batch.batchId(),
                 batch.idempotencyKey(),
+                batch.ontologyId(),
                 batch.ontologyRevision(),
                 batch.requestedBy(),
                 batch.correlationId(),
@@ -58,6 +59,7 @@ public class MutationBatchProcessor {
 
     private void validate(OntologyMutationBatch batch) {
         if (batch.batchId() == null
+                || batch.ontologyId() == null
                 || batch.ontologyRevision() <= 0
                 || !StringUtils.hasText(batch.idempotencyKey())
                 || !StringUtils.hasText(batch.requestedBy())
@@ -86,6 +88,7 @@ public class MutationBatchProcessor {
                 eventId,
                 eventType,
                 1,
+                batch.ontologyId(),
                 batch.ontologyRevision(),
                 batch.occurredAt(),
                 "ontology-core/action/" + batch.actionTypeId(),

@@ -200,7 +200,7 @@ export default function PipelineEditorPage({ accessToken, id, navigate }: Props)
     const id = `${definition.type.toLowerCase()}-${crypto.randomUUID().slice(0, 8)}`;
     const selectedId = editor.selectedNodeId;
     const incoming = selectedId ? graph.edges.filter((edge) => edge.target === selectedId) : [];
-    const edges = selectedId && incoming.length === 1
+    const edges = definition.type !== 'SOURCE' && selectedId && incoming.length === 1
       ? [...graph.edges.filter((edge) => edge.id !== incoming[0].id), { ...incoming[0], target: id }, { id: `edge-${crypto.randomUUID()}`, source: id, target: selectedId }]
       : graph.edges;
     changeGraph({ edges, nodes: [...graph.nodes, { config: {}, id, inputSchema: [], invalidReasons: [], name: definition.label, outputSchema: [], position: { x: 340 + graph.nodes.length * 30, y: 100 + graph.nodes.length * 35 }, type: definition.type }] }, true);
@@ -209,12 +209,16 @@ export default function PipelineEditorPage({ accessToken, id, navigate }: Props)
   function deleteSelected() {
     const id = editor.selectedNodeId;
     if (!id) return;
-    if (graph.nodes.find((node) => node.id === id)?.type === 'SOURCE') { message.warning('源节点不能删除，请更换管道源资产'); return; }
+    if (graph.nodes.find((node) => node.id === id)?.type === 'SOURCE'
+      && graph.nodes.filter((node) => node.type === 'SOURCE').length === 1) {
+      message.warning('至少保留一个源节点');
+      return;
+    }
     changeGraph({ edges: graph.edges.filter((edge) => edge.source !== id && edge.target !== id), nodes: graph.nodes.filter((node) => node.id !== id) }, true); editor.setSelectedNode(undefined);
   }
   function duplicateSelected() {
     const source = graph.nodes.find((node) => node.id === editor.selectedNodeId);
-    if (!source || source.type === 'SOURCE') return;
+    if (!source) return;
     const id = `${source.type.toLowerCase()}-${crypto.randomUUID().slice(0, 8)}`;
     changeGraph({ ...graph, nodes: [...graph.nodes, { ...structuredClone(source), id, name: `${source.name} 副本`, position: { x: source.position.x + 50, y: source.position.y + 70 } }] }, true); editor.setSelectedNode(id);
   }
@@ -257,16 +261,16 @@ export default function PipelineEditorPage({ accessToken, id, navigate }: Props)
 
   const selected = graph.nodes.find((node) => node.id === editor.selectedNodeId);
   useEffect(() => {
-    const connectionId = selected?.type === 'JOIN' ? String(selected.config.lookupConnectionId ?? '') : '';
+    const connectionId = selected?.type === 'SOURCE' ? String(selected.config.connectionId ?? '') : '';
     if (connectionId && !lookupAssets[connectionId]) void loadLookupAssets(connectionId);
-  }, [loadLookupAssets, lookupAssets, selected?.config.lookupConnectionId, selected?.type]);
+  }, [loadLookupAssets, lookupAssets, selected?.config.connectionId, selected?.type]);
   useEffect(() => {
-    if (selected?.type !== 'JOIN') return;
-    const connectionId = String(selected.config.lookupConnectionId ?? '');
-    const assetId = String(selected.config.lookupAssetId ?? '');
+    if (selected?.type !== 'SOURCE') return;
+    const connectionId = String(selected.config.connectionId ?? '');
+    const assetId = String(selected.config.assetId ?? '');
     const asset = lookupAssets[connectionId]?.find((item) => item.id === assetId);
     if (connectionId && assetId && asset && asset.fields.length === 0) void loadLookupAsset(connectionId, assetId);
-  }, [loadLookupAsset, lookupAssets, selected?.config.lookupAssetId, selected?.config.lookupConnectionId, selected?.type]);
+  }, [loadLookupAsset, lookupAssets, selected?.config.assetId, selected?.config.connectionId, selected?.type]);
 
   if (loading) return <div className="center-loading"><Spin size="large" /></div>;
   if (problem || !pipeline || !runtime || !schedule) return <Result extra={<Button onClick={() => void load()}>重试</Button>} status="error" subTitle={problem?.message} title="无法打开管道" />;

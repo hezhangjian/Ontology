@@ -11,6 +11,7 @@ public record OntologyEventEnvelope(
         UUID eventId,
         String eventType,
         int schemaVersion,
+        UUID ontologyId,
         long ontologyRevision,
         Instant occurredAt,
         String producer,

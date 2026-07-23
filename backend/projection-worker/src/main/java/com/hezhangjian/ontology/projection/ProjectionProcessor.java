@@ -136,6 +136,7 @@ public class ProjectionProcessor {
                 event.eventType(),
                 topic,
                 messageId,
+                event.ontologyId(),
                 event.ontologyRevision(),
                 validated.entityKey(),
                 validated.entityVersion(),

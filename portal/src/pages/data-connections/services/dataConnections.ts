@@ -14,7 +14,7 @@ import type {
 } from '../types';
 import { activeOntologyId } from '../../../features/ontology/ontologyContext';
 
-const base = '/api/ontology/v1';
+const base = () => `/api/v1/ontologies/${activeOntologyId()}`;
 
 export class ApiProblem extends Error {
   constructor(
@@ -28,13 +28,11 @@ export class ApiProblem extends Error {
 
 export function dataConnectionsApi(accessToken: string) {
   async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const response = await fetch(`${base}${path}`, {
+    const response = await fetch(`${base()}${path}`, {
       ...init,
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
-        'X-Ontology-Id': activeOntologyId(),
-        'X-Workspace-Id': activeOntologyId(),
         ...init.headers,
       },
     });
@@ -47,9 +45,9 @@ export function dataConnectionsApi(accessToken: string) {
   }
 
   async function multipart<T>(path: string, body: FormData): Promise<T> {
-    const response = await fetch(`${base}${path}`, {
+    const response = await fetch(`${base()}${path}`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}`, 'X-Ontology-Id': activeOntologyId(), 'X-Workspace-Id': activeOntologyId() },
+      headers: { Authorization: `Bearer ${accessToken}` },
       body,
     });
     if (!response.ok) {
@@ -70,34 +68,34 @@ export function dataConnectionsApi(accessToken: string) {
       config: Record<string, unknown>;
       credential: CredentialInput;
       testToken: string;
-    }) => request<DataSource>('/data-sources', { method: 'POST', body: JSON.stringify(body) }),
-    delete: (id: string) => request<void>(`/data-sources/${id}`, { method: 'DELETE' }),
-    disable: (id: string) => request<DataSource>(`/data-sources/${id}/disable`, { method: 'POST' }),
-    discover: (id: string) => request<{ taskId: string; status: string; discoveredCount: number }>(`/data-sources/${id}/discover`, { method: 'POST' }),
-    enable: (id: string) => request<DataSource>(`/data-sources/${id}/enable`, { method: 'POST' }),
-    get: (id: string) => request<DataSource>(`/data-sources/${id}`),
-    getAsset: (id: string, assetId: string) => request<DataSourceAsset>(`/data-sources/${id}/assets/${assetId}`),
-    inferSchema: (id: string, assetId: string) => request(`/data-sources/${id}/assets/${assetId}/infer-schema`, { method: 'POST' }),
+    }) => request<DataSource>('/connections', { method: 'POST', body: JSON.stringify(body) }),
+    delete: (id: string) => request<void>(`/connections/${id}`, { method: 'DELETE' }),
+    disable: (id: string) => request<DataSource>(`/connections/${id}/disable`, { method: 'POST' }),
+    discover: (id: string) => request<{ taskId: string; status: string; discoveredCount: number }>(`/connections/${id}/discover`, { method: 'POST' }),
+    enable: (id: string) => request<DataSource>(`/connections/${id}/enable`, { method: 'POST' }),
+    get: (id: string) => request<DataSource>(`/connections/${id}`),
+    getAsset: (id: string, assetId: string) => request<DataSourceAsset>(`/connections/${id}/assets/${assetId}`),
+    inferSchema: (id: string, assetId: string) => request(`/connections/${id}/assets/${assetId}/infer-schema`, { method: 'POST' }),
     importLocalCsv: (name: string, description: string | undefined, tags: string[], files: File[]) => {
       const form = new FormData();
       form.append('name', name);
       if (description) form.append('description', description);
       tags.forEach((tag) => form.append('tags', tag));
       files.forEach((file) => form.append('files', file, file.webkitRelativePath || file.name));
-      return multipart<DataSource>('/data-sources/local-csv', form);
+      return multipart<DataSource>('/connections/local-csv', form);
     },
-    list: (query: string) => request<DataSourcePage>(`/data-sources${query ? `?${query}` : ''}`),
-    listAssets: (id: string, search = '') => request<{ items: DataSourceAsset[]; total: number }>(`/data-sources/${id}/assets?size=100&search=${encodeURIComponent(search)}`),
+    list: (query: string) => request<DataSourcePage>(`/connections${query ? `?${query}` : ''}`),
+    listAssets: (id: string, search = '') => request<{ items: DataSourceAsset[]; total: number }>(`/connections/${id}/assets?size=100&search=${encodeURIComponent(search)}`),
     listCredentials: () => request<CredentialSummary[]>('/credentials?usable=true'),
-    overview: (id: string) => request<Overview>(`/data-sources/${id}/overview`),
-    pipelines: (id: string) => request<PipelineSummary[]>(`/data-sources/${id}/pipelines`),
-    preview: (id: string, assetId: string, limit = 50) => request<AssetPreview>(`/data-sources/${id}/assets/${assetId}/preview`, { method: 'POST', body: JSON.stringify({ limit }) }),
-    retest: (id: string) => request<ConnectionTestResult>(`/data-sources/${id}/test`, { method: 'POST' }),
-    rotate: (id: string, credential: CredentialInput) => request<CredentialSummary>(`/data-sources/${id}/rotate-credential`, { method: 'POST', body: JSON.stringify({ credential }) }),
-    runs: (id: string) => request<PipelineRun[]>(`/data-sources/${id}/runs`),
+    overview: (id: string) => request<Overview>(`/connections/${id}/overview`),
+    pipelines: (id: string) => request<PipelineSummary[]>(`/connections/${id}/pipelines`),
+    preview: (id: string, assetId: string, limit = 50) => request<AssetPreview>(`/connections/${id}/assets/${assetId}/preview`, { method: 'POST', body: JSON.stringify({ limit }) }),
+    retest: (id: string) => request<ConnectionTestResult>(`/connections/${id}/test`, { method: 'POST' }),
+    rotate: (id: string, credential: CredentialInput) => request<CredentialSummary>(`/connections/${id}/rotate-credential`, { method: 'POST', body: JSON.stringify({ credential }) }),
+    runs: (id: string) => request<PipelineRun[]>(`/connections/${id}/runs`),
     test: (body: { type: DataSourceType; config: Record<string, unknown>; credential: CredentialInput }) =>
-      request<ConnectionTestResult>('/data-sources/test', { method: 'POST', body: JSON.stringify(body) }),
-    update: (id: string, version: number, body: Partial<DataSource>) => request<DataSource>(`/data-sources/${id}`, {
+      request<ConnectionTestResult>('/connection-tests', { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: string, version: number, body: Partial<DataSource>) => request<DataSource>(`/connections/${id}`, {
       method: 'PATCH',
       headers: { 'If-Match': String(version) },
       body: JSON.stringify(body),

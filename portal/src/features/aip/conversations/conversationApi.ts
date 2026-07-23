@@ -33,13 +33,14 @@ export type ConversationStreamEvent =
   | { type: 'user_message'; data: ConversationMessage };
 
 export function conversationApi(accessToken: string) {
+  const agentId = '00000000-0000-0000-0000-00000000b001';
+  const base = () => `/api/v1/ontologies/${activeOntologyId()}/agents/${agentId}/conversations`;
   const request = async <T,>(path: string, init: RequestInit = {}) => {
-    const response = await fetch(`/api/agent/v1/conversations${path}`, {
+    const response = await fetch(`${base()}${path}`, {
       ...init,
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
-        'X-Ontology-Id': activeOntologyId(),
         ...init.headers,
       },
     });
@@ -50,19 +51,18 @@ export function conversationApi(accessToken: string) {
     return response.json() as Promise<T>;
   };
   return {
-    confirmAction: (conversationId: string, actionId: string, previewToken: string) => request<Record<string, unknown>>(`/${conversationId}/confirm-action`, { method: 'POST', body: JSON.stringify({ actionId, previewToken, idempotencyKey: `conversation:${conversationId}:${crypto.randomUUID()}` }) }),
+    confirmAction: (conversationId: string, actionId: string, previewToken: string) => request<Record<string, unknown>>(`/${conversationId}/action-confirmations`, { method: 'POST', headers: { 'Idempotency-Key': `conversation:${conversationId}:${crypto.randomUUID()}` }, body: JSON.stringify({ actionTypeId: actionId, previewToken }) }),
     confirmRule: (conversationId: string, proposal: Record<string, unknown>) => request<Record<string, unknown>>(`/${conversationId}/confirm-rule-transform`, { method: 'POST', body: JSON.stringify(proposal) }),
     create: () => request<Conversation>('', { method: 'POST', body: JSON.stringify({}) }),
     get: (id: string) => request<Conversation>(`/${id}`),
     list: () => request<Conversation[]>(''),
     send: async (id: string, content: string, onEvent: (event: ConversationStreamEvent) => void) => {
-      const response = await fetch(`/api/agent/v1/conversations/${id}/messages`, {
+      const response = await fetch(`${base()}/${id}/messages`, {
         method: 'POST',
         headers: {
           Accept: 'text/event-stream',
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
-          'X-Ontology-Id': activeOntologyId(),
         },
         body: JSON.stringify({ content }),
       });

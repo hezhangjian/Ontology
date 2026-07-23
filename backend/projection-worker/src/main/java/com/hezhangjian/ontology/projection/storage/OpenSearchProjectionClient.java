@@ -44,6 +44,8 @@ public class OpenSearchProjectionClient {
         putTemplate("platform-ontology-relations-template", "platform-ontology-relations-*");
         ensureAlias(OBJECT_ALIAS, "platform-ontology-objects-v1");
         ensureAlias(RELATION_ALIAS, "platform-ontology-relations-v1");
+        ensureMapping(OBJECT_ALIAS);
+        ensureMapping(RELATION_ALIAS);
     }
 
     public void apply(ValidatedEvent validated, String graphElementId) {
@@ -117,6 +119,7 @@ public class OpenSearchProjectionClient {
         for (GraphObject object : objects) {
             ObjectNode document = objectMapper.createObjectNode();
             document.put("graph_element_id", object.graphId());
+            document.put("ontology_id", object.ontologyId());
             document.put("object_type", object.objectType());
             document.put("object_id", object.objectId());
             document.put("ontology_revision", object.ontologyRevision());
@@ -128,7 +131,8 @@ public class OpenSearchProjectionClient {
                     object.ontologyRevision(), object.objectType(), object.payload()));
             http.requireSuccess(
                     "PUT",
-                    uri(newIndex + "/_doc/" + stableId("object:" + object.objectType() + ":" + object.objectId())
+                    uri(newIndex + "/_doc/" + stableId(object.ontologyId() + ":object:"
+                            + object.objectType() + ":" + object.objectId())
                             + "?refresh=false&version=" + object.objectVersion() + "&version_type=external_gte"),
                     document);
             count++;
@@ -170,13 +174,26 @@ public class OpenSearchProjectionClient {
         http.requireSuccess("PUT", uri(index), indexDefinition(alias));
     }
 
+    private void ensureMapping(String alias) {
+        http.requireSuccess("PUT", uri(alias + "/_mapping"), mappingDefinition());
+    }
+
     private ObjectNode indexDefinition(String alias) {
         ObjectNode root = objectMapper.createObjectNode();
         root.set("settings", objectMapper.createObjectNode()
                 .put("number_of_shards", 1)
                 .put("number_of_replicas", 0));
+        root.set("mappings", mappingDefinition());
+        if (alias != null) {
+            root.set("aliases", objectMapper.createObjectNode().set(alias, objectMapper.createObjectNode()));
+        }
+        return root;
+    }
+
+    private ObjectNode mappingDefinition() {
         ObjectNode fields = objectMapper.createObjectNode();
         keyword(fields, "graph_element_id");
+        keyword(fields, "ontology_id");
         keyword(fields, "object_type");
         keyword(fields, "object_id");
         keyword(fields, "relation_type");
@@ -191,14 +208,10 @@ public class OpenSearchProjectionClient {
         fields.set("entity_version", objectMapper.createObjectNode().put("type", "long"));
         fields.set("occurred_at", objectMapper.createObjectNode().put("type", "date"));
         fields.set("properties", objectMapper.createObjectNode().put("type", "object").put("dynamic", true));
-        root.set("mappings", objectMapper.createObjectNode()
+        return objectMapper.createObjectNode()
                 .put("dynamic", "strict")
                 .put("date_detection", false)
-                .set("properties", fields));
-        if (alias != null) {
-            root.set("aliases", objectMapper.createObjectNode().set(alias, objectMapper.createObjectNode()));
-        }
-        return root;
+                .set("properties", fields);
     }
 
     private void switchAlias(String alias, String newIndex) {
@@ -229,6 +242,7 @@ public class OpenSearchProjectionClient {
         OntologyEventEnvelope event = validated.event();
         ObjectNode document = objectMapper.createObjectNode();
         document.put("graph_element_id", graphElementId);
+        document.put("ontology_id", event.ontologyId().toString());
         document.put("ontology_revision", event.ontologyRevision());
         document.put("entity_version", validated.entityVersion());
         document.put("correlation_id", event.correlationId());

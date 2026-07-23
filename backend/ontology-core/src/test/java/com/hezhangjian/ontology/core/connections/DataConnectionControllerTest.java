@@ -25,6 +25,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @WebMvcTest(DataConnectionController.class)
 @Import(com.hezhangjian.ontology.core.security.ResourceServerSecurity.class)
 class DataConnectionControllerTest {
+    private static final String BASE = "/v1/ontologies/00000000-0000-0000-0000-00000000a001";
     @Autowired MockMvc mvc;
     @MockitoBean DataConnectionService service;
 
@@ -33,7 +34,7 @@ class DataConnectionControllerTest {
         when(service.list(0, 20, null, null, null, null)).thenReturn(new ConnectionModels.DataSourcePage(
                 List.of(source()), 0, 20, 1, Map.of("all", 1), Map.of()));
 
-        mvc.perform(get("/v1/data-sources"))
+        mvc.perform(get(BASE + "/connections"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].name").value("受控 MinIO"))
                 .andExpect(jsonPath("$.items[0].credential.ciphertext").doesNotExist());
@@ -44,8 +45,8 @@ class DataConnectionControllerTest {
         UUID id = UUID.randomUUID();
         when(service.list(0, 20, null, null, null, null)).thenReturn(new ConnectionModels.DataSourcePage(
                 List.of(), 0, 20, 0, Map.of(), Map.of()));
-        mvc.perform(get("/v1/data-sources")).andExpect(status().isOk());
-        mvc.perform(delete("/v1/data-sources/" + id))
+        mvc.perform(get(BASE + "/connections")).andExpect(status().isOk());
+        mvc.perform(delete(BASE + "/connections/" + id))
                 .andExpect(status().isNoContent());
         verify(service).delete(any(), any());
     }
@@ -53,7 +54,7 @@ class DataConnectionControllerTest {
     @Test
     void localIdentityIsUsedWithoutLogin() throws Exception {
         UUID id = UUID.randomUUID();
-        mvc.perform(delete("/v1/data-sources/" + id))
+        mvc.perform(delete(BASE + "/connections/" + id))
                 .andExpect(status().isNoContent());
 
         verify(service).delete(any(), any());
@@ -66,7 +67,7 @@ class DataConnectionControllerTest {
         MockMultipartFile file = new MockMultipartFile("files", "data/demo-token-usage.csv", "text/csv",
                 "employee_name,month,total_token\n张三,2026-07,120\n".getBytes());
 
-        mvc.perform(multipart("/v1/data-sources/local-csv").file(file)
+        mvc.perform(multipart(BASE + "/connections/local-csv").file(file)
                         .param("name", "7 月 Token 消耗")
                         .param("tags", "Token", "月度"))
                 .andExpect(status().isCreated())

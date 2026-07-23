@@ -48,6 +48,6 @@ class OntologyCatalogControllerTest {
 
     private OntologyCatalogService.OntologyView view() {
         return new OntologyCatalogService.OntologyView(UUID.randomUUID(), "supply_chain", "供应链运营",
-                "供应链场景", "deployment-unit", "#3157d5", 0, 0, Instant.now());
+                "供应链场景", "deployment-unit", "#3157d5", 0, 0, Instant.now(), Instant.now());
     }
 }

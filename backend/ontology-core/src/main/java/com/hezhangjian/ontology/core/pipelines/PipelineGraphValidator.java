@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class PipelineGraphValidator {
-    private static final Set<String> OUTPUT_TYPES = Set.of("DATASET_OUTPUT", "ONTOLOGY_OBJECT", "ONTOLOGY_RELATION");
+    private static final Set<String> OUTPUT_TYPES = Set.of("DATASET_OUTPUT", "LINK_OUTPUT", "OBJECT_OUTPUT");
     private static final Set<String> SOURCE_TYPES = Set.of("SOURCE");
     private final ObjectMapper json;
 
@@ -34,20 +34,20 @@ public class PipelineGraphValidator {
 
     public List<NodeType> nodeTypes() {
         return List.of(
-                type("AGGREGATE", "聚合", "转换", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, false, "分组与类型化指标"),
+                type("AGGREGATE", "聚合", "转换", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, false, "Flink keyed/window 聚合"),
                 type("CAST", "类型转换", "转换", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, false, "受控字段类型转换"),
-                type("DEDUPLICATE", "去重", "转换", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, false, "按键保留首条或末条记录"),
+                type("DATASET_OUTPUT", "数据集输出", "输出", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, true, "物化为分片 Parquet 数据集"),
+                type("DEDUPLICATE", "去重", "转换", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, false, "checkpoint-aware keyed state 去重"),
                 type("DERIVE", "派生字段", "转换", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, false, "安全表达式生成字段"),
                 type("FILTER", "过滤", "转换", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, false, "类型化 AND/OR 条件"),
-                type("JOIN", "关联数据", "转换", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, false, "按字段关联一个有界辅助文件或数据表"),
-                type("DATASET_OUTPUT", "数据集输出", "输出", List.of(PipelineMode.BATCH), 1, 1, false, true, "物化为可复用的数据集"),
-                type("ONTOLOGY_OBJECT", "本体对象输出", "输出", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, true, "映射对象 ID 与属性"),
-                type("ONTOLOGY_RELATION", "本体关系输出", "输出", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, true, "映射关系端点与属性"),
+                type("JOIN", "关联", "转换", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 2, 2, false, false, "两个上游 DataStream 的窗口关联"),
+                type("LINK_OUTPUT", "本体关系输出", "输出", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, true, "映射关系端点与属性"),
+                type("OBJECT_OUTPUT", "本体对象输出", "输出", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, true, "映射对象 ID 与属性"),
                 type("QUALITY", "质量门禁", "治理", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, false, "执行版本化质量规则"),
                 type("RULE_TRANSFORM", "规则清洗", "治理", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, false, "按声明式条件替换、保留、丢弃或隔离记录"),
                 type("SELECT", "选择/重命名", "转换", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, false, "选择、重命名和排序字段"),
                 type("SOURCE", "数据源", "输入", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 0, 0, true, false, "受控连接与资产源"),
-                type("WINDOW", "窗口", "转换", List.of(PipelineMode.STREAMING), 1, 1, false, false, "滚动、滑动或会话窗口")
+                type("WINDOW", "窗口", "转换", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, false, "滚动、滑动或会话事件时间窗口")
         );
     }
 
@@ -95,8 +95,10 @@ public class PipelineGraphValidator {
 
         long sourceCount = byId.values().stream().filter(n -> SOURCE_TYPES.contains(n.type())).count();
         long outputCount = byId.values().stream().filter(n -> OUTPUT_TYPES.contains(n.type())).count();
-        if (sourceCount == 0) issue(issues, "graph.source", "GRAPH", "ERROR", null, "至少需要一个数据源", "画布没有源节点。", "从节点库添加数据源");
-        if (outputCount == 0) issue(issues, "graph.output", "OUTPUT", "ERROR", null, "至少需要一个本体输出", "画布没有对象或关系输出。", "添加本体对象或关系输出");
+        if (sourceCount < 1) issue(issues, "graph.source", "GRAPH", "ERROR", null, "至少需要一个数据源",
+                "当前图没有源节点。", "添加一个受控数据源");
+        if (outputCount < 1) issue(issues, "graph.output", "OUTPUT", "ERROR", null, "至少需要一个输出",
+                "当前图没有输出节点。", "添加 Dataset、对象或关系输出");
 
         for (PipelineNode node : byId.values()) {
             NodeType definition = supported.get(node.type());
@@ -151,7 +153,7 @@ public class PipelineGraphValidator {
                                         Map<String, PipelineNode> byId, List<ValidationIssue> issues) {
         Map<String, Object> config = safe(node.config());
         return switch (node.type()) {
-            case "SOURCE" -> sourceSchema;
+            case "SOURCE" -> sourceFields(config.get("sourceSchema"), sourceSchema, node.id());
             case "SELECT" -> {
                 Object raw = config.get("fields");
                 if (!(raw instanceof List<?> selections) || selections.isEmpty()) {
@@ -217,34 +219,60 @@ public class PipelineGraphValidator {
                         .map(byId::get).noneMatch(parent -> parent != null && parent.type().equals("WINDOW"))) {
                     issue(issues, "aggregate.window." + node.id(), "SEMANTICS", "ERROR", node.id(), "流式聚合前必须有窗口", "无界聚合会产生无界状态。", "在聚合前添加窗口节点");
                 }
-                yield input;
+                List<FieldSchema> aggregate = new ArrayList<>();
+                Set<String> groups = new LinkedHashSet<>();
+                if (config.get("groupBy") instanceof List<?> values) values.forEach(value -> groups.add(text(value)));
+                input.stream().filter(field -> groups.contains(field.name())).forEach(aggregate::add);
+                List<Map<?, ?>> metrics = new ArrayList<>();
+                if (config.get("aggregations") instanceof List<?> configured) {
+                    configured.stream().filter(Map.class::isInstance)
+                            .map(Map.class::cast).forEach(metrics::add);
+                }
+                if (metrics.isEmpty()) metrics.add(config);
+                Set<String> metricNames = new HashSet<>();
+                for (Map<?, ?> metric : metrics) {
+                    String operation = textOr(metric.get("operation"),
+                            textOr(metric.get("aggregation"), "COUNT")).toUpperCase(java.util.Locale.ROOT);
+                    String output = textOr(metric.get("outputField"),
+                            textOr(metric.get("as"), operation.toLowerCase(java.util.Locale.ROOT)));
+                    if (!metricNames.add(output)) {
+                        issue(issues, "aggregate.output.duplicate." + node.id() + "." + output,
+                                "SCHEMA", "ERROR", node.id(), "聚合输出字段不能重复", output,
+                                "为每个聚合指标设置不同的输出字段名");
+                        continue;
+                    }
+                    aggregate.add(new FieldSchema(output,
+                            List.of("COUNT", "COUNT_DISTINCT", "DISTINCT_COUNT").contains(operation)
+                                    ? "LONG" : "DECIMAL",
+                            false, false, node.id()));
+                }
+                aggregate.add(new FieldSchema("_window_start", "DATETIME", false, false, node.id()));
+                aggregate.add(new FieldSchema("_window_end", "DATETIME", false, false, node.id()));
+                yield aggregate;
             }
             case "JOIN" -> {
-                if (mode == PipelineMode.STREAMING && !Boolean.TRUE.equals(config.get("boundedDimension"))) {
-                    issue(issues, "join.stream." + node.id(), "SEMANTICS", "ERROR", node.id(), "流式 JOIN 仅支持有界维表", "v1 不支持 stream-stream JOIN。", "将辅助源设置为有界 lookup/broadcast 维表");
-                }
                 String leftKey = text(config.get("leftKey"));
                 String rightKey = text(config.get("rightKey"));
-                List<FieldSchema> lookupFields = lookupFields(config.get("lookupFields"), node.id());
-                if (text(config.get("lookupConnectionId")).isBlank() || text(config.get("lookupAssetId")).isBlank()
-                        || leftKey.isBlank() || rightKey.isBlank()) {
+                if (leftKey.isBlank() || rightKey.isBlank()) {
                     issue(issues, "join.config." + node.id(), "SEMANTICS", "ERROR", node.id(), "关联配置不完整",
-                            "请选择辅助连接、文件或数据表，以及两侧关联字段。", "在右侧完成关联配置");
+                            "必须配置左右两个上游的关联字段。", "配置左右关联字段");
                 } else {
                     if (input.stream().noneMatch(field -> field.name().equals(leftKey))) {
-                        issue(issues, "join.left." + node.id(), "SCHEMA", "ERROR", node.id(), "主数据关联字段已失效", leftKey, "重新选择主数据字段");
+                        issue(issues, "join.left." + node.id(), "SCHEMA", "ERROR", node.id(), "左侧关联字段已失效", leftKey, "重新选择左侧字段");
                     }
-                    if (lookupFields.stream().noneMatch(field -> field.name().equals(rightKey))) {
-                        issue(issues, "join.right." + node.id(), "SCHEMA", "ERROR", node.id(), "辅助数据关联字段已失效", rightKey, "重新选择辅助数据字段");
+                    if (input.stream().noneMatch(field -> field.name().equals(rightKey))) {
+                        issue(issues, "join.right." + node.id(), "SCHEMA", "ERROR", node.id(), "右侧关联字段已失效", rightKey, "重新选择右侧字段");
                     }
                 }
                 Map<String, FieldSchema> merged = input.stream().collect(Collectors.toMap(
                         FieldSchema::name, Function.identity(), (left, right) -> left, LinkedHashMap::new));
-                for (FieldSchema field : lookupFields) {
-                    String name = merged.containsKey(field.name()) ? textOr(config.get("lookupPrefix"), "辅助_") + field.name() : field.name();
-                    merged.put(name, new FieldSchema(name, field.type(), true, field.sensitive(), node.id()));
-                }
                 yield merged.values().stream().toList();
+            }
+            case "WINDOW" -> {
+                List<FieldSchema> windowed = new ArrayList<>(input);
+                windowed.add(new FieldSchema("_window_start", "DATETIME", false, false, node.id()));
+                windowed.add(new FieldSchema("_window_end", "DATETIME", false, false, node.id()));
+                yield windowed;
             }
             case "DATASET_OUTPUT" -> {
                 if (text(config.get("datasetName")).isBlank()) issue(issues, "dataset.name.required." + node.id(), "OUTPUT", "ERROR", node.id(),
@@ -282,7 +310,7 @@ public class PipelineGraphValidator {
                 }
                 yield output;
             }
-            case "ONTOLOGY_OBJECT" -> {
+            case "OBJECT_OUTPUT" -> {
                 List<String> idFields = idFields(config);
                 if (text(config.get("objectTypeId")).isBlank() || idFields.isEmpty()) {
                     issue(issues, "output.object." + node.id(), "OUTPUT", "ERROR", node.id(), "对象输出配置不完整", "对象类型和对象 ID 字段均为必填。", "配置对象类型与稳定 ID 映射");
@@ -295,7 +323,7 @@ public class PipelineGraphValidator {
                 }
                 yield List.of();
             }
-            case "ONTOLOGY_RELATION" -> {
+            case "LINK_OUTPUT" -> {
                 if (text(config.get("relationTypeId")).isBlank() || text(config.get("sourceIdField")).isBlank() || text(config.get("targetIdField")).isBlank()) {
                     issue(issues, "output.relation." + node.id(), "OUTPUT", "ERROR", node.id(), "关系输出配置不完整", "关系类型和两端 ID 字段均为必填。", "配置关系端点映射");
                 }
@@ -342,6 +370,13 @@ public class PipelineGraphValidator {
             }
         }
         return fields;
+    }
+
+    private List<FieldSchema> sourceFields(Object raw, List<FieldSchema> fallback, String nodeId) {
+        List<FieldSchema> configured = lookupFields(raw, nodeId);
+        return configured.isEmpty() ? fallback.stream()
+                .map(field -> new FieldSchema(field.name(), field.type(), field.nullable(),
+                        field.sensitive(), nodeId)).toList() : configured;
     }
 
     private Set<String> connectedToOutputs(Map<String, PipelineNode> nodes, Map<String, List<String>> incoming) {

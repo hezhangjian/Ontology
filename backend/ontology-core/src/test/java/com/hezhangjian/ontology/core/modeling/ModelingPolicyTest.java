@@ -29,10 +29,23 @@ class ModelingPolicyTest {
 
     @Test
     void rejectsConflictingActionWrites() {
-        assertThatThrownBy(() -> policy.validateActionRules(List.of(
+        assertThatThrownBy(() -> policy.validateActionRules("UPDATE", List.of(
                 Map.of("targetPropertyId", "status", "value", "OPEN"),
                 Map.of("targetPropertyId", "status", "value", "CLOSED"))))
                 .isInstanceOf(ConnectionProblem.class).hasMessageContaining("冲突写入");
+    }
+
+    @Test
+    void acceptsCompleteActionOperationAndApprovalContracts() {
+        for (String operation : List.of("CREATE", "LINK", "RETIRE", "UNLINK", "UPDATE")) {
+            for (String approval : List.of("ALWAYS", "CONDITIONAL", "NONE")) {
+                assertThatCode(() -> policy.validateActionContract(operation, approval))
+                        .doesNotThrowAnyException();
+            }
+        }
+        assertThatCode(() -> policy.validateActionRules("LINK", List.of(Map.of(
+                "operation", "LINK", "relationTypeId", "00000000-0000-0000-0000-000000000201"))))
+                .doesNotThrowAnyException();
     }
 
     @Test

@@ -7,16 +7,14 @@ import { activeOntologyId, setActiveOntologyId } from './ontologyContext';
 interface OntologyCatalogItem {
   id: string;
   apiName: string;
+  activeRevision: number;
   displayName: string;
-  description: string;
-  color: string;
-  objectTypeCount: number;
-  linkTypeCount: number;
+  health: 'DEGRADED' | 'FAILED' | 'HEALTHY';
+  role: string;
 }
 
 interface CreateOntologyValues {
   apiName: string;
-  color: string;
   description?: string;
   displayName: string;
 }
@@ -35,7 +33,7 @@ export default function OntologySwitcher({ accessToken, canCreate, collapsed, on
     setLoading(true);
     setLoadFailed(false);
     try {
-      const response = await fetch('/api/ontology/v1/ontologies', { headers: { Authorization: `Bearer ${accessToken}` } });
+      const response = await fetch('/api/v1/ontologies', { headers: { Authorization: `Bearer ${accessToken}` } });
       if (!response.ok) throw new Error('本体目录加载失败');
       const catalog = await response.json() as OntologyCatalogItem[];
       setItems(catalog);
@@ -57,7 +55,7 @@ export default function OntologySwitcher({ accessToken, canCreate, collapsed, on
   const menuItems = useMemo<MenuProps['items']>(() => [
     ...items.map((item) => ({
       key: `ontology:${item.id}`,
-      label: <div className="ontology-option"><span className="ontology-color" style={{ background: item.color }} /><div><strong>{item.displayName}</strong><small>{item.objectTypeCount} 个对象类型 · {item.linkTypeCount} 个关系</small></div></div>,
+      label: <div className="ontology-option"><span className="ontology-color" style={{ background: colorFor(item.id) }} /><div><strong>{item.displayName}</strong><small>Revision {item.activeRevision} · {item.health}</small></div></div>,
     })),
     ...(canCreate ? [{ type: 'divider' as const }, { key: 'create', icon: <PlusOutlined />, label: '新建本体' }] : []),
   ], [canCreate, items]);
@@ -65,7 +63,6 @@ export default function OntologySwitcher({ accessToken, canCreate, collapsed, on
   const choose: MenuProps['onClick'] = ({ key }) => {
     if (key === 'create') {
       setCreateError('');
-      form.setFieldsValue({ color: '#3157d5' });
       setCreateOpen(true);
       return;
     }
@@ -81,7 +78,7 @@ export default function OntologySwitcher({ accessToken, canCreate, collapsed, on
     setCreating(true);
     setCreateError('');
     try {
-      const response = await fetch('/api/ontology/v1/ontologies', {
+      const response = await fetch('/api/v1/ontologies', {
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(values),
@@ -114,7 +111,7 @@ export default function OntologySwitcher({ accessToken, canCreate, collapsed, on
         loading={loading}
         title={label}
       >
-        {!collapsed && <><span className="ontology-color" style={{ background: active?.color ?? '#8c95a8' }} /><span className="ontology-switcher-label">{label}</span><DownOutlined className="ontology-switcher-arrow" /></>}
+        {!collapsed && <><span className="ontology-color" style={{ background: active ? colorFor(active.id) : '#8c95a8' }} /><span className="ontology-switcher-label">{label}</span><DownOutlined className="ontology-switcher-arrow" /></>}
       </Button>
     </Dropdown>
     <Modal cancelText="取消" confirmLoading={creating} okText="创建并切换" onCancel={() => setCreateOpen(false)} onOk={() => void create()} open={createOpen} title="新建本体">
@@ -124,8 +121,13 @@ export default function OntologySwitcher({ accessToken, canCreate, collapsed, on
         <Form.Item label="本体名称" name="displayName" rules={[{ required: true, message: '请输入本体名称' }, { max: 240 }]}><Input autoFocus placeholder="例如：供应链运营" /></Form.Item>
         <Form.Item extra="创建后不可与已有本体重复" label="API 名称" name="apiName" rules={[{ required: true, message: '请输入 API 名称' }, { pattern: /^[a-z][a-z0-9_]{1,159}$/, message: '使用小写字母、数字和下划线，并以字母开头' }]}><Input placeholder="例如：supply_chain" /></Form.Item>
         <Form.Item label="场景说明" name="description" rules={[{ max: 1000 }]}><Input.TextArea placeholder="说明该本体覆盖的业务范围" rows={3} /></Form.Item>
-        <Form.Item initialValue="#3157d5" label="标识颜色" name="color" rules={[{ required: true }]}><Input className="ontology-color-input" type="color" /></Form.Item>
       </Form>
     </Modal>
   </>;
+}
+
+function colorFor(id: string) {
+  const colors = ['#3157d5', '#0f8f6f', '#a45a00', '#7b4bb7', '#b83260'];
+  const hash = [...id].reduce((value, character) => value + character.charCodeAt(0), 0);
+  return colors[hash % colors.length];
 }

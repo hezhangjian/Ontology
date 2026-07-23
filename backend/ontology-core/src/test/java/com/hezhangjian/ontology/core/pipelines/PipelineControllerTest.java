@@ -23,6 +23,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @WebMvcTest(PipelineController.class)
 @Import(com.hezhangjian.ontology.core.security.ResourceServerSecurity.class)
 class PipelineControllerTest {
+    private static final String BASE = "/v1/ontologies/00000000-0000-0000-0000-00000000a001";
     @Autowired MockMvc mvc;
     @MockitoBean PipelineEventStreamService streams;
     @MockitoBean PipelineService service;
@@ -32,7 +33,7 @@ class PipelineControllerTest {
         when(service.list(0, 20, null, null, null, null, null, null)).thenReturn(
                 new PipelineModels.PipelinePage(List.of(), 0, 20, 0, Map.of("ALL", 0), Map.of()));
 
-        mvc.perform(get("/v1/pipelines")).andExpect(status().isOk());
+        mvc.perform(get(BASE + "/pipelines")).andExpect(status().isOk());
     }
 
     @Test
@@ -40,7 +41,7 @@ class PipelineControllerTest {
         UUID id = UUID.randomUUID();
         String body = "{\"position\":\"EARLIEST\",\"specificOffsets\":{},\"acknowledgeDuplicateOrLossRisk\":true}";
 
-        mvc.perform(post("/v1/pipelines/" + id + "/reset-offsets").contentType(MediaType.APPLICATION_JSON).content(body))
+        mvc.perform(post(BASE + "/pipelines/" + id + "/reset-offsets").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isOk());
         verify(service).resetOffsets(any(), any(), any());
     }
@@ -49,7 +50,7 @@ class PipelineControllerTest {
     void localUserCanDeletePipelineWithoutLogin() throws Exception {
         UUID id = UUID.randomUUID();
 
-        mvc.perform(delete("/v1/pipelines/" + id))
+        mvc.perform(delete(BASE + "/pipelines/" + id))
                 .andExpect(status().isNoContent());
 
         verify(service).delete(any(), any());

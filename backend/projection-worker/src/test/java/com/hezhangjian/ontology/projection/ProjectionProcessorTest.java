@@ -46,7 +46,7 @@ class ProjectionProcessorTest {
         OntologyEventEnvelope event = event("10000000-0000-4000-8000-000000000001", "E-1", 1);
         ValidatedEvent validated = validated(event);
         when(validator.validate(event)).thenReturn(validated);
-        when(repository.register(any(), anyString(), anyString(), anyString(), anyLong(),
+        when(repository.register(any(), anyString(), anyString(), anyString(), any(), anyLong(),
                 anyString(), anyLong(), anyString()))
                 .thenReturn(ledger(event, "PROJECTED", 1, "graph-1"));
 
@@ -66,7 +66,7 @@ class ProjectionProcessorTest {
         ValidatedEvent secondValidated = validated(second);
         when(validator.validate(first)).thenReturn(firstValidated);
         when(validator.validate(second)).thenReturn(secondValidated);
-        when(repository.register(any(), anyString(), anyString(), anyString(), anyLong(),
+        when(repository.register(any(), anyString(), anyString(), anyString(), any(), anyLong(),
                 anyString(), anyLong(), anyString()))
                 .thenReturn(ledger(first, "RECEIVED", 0, null), ledger(second, "RECEIVED", 0, null));
         when(repository.beginAttempt(first.eventId())).thenReturn(ledger(first, "RECEIVED", 1, null));
@@ -99,7 +99,7 @@ class ProjectionProcessorTest {
         ValidatedEvent validatedObject = validated(object);
         when(validator.validate(relation)).thenReturn(validatedRelation);
         when(validator.validate(object)).thenReturn(validatedObject);
-        when(repository.register(any(), anyString(), anyString(), anyString(), anyLong(),
+        when(repository.register(any(), anyString(), anyString(), anyString(), any(), anyLong(),
                 anyString(), anyLong(), anyString()))
                 .thenReturn(ledger(relation, "RECEIVED", 0, null), ledger(object, "RECEIVED", 0, null));
         when(repository.beginAttempt(relation.eventId())).thenReturn(ledger(relation, "RECEIVED", 1, null));
@@ -125,7 +125,7 @@ class ProjectionProcessorTest {
         ValidatedEvent validated = validated(event);
         ProjectionException unavailable = new ProjectionException("SEARCH_UNAVAILABLE", "search unavailable", true);
         when(validator.validate(event)).thenReturn(validated);
-        when(repository.register(any(), anyString(), anyString(), anyString(), anyLong(),
+        when(repository.register(any(), anyString(), anyString(), anyString(), any(), anyLong(),
                 anyString(), anyLong(), anyString()))
                 .thenReturn(ledger(event, "RECEIVED", 0, null));
         when(repository.beginAttempt(event.eventId())).thenReturn(ledger(event, "RECEIVED", 1, null));
@@ -146,6 +146,7 @@ class ProjectionProcessorTest {
                 UUID.fromString(eventId),
                 "object.upsert",
                 1,
+                UUID.fromString("00000000-0000-0000-0000-00000000a001"),
                 1,
                 Instant.parse("2026-07-20T00:00:00Z"),
                 "test",
@@ -181,6 +182,7 @@ class ProjectionProcessorTest {
                 UUID.fromString(eventId),
                 "relation.upsert",
                 1,
+                UUID.fromString("00000000-0000-0000-0000-00000000a001"),
                 1,
                 Instant.parse("2026-07-20T00:00:00Z"),
                 "test",

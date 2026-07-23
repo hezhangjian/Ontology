@@ -42,9 +42,10 @@ import org.apache.pulsar.client.api.SubscriptionInitialPosition;
 
 final class RuntimeSource extends RichSourceFunction<String> implements CheckpointedFunction, CheckpointListener {
     private final String coreUrl;
-    private final int limit;
+    private final long limit;
     private final boolean preview;
     private final UUID runId;
+    private final String sourceNodeId;
     private volatile boolean running = true;
     private transient RuntimeClient client;
     private transient RuntimeClient.RuntimeSpec spec;
@@ -56,17 +57,19 @@ final class RuntimeSource extends RichSourceFunction<String> implements Checkpoi
     private transient ObjectMapper json;
     private long readCount;
 
-    RuntimeSource(String coreUrl, UUID runId, boolean preview, int limit) {
+    RuntimeSource(String coreUrl, UUID runId, boolean preview, long limit, String sourceNodeId) {
         this.coreUrl = coreUrl;
         this.runId = runId;
         this.preview = preview;
         this.limit = Math.max(1, limit);
+        this.sourceNodeId = sourceNodeId;
     }
 
     @Override
     public void open(Configuration parameters) {
         client = new RuntimeClient(coreUrl, runId);
-        spec = preview ? client.exchangePreview(runId).runtime() : client.exchange();
+        spec = (preview ? client.exchangePreview(runId).runtime() : client.exchange())
+                .forSource(sourceNodeId);
         json = new ObjectMapper();
         pendingPulsar = new ArrayList<>();
     }

@@ -17,6 +17,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -202,7 +203,7 @@ public class HugeGraphProjectionClient {
         Map<String, ValidatedEvent> uniqueEvents = new LinkedHashMap<>();
         for (ValidatedEvent event : events) {
             uniqueEvents.put(
-                    objectKey(event.event().objectType(), event.event().objectId()),
+                    objectKey(event.event().ontologyId(), event.event().objectType(), event.event().objectId()),
                     event);
         }
         ArrayNode vertices = objectMapper.createArrayNode();
@@ -241,6 +242,7 @@ public class HugeGraphProjectionClient {
         List<String> ids = new ArrayList<>();
         for (ValidatedEvent event : events) {
             ids.add(idsByObjectKey.get(objectKey(
+                    event.event().ontologyId(),
                     event.event().objectType(),
                     event.event().objectId())));
         }
@@ -250,7 +252,8 @@ public class HugeGraphProjectionClient {
     private List<String> upsertRelationsBatch(List<ValidatedEvent> events) {
         Map<String, ValidatedEvent> uniqueEvents = new LinkedHashMap<>();
         for (ValidatedEvent event : events) {
-            uniqueEvents.put(relationKey(event.event().relationType(), event.event().relationId()), event);
+            uniqueEvents.put(relationKey(event.event().ontologyId(),
+                    event.event().relationType(), event.event().relationId()), event);
         }
         Map<String, String> idsByRelationKey = new LinkedHashMap<>();
         List<ValidatedEvent> chunk = new ArrayList<>();
@@ -271,6 +274,7 @@ public class HugeGraphProjectionClient {
         List<String> ids = new ArrayList<>();
         for (ValidatedEvent event : events) {
             ids.add(idsByRelationKey.get(relationKey(
+                    event.event().ontologyId(),
                     event.event().relationType(), event.event().relationId())));
         }
         return List.copyOf(ids);
@@ -284,8 +288,8 @@ public class HugeGraphProjectionClient {
             ObjectNode properties = relationProperties(event);
             ObjectNode edge = objectMapper.createObjectNode();
             edge.put("label", RELATION_LABEL);
-            edge.put("outV", objectLabelId + ":" + objectKey(event.sourceObjectType(), event.sourceObjectId()));
-            edge.put("inV", objectLabelId + ":" + objectKey(event.targetObjectType(), event.targetObjectId()));
+            edge.put("outV", objectLabelId + ":" + objectKey(event.ontologyId(), event.sourceObjectType(), event.sourceObjectId()));
+            edge.put("inV", objectLabelId + ":" + objectKey(event.ontologyId(), event.targetObjectType(), event.targetObjectId()));
             edge.put("outVLabel", OBJECT_LABEL);
             edge.put("inVLabel", OBJECT_LABEL);
             edge.set("properties", properties);
@@ -319,7 +323,8 @@ public class HugeGraphProjectionClient {
         }
         Map<String, String> idsByRelationKey = new LinkedHashMap<>();
         Iterator<String> fallbackKeys = events.stream()
-                .map(event -> relationKey(event.event().relationType(), event.event().relationId()))
+                .map(event -> relationKey(event.event().ontologyId(),
+                        event.event().relationType(), event.event().relationId()))
                 .iterator();
         for (JsonNode edge : stored) {
             if (!edge.hasNonNull("id")) {
@@ -335,9 +340,9 @@ public class HugeGraphProjectionClient {
 
     private int estimatedEdgeIdSize(OntologyEventEnvelope event) {
         return String.valueOf(objectLabelId).length() * 2
-                + objectKey(event.sourceObjectType(), event.sourceObjectId()).length()
-                + objectKey(event.targetObjectType(), event.targetObjectId()).length()
-                + relationKey(event.relationType(), event.relationId()).length()
+                + objectKey(event.ontologyId(), event.sourceObjectType(), event.sourceObjectId()).length()
+                + objectKey(event.ontologyId(), event.targetObjectType(), event.targetObjectId()).length()
+                + relationKey(event.ontologyId(), event.relationType(), event.relationId()).length()
                 + 24;
     }
 
@@ -352,6 +357,7 @@ public class HugeGraphProjectionClient {
                     JsonNode properties = vertex.path("properties");
                     result.add(new GraphObject(
                             vertex.path("id").asText(),
+                            ontologyIdFromObjectKey(properties.path("object_key").asText()),
                             properties.path("object_type").asText(),
                             properties.path("object_id").asText(),
                             properties.path("object_version").asLong(),
@@ -364,6 +370,16 @@ public class HugeGraphProjectionClient {
             page = response.path("page").isTextual() ? response.path("page").asText() : null;
         } while (page != null && !page.isBlank());
         return result;
+    }
+
+    private String ontologyIdFromObjectKey(String key) {
+        try {
+            String decoded = new String(Base64.getUrlDecoder().decode(key), StandardCharsets.UTF_8);
+            int separator = decoded.indexOf(':');
+            return separator > 0 ? decoded.substring(0, separator) : "";
+        } catch (IllegalArgumentException failure) {
+            return "";
+        }
     }
 
     private String upsertObject(OntologyEventEnvelope event) {
@@ -385,7 +401,7 @@ public class HugeGraphProjectionClient {
 
     private ObjectNode objectProperties(OntologyEventEnvelope event) {
         ObjectNode properties = objectMapper.createObjectNode();
-        properties.put("object_key", objectKey(event.objectType(), event.objectId()));
+        properties.put("object_key", objectKey(event.ontologyId(), event.objectType(), event.objectId()));
         properties.put("object_type", event.objectType());
         properties.put("object_id", event.objectId());
         properties.put("object_version", event.objectVersion());
@@ -397,9 +413,9 @@ public class HugeGraphProjectionClient {
     }
 
     private String deleteObject(OntologyEventEnvelope event) {
-        String id = findObjectId(event.objectType(), event.objectId());
+        String id = findObjectId(event.ontologyId(), event.objectType(), event.objectId());
         if (id == null) {
-            return "missing:" + objectKey(event.objectType(), event.objectId());
+            return "missing:" + objectKey(event.ontologyId(), event.objectType(), event.objectId());
         }
         StorageHttpClient.Response response = http.exchange(
                 "DELETE", uri("graph/vertices/" + encodeJsonString(id) + "?label=" + OBJECT_LABEL), null);
@@ -410,8 +426,8 @@ public class HugeGraphProjectionClient {
     }
 
     private String upsertRelation(OntologyEventEnvelope event) {
-        String sourceId = findObjectId(event.sourceObjectType(), event.sourceObjectId());
-        String targetId = findObjectId(event.targetObjectType(), event.targetObjectId());
+        String sourceId = findObjectId(event.ontologyId(), event.sourceObjectType(), event.sourceObjectId());
+        String targetId = findObjectId(event.ontologyId(), event.targetObjectType(), event.targetObjectId());
         if (sourceId == null || targetId == null) {
             throw new ProjectionException("RELATION_ENDPOINT_MISSING", "Relation endpoint object is not projected", true);
         }
@@ -437,9 +453,10 @@ public class HugeGraphProjectionClient {
     }
 
     private String deleteRelation(OntologyEventEnvelope event) {
-        String id = findElementId("edges", "relation_key", relationKey(event.relationType(), event.relationId()));
+        String id = findElementId("edges", "relation_key",
+                relationKey(event.ontologyId(), event.relationType(), event.relationId()));
         if (id == null) {
-            return "missing:" + relationKey(event.relationType(), event.relationId());
+            return "missing:" + relationKey(event.ontologyId(), event.relationType(), event.relationId());
         }
         StorageHttpClient.Response response = http.exchange(
                 "DELETE", uri("graph/edges/" + encode(id) + "?label=" + RELATION_LABEL), null);
@@ -449,8 +466,8 @@ public class HugeGraphProjectionClient {
         return id;
     }
 
-    private String findObjectId(String type, String id) {
-        String candidate = objectLabelId + ":" + objectKey(type, id);
+    private String findObjectId(UUID ontologyId, String type, String id) {
+        String candidate = objectLabelId + ":" + objectKey(ontologyId, type, id);
         StorageHttpClient.Response response = http.exchange(
                 "GET", uri("graph/vertices/" + encodeJsonString(candidate) + "?label=" + OBJECT_LABEL), null);
         if (response.status() == 404) {
@@ -472,7 +489,7 @@ public class HugeGraphProjectionClient {
 
     private ObjectNode relationProperties(OntologyEventEnvelope event) {
         ObjectNode properties = objectMapper.createObjectNode();
-        properties.put("relation_key", relationKey(event.relationType(), event.relationId()));
+        properties.put("relation_key", relationKey(event.ontologyId(), event.relationType(), event.relationId()));
         properties.put("relation_type", event.relationType());
         properties.put("relation_id", event.relationId());
         properties.put("relation_version", event.relationVersion());
@@ -489,13 +506,13 @@ public class HugeGraphProjectionClient {
         edit.put("deleted", validated.deleted());
         if (validated.relation()) {
             edit.put("kind", "relation");
-            edit.put("key", relationKey(event.relationType(), event.relationId()));
-            edit.put("sourceKey", objectKey(event.sourceObjectType(), event.sourceObjectId()));
-            edit.put("targetKey", objectKey(event.targetObjectType(), event.targetObjectId()));
+            edit.put("key", relationKey(event.ontologyId(), event.relationType(), event.relationId()));
+            edit.put("sourceKey", objectKey(event.ontologyId(), event.sourceObjectType(), event.sourceObjectId()));
+            edit.put("targetKey", objectKey(event.ontologyId(), event.targetObjectType(), event.targetObjectId()));
             edit.set("properties", relationProperties(event));
         } else {
             edit.put("kind", "object");
-            edit.put("key", objectKey(event.objectType(), event.objectId()));
+            edit.put("key", objectKey(event.ontologyId(), event.objectType(), event.objectId()));
             edit.set("properties", objectProperties(event));
         }
         return edit;
@@ -558,12 +575,12 @@ public class HugeGraphProjectionClient {
         }
     }
 
-    private String objectKey(String type, String id) {
-        return stableKey(type, id);
+    private String objectKey(UUID ontologyId, String type, String id) {
+        return stableKey(ontologyId + ":" + type, id);
     }
 
-    private String relationKey(String type, String id) {
-        return stableKey(type, id);
+    private String relationKey(UUID ontologyId, String type, String id) {
+        return stableKey(ontologyId + ":" + type, id);
     }
 
     private String stableKey(String type, String id) {
@@ -596,6 +613,7 @@ public class HugeGraphProjectionClient {
 
     public record GraphObject(
             String graphId,
+            String ontologyId,
             String objectType,
             String objectId,
             long objectVersion,

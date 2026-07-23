@@ -38,30 +38,24 @@ class PipelineTransformTest {
     }
 
     @Test
-    void joinsLookupRowsAndBuildsStableCompoundIdentity() throws Exception {
+    void buildsStableCompoundIdentity() throws Exception {
         Map<String, Object> graph = Map.of(
-                "edges", List.of(
-                        Map.of("id", "e1", "source", "source-1", "target", "join-1"),
-                        Map.of("id", "e2", "source", "join-1", "target", "output-1")),
+                "edges", List.of(Map.of("id", "e1", "source", "source-1", "target", "output-1")),
                 "nodes", List.of(
                         Map.of("config", Map.of(), "id", "source-1", "type", "SOURCE"),
-                        Map.of("config", Map.of(
-                                "joinType", "LEFT", "leftKey", "employee_id", "rightKey", "employee_id",
-                                "lookupRows", List.of(Map.of("employee_id", "e-1", "leader", "Alice"))),
-                                "id", "join-1", "type", "JOIN"),
                         Map.of("config", Map.of(
                                 "idFields", List.of("month", "employee_id"),
                                 "mappings", Map.of("leader", "leader"),
                                 "objectTypeId", "usage",
                                 "primaryPropertyKey", "record_key"),
-                                "id", "output-1", "inputSchema", List.of(), "type", "ONTOLOGY_OBJECT")));
+                                "id", "output-1", "inputSchema", List.of(), "type", "OBJECT_OUTPUT")));
         PipelineTransform transform = new PipelineTransform(graph,
                 Map.of("assetId", "asset", "connectionId", "connection", "ontologyRevision", 1,
                         "pipelineId", "pipeline", "pipelineVersion", 1, "runId", "run"), "test");
         transform.open(new Configuration());
         List<String> values = new ArrayList<>();
 
-        transform.flatMap("{\"employee_id\":\"e-1\",\"month\":\"2026-07\"}", collector(values));
+        transform.flatMap("{\"employee_id\":\"e-1\",\"month\":\"2026-07\",\"leader\":\"Alice\"}", collector(values));
 
         Map<String, Object> event = json.readValue(values.get(0), new TypeReference<>() { });
         Map<?, ?> payload = (Map<?, ?>) event.get("payload");
@@ -80,7 +74,7 @@ class PipelineTransformTest {
                                 "idField", "employee_id",
                                 "mappings", Map.of("name", "name"),
                                 "objectTypeId", "employee"),
-                                "id", "output-1", "inputSchema", List.of(), "type", "ONTOLOGY_OBJECT")));
+                                "id", "output-1", "inputSchema", List.of(), "type", "OBJECT_OUTPUT")));
         Map<String, Object> source = Map.of(
                 "assetId", "asset", "connectionId", "connection", "ontologyRevision", 1,
                 "pipelineId", "pipeline", "pipelineVersion", 1, "runId", "run");

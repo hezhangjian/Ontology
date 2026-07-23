@@ -6,7 +6,7 @@ const { Text } = Typography;
 
 export default function NodeLibrary({ mode, nodeTypes, onAdd }: { mode: PipelineMode; nodeTypes: NodeType[]; onAdd: (type: NodeType) => void }) {
   const [search, setSearch] = useState('');
-  const grouped = useMemo(() => nodeTypes.filter((node) => node.modes.includes(mode) && node.type !== 'SOURCE')
+  const grouped = useMemo(() => nodeTypes.filter((node) => node.modes.includes(mode))
     .filter((node) => `${node.label}${node.description}`.toLowerCase().includes(search.toLowerCase()))
     .reduce<Record<string, NodeType[]>>((result, node) => ({ ...result, [node.category]: [...(result[node.category] ?? []), node] }), {}), [mode, nodeTypes, search]);
   return (

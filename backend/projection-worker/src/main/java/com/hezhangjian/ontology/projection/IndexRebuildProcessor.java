@@ -33,7 +33,9 @@ public class IndexRebuildProcessor {
             return new RebuildResult(job.targetIndex(), job.objectCount());
         }
         try {
-            RebuildResult result = search.rebuildObjects(graph.listObjects(), validator::filterSearchable);
+            RebuildResult result = search.rebuildObjects(graph.listObjects().stream()
+                    .filter(object -> command.ontologyId().toString().equals(object.ontologyId()))
+                    .toList(), validator::filterSearchable);
             repository.finishRebuild(command.rebuildId(), result.index(), result.objectCount());
             return result;
         } catch (RuntimeException exception) {

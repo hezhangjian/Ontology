@@ -2,8 +2,6 @@ package com.hezhangjian.ontology.core.datasets;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -33,7 +31,6 @@ final class DatasetMaterializationConsumer implements SmartLifecycle {
     private final String pulsarUrl;
     private final ExecutorService executor = Executors.newSingleThreadExecutor(
             Thread.ofPlatform().name("dataset-materialization-consumer").factory());
-    private final Map<String, Batch> batches = new LinkedHashMap<>();
     private volatile boolean running;
     private PulsarClient client;
     private Consumer<byte[]> consumer;
@@ -60,29 +57,37 @@ final class DatasetMaterializationConsumer implements SmartLifecycle {
                 if (message == null) continue;
                 Map<String, Object> event = json.readValue(message.getData(), new TypeReference<>() { });
                 String correlationId = String.valueOf(event.get("correlation_id"));
-                Batch batch = batches.computeIfAbsent(correlationId, ignored -> new Batch());
                 if ("dataset.row".equals(event.get("event_type"))) {
                     UUID eventId = UUID.fromString(String.valueOf(event.get("event_id")));
                     @SuppressWarnings("unchecked") Map<String, Object> payload = (Map<String, Object>) event.get("payload");
-                    batch.rows.putIfAbsent(eventId, new RowEvent(eventId, payload,
-                            longValue(event.get("ontology_revision"), 1), message.getMessageId().toString()));
-                    batch.messages.add(message);
+                    jdbc.sql("""
+                            INSERT INTO control.dataset_materialization_rows(
+                              correlation_id,event_id,dataset_id,ontology_id,ontology_revision,message_id,payload)
+                            VALUES (:correlation,:eventId,:datasetId,:ontologyId,:revision,:messageId,:payload::jsonb)
+                            ON CONFLICT(event_id) DO NOTHING
+                            """).param("correlation", correlationId).param("eventId", eventId)
+                            .param("datasetId", UUID.fromString(String.valueOf(event.get("dataset_id"))))
+                            .param("ontologyId", UUID.fromString(String.valueOf(event.get("ontology_id"))))
+                            .param("revision", longValue(event.get("ontology_revision"), 1))
+                            .param("messageId", message.getMessageId().toString())
+                            .param("payload", json.writeValueAsString(payload)).update();
+                    consumer.acknowledge(message);
                 } else if ("dataset.complete".equals(event.get("event_type"))) {
                     String runStatus = runStatus(event);
                     if (!canDecideMaterialization(runStatus)) {
                         consumer.negativeAcknowledge(message);
                     } else {
-                        if (isSuccessfulMaterialization(runStatus)) finish(event, batch);
-                        else fail(event);
-                        for (Message<byte[]> rowMessage : batch.messages) consumer.acknowledge(rowMessage);
+                        if (isSuccessfulMaterialization(runStatus)) finish(event);
+                        else fail(event, correlationId);
                         consumer.acknowledge(message);
-                        batches.remove(correlationId);
                     }
                 } else {
                     consumer.acknowledge(message);
                 }
-            } catch (Exception cause) {
-                log.warn("Dataset materialization consumer will reconnect: {}", cause.getMessage());
+            } catch (Throwable cause) {
+                // The consumer is submitted to an ExecutorService, which otherwise retains task
+                // failures without logging them and leaves the completion message unacknowledged.
+                log.warn("Dataset materialization consumer will reconnect", cause);
                 closeResources();
                 if (running) try { TimeUnit.SECONDS.sleep(2); }
                 catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
@@ -99,25 +104,25 @@ final class DatasetMaterializationConsumer implements SmartLifecycle {
         log.info("Dataset materialization consumer connected to {}", TOPIC);
     }
 
-    private void finish(Map<String, Object> completed, Batch batch) {
+    private void finish(Map<String, Object> completed) {
         UUID datasetId = UUID.fromString(String.valueOf(completed.get("dataset_id")));
+        String correlationId = String.valueOf(completed.get("correlation_id"));
         long expected = longValue(completed.get("row_count"), -1);
-        if (expected != batch.rows.size()) {
-            throw new IllegalStateException("Dataset batch expected " + expected + " rows but received " + batch.rows.size());
-        }
-        datasets.finalizeFlinkMaterialization(datasetId,
-                batch.rows.values().stream().map(RowEvent::payload).toList());
-        long version = 0;
-        for (RowEvent row : batch.rows.values()) {
-            jdbc.sql("""
-                    INSERT INTO control.projection_ledger(event_id,event_type,topic,message_id,ontology_revision,
-                      entity_key,entity_version,correlation_id,status,projected_at)
-                    VALUES (:eventId,'dataset.row',:topic,:messageId,:revision,:entityKey,:version,:correlation,'PROJECTED',now())
-                    ON CONFLICT(event_id) DO UPDATE SET status='PROJECTED',projected_at=now(),updated_at=now()
-                    """).param("eventId", row.eventId()).param("topic", TOPIC).param("messageId", row.messageId())
-                    .param("revision", row.ontologyRevision()).param("entityKey", "dataset:" + datasetId + ":" + row.eventId())
-                    .param("version", ++version).param("correlation", String.valueOf(completed.get("correlation_id"))).update();
-        }
+        datasets.finalizeFlinkMaterialization(datasetId, correlationId, expected);
+        jdbc.sql("""
+                INSERT INTO control.projection_ledger(
+                  event_id,event_type,topic,message_id,ontology_id,ontology_revision,
+                  entity_key,entity_version,correlation_id,status,projected_at)
+                SELECT event_id,'dataset.row',:topic,message_id,ontology_id,ontology_revision,
+                  'dataset:' || :datasetId || ':' || event_id,
+                  row_number() OVER (ORDER BY event_id),correlation_id,'PROJECTED',now()
+                FROM control.dataset_materialization_rows
+                WHERE dataset_id=:datasetId AND correlation_id=:correlation
+                ON CONFLICT(event_id) DO UPDATE
+                  SET status='PROJECTED',projected_at=now(),updated_at=now()
+                """).param("topic", TOPIC).param("datasetId", datasetId)
+                .param("correlation", correlationId).update();
+        deleteStaged(datasetId, correlationId);
     }
 
     private String runStatus(Map<String, Object> completed) {
@@ -135,10 +140,18 @@ final class DatasetMaterializationConsumer implements SmartLifecycle {
         return List.of("COMPLETED", "DEGRADED", "PROJECTING").contains(status);
     }
 
-    private void fail(Map<String, Object> completed) {
+    private void fail(Map<String, Object> completed, String correlationId) {
         UUID datasetId = UUID.fromString(String.valueOf(completed.get("dataset_id")));
         jdbc.sql("UPDATE control.datasets SET status='FAILED',row_count=0,schema='[]'::jsonb,updated_at=now() WHERE id=:id")
                 .param("id", datasetId).update();
+        deleteStaged(datasetId, correlationId);
+    }
+
+    private void deleteStaged(UUID datasetId, String correlationId) {
+        jdbc.sql("""
+                DELETE FROM control.dataset_materialization_rows
+                WHERE dataset_id=:datasetId AND correlation_id=:correlation
+                """).param("datasetId", datasetId).param("correlation", correlationId).update();
     }
 
     private long longValue(Object value, long fallback) {
@@ -166,10 +179,4 @@ final class DatasetMaterializationConsumer implements SmartLifecycle {
     @Override public boolean isAutoStartup() { return true; }
     @Override public void stop(Runnable callback) { stop(); callback.run(); }
 
-    private static final class Batch {
-        private final Map<UUID, RowEvent> rows = new LinkedHashMap<>();
-        private final List<Message<byte[]>> messages = new ArrayList<>();
-    }
-
-    private record RowEvent(UUID eventId, Map<String, Object> payload, long ontologyRevision, String messageId) { }
 }

@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/v1")
+@RequestMapping("/v1/ontologies/{ontologyId}")
 @PreAuthorize("hasAnyRole('Viewer','Builder','Admin')")
 public class DatasetController {
     private final DatasetService service;
@@ -40,6 +40,7 @@ public class DatasetController {
     ResponseEntity<Dataset> materialize(@PathVariable UUID pipelineId, @RequestBody(required=false) MaterializeRequest request, Authentication authentication) {
         ActorIdentity actor = ActorIdentity.from(authentication);
         Dataset dataset = service.materialize(pipelineId, request, new Actor(actor.id(), actor.name(), actor.admin()));
-        return ResponseEntity.created(URI.create("/v1/datasets/" + dataset.id())).body(dataset);
+        return ResponseEntity.created(URI.create("/v1/ontologies/" + com.hezhangjian.ontology.core.security.WorkspaceContext.id()
+                + "/datasets/" + dataset.id())).body(dataset);
     }
 }

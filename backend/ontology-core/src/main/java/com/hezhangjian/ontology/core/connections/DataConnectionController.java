@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 @RestController
-@RequestMapping("/v1")
+@RequestMapping("/v1/ontologies/{ontologyId}")
 @PreAuthorize("hasAnyRole('Builder','Admin')")
 public class DataConnectionController {
     private final DataConnectionService service;
@@ -32,7 +32,7 @@ public class DataConnectionController {
         this.service = service;
     }
 
-    @GetMapping("/data-sources")
+    @GetMapping("/connections")
     DataSourcePage list(@RequestParam(defaultValue = "0") int page,
                         @RequestParam(defaultValue = "20") int size,
                         @RequestParam(required = false) String search,
@@ -42,68 +42,70 @@ public class DataConnectionController {
         return service.list(page, size, search, type, status, owner);
     }
 
-    @PostMapping("/data-sources/test")
+    @PostMapping("/connection-tests")
     TestResult test(@RequestBody TestRequest request, Authentication authentication) {
         return service.test(request, actor(authentication));
     }
 
-    @PostMapping("/data-sources")
+    @PostMapping("/connections")
     ResponseEntity<DataSource> create(@RequestBody CreateRequest request, Authentication authentication) {
         DataSource created = service.create(request, actor(authentication));
-        return ResponseEntity.created(URI.create("/v1/data-sources/" + created.id())).eTag(Long.toString(created.version())).body(created);
+        return ResponseEntity.created(URI.create("/v1/ontologies/" + com.hezhangjian.ontology.core.security.WorkspaceContext.id()
+                + "/connections/" + created.id())).eTag(Long.toString(created.version())).body(created);
     }
 
-    @PostMapping(value = "/data-sources/local-csv", consumes = "multipart/form-data")
+    @PostMapping(value = "/connections/local-csv", consumes = "multipart/form-data")
     ResponseEntity<DataSource> importLocalCsv(@RequestParam String name,
                                                @RequestParam(required = false) String description,
                                                @RequestParam(required = false) List<String> tags,
                                                @RequestParam("files") List<MultipartFile> files,
                                                Authentication authentication) {
         DataSource created = service.importLocalCsv(name, description, tags, files, actor(authentication));
-        return ResponseEntity.created(URI.create("/v1/data-sources/" + created.id())).eTag(Long.toString(created.version())).body(created);
+        return ResponseEntity.created(URI.create("/v1/ontologies/" + com.hezhangjian.ontology.core.security.WorkspaceContext.id()
+                + "/connections/" + created.id())).eTag(Long.toString(created.version())).body(created);
     }
 
-    @GetMapping("/data-sources/{id}")
+    @GetMapping("/connections/{id}")
     ResponseEntity<DataSource> get(@PathVariable UUID id) {
         DataSource source = service.get(id);
         return ResponseEntity.ok().eTag(Long.toString(source.version())).body(source);
     }
 
-    @GetMapping("/data-sources/{id}/overview")
+    @GetMapping("/connections/{id}/overview")
     Overview overview(@PathVariable UUID id) {
         return service.overview(id);
     }
 
-    @PatchMapping("/data-sources/{id}")
+    @PatchMapping("/connections/{id}")
     ResponseEntity<DataSource> update(@PathVariable UUID id, @RequestHeader("If-Match") String ifMatch,
                                       @RequestBody UpdateRequest request, Authentication authentication) {
         DataSource source = service.update(id, parseVersion(ifMatch), request, actor(authentication));
         return ResponseEntity.ok().eTag(Long.toString(source.version())).body(source);
     }
 
-    @PostMapping("/data-sources/{id}/test")
+    @PostMapping("/connections/{id}/test")
     TestResult retest(@PathVariable UUID id, Authentication authentication) {
         return service.retest(id, actor(authentication));
     }
 
-    @PostMapping("/data-sources/{id}/disable")
+    @PostMapping("/connections/{id}/disable")
     DataSource disable(@PathVariable UUID id, Authentication authentication) {
         return service.disable(id, actor(authentication));
     }
 
-    @PostMapping("/data-sources/{id}/enable")
+    @PostMapping("/connections/{id}/enable")
     DataSource enable(@PathVariable UUID id, Authentication authentication) {
         return service.enable(id, actor(authentication));
     }
 
-    @DeleteMapping("/data-sources/{id}")
+    @DeleteMapping("/connections/{id}")
     @PreAuthorize("hasAnyRole('Viewer','Builder','Admin')")
     ResponseEntity<Void> delete(@PathVariable UUID id, Authentication authentication) {
         service.delete(id, actor(authentication));
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("/data-sources/{id}/rotate-credential")
+    @PostMapping("/connections/{id}/rotate-credential")
     CredentialSummary rotate(@PathVariable UUID id, @RequestBody RotateCredentialRequest request,
                              Authentication authentication) {
         return service.rotate(id, request.credential(), actor(authentication));
@@ -115,46 +117,46 @@ public class DataConnectionController {
         return service.credentials(actor(authentication));
     }
 
-    @GetMapping("/data-sources/{id}/assets")
+    @GetMapping("/connections/{id}/assets")
     AssetPage assets(@PathVariable UUID id, @RequestParam(defaultValue = "0") int page,
                      @RequestParam(defaultValue = "50") int size,
                      @RequestParam(required = false) String search) {
         return service.assets(id, page, size, search);
     }
 
-    @PostMapping("/data-sources/{id}/discover")
+    @PostMapping("/connections/{id}/discover")
     ResponseEntity<DiscoveryRun> discover(@PathVariable UUID id, Authentication authentication) {
         return ResponseEntity.accepted().body(service.discover(id, actor(authentication)));
     }
 
-    @GetMapping("/data-sources/{id}/assets/{assetId}")
+    @GetMapping("/connections/{id}/assets/{assetId}")
     DataSourceAsset asset(@PathVariable UUID id, @PathVariable UUID assetId) {
         return service.asset(id, assetId);
     }
 
-    @PostMapping("/data-sources/{id}/assets/{assetId}/infer-schema")
+    @PostMapping("/connections/{id}/assets/{assetId}/infer-schema")
     ResponseEntity<DiscoveryRun> inferSchema(@PathVariable UUID id, @PathVariable UUID assetId,
                                              Authentication authentication) {
         return ResponseEntity.accepted().body(service.inferSchema(id, assetId, actor(authentication)));
     }
 
-    @PostMapping("/data-sources/{id}/assets/{assetId}/preview")
+    @PostMapping("/connections/{id}/assets/{assetId}/preview")
     AssetPreview preview(@PathVariable UUID id, @PathVariable UUID assetId,
                          @RequestBody(required = false) PreviewRequest request, Authentication authentication) {
         return service.preview(id, assetId, request == null ? 50 : request.limit(), actor(authentication));
     }
 
-    @GetMapping("/data-sources/{id}/assets/{assetId}/usage")
+    @GetMapping("/connections/{id}/assets/{assetId}/usage")
     AssetUsage usage(@PathVariable UUID id, @PathVariable UUID assetId) {
         return service.usage(id, assetId);
     }
 
-    @GetMapping("/data-sources/{id}/pipelines")
+    @GetMapping("/connections/{id}/pipelines")
     List<PipelineSummary> pipelines(@PathVariable UUID id) {
         return service.pipelines(id);
     }
 
-    @GetMapping("/data-sources/{id}/runs")
+    @GetMapping("/connections/{id}/runs")
     List<PipelineRunSummary> runs(@PathVariable UUID id) {
         return service.runs(id);
     }

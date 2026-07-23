@@ -54,11 +54,12 @@ export default function DatasetObjectWizardPage({ accessToken, displayName, navi
           const datasetOutput = copy.draft.graph.nodes.find((node) => node.type === 'DATASET_OUTPUT');
           const outputMappings = Array.isArray(datasetOutput?.config.fieldMappings) ? datasetOutput.config.fieldMappings as Array<{ source: string; target: string }> : [];
           const upstreamField = (field: string) => outputMappings.find((mapping) => mapping.target === field)?.source ?? field;
-          const graph = { ...copy.draft.graph, nodes: copy.draft.graph.nodes.map((node) => node.type === 'DATASET_OUTPUT' ? { ...node, name: `${resource.displayName}对象输出`, type: 'ONTOLOGY_OBJECT', config: { idFields: [upstreamField(values.identityField)], mappings: Object.fromEntries(properties.map((property) => [property.apiName, upstreamField(String(property.sourceField))])), objectTypeId: resource.id }, outputSchema: [] } : node) };
+          const graph = { ...copy.draft.graph, nodes: copy.draft.graph.nodes.map((node) => node.type === 'DATASET_OUTPUT' ? { ...node, name: `${resource.displayName}对象输出`, type: 'OBJECT_OUTPUT', config: { idFields: [upstreamField(values.identityField)], mappings: Object.fromEntries(properties.map((property) => [property.apiName, upstreamField(String(property.sourceField))])), objectTypeId: resource.id }, outputSchema: [] } : node) };
           await pipelineApi.updateDraft(copy.id, copy.draft.etag, { description: `由 Dataset ${dataset.name} 维护 ${resource.displayName}对象实例`, graph, name: `${resource.displayName}对象映射`, runtime: copy.draft.runtime, schedule: copy.draft.schedule });
-          await pipelineApi.publish(copy.id, undefined, true);
-          message.success(`已创建 ${resource.displayName}，并提交 Flink 对象实例管道（预计 ${mapping.objectCount} 个）`);
-          navigate(`/ontology/object-types/${resource.id}`); return;
+          await pipelineApi.publish(copy.id);
+          const run = await pipelineApi.run(copy.id);
+          message.success(`已创建 ${resource.displayName}，正在生成预计 ${mapping.objectCount} 个对象`);
+          navigate(`/data/pipelines/${copy.id}/runs/${run.id}`); return;
         }
         if (current.status === 'FAILED') throw new Error(current.safeError || '创建失败');
         await new Promise((resolve) => window.setTimeout(resolve, 300));

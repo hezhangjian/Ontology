@@ -118,7 +118,7 @@ export default function ConversationCenterPage({ accessToken }: { accessToken: s
     if (!current || !trace.result || typeof trace.result !== 'object') return;
     try {
       const result = trace.result as Record<string, unknown>;
-      if (trace.name === 'preview_action') await api.confirmAction(current.id, String(result.actionId), String(result.previewToken));
+      if (trace.name === 'preview_action') await api.confirmAction(current.id, String(result.actionTypeId), String(result.token));
       else await api.confirmRule(current.id, result);
       message.success('变更已确认并提交；可继续询问执行状态');
     } catch (error) { message.error((error as Error).message); }
