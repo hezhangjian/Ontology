@@ -60,6 +60,7 @@ dashboards:
   suppression-threshold: 5
 
 server:
+  multipart-max-parts: ${SERVER_MULTIPART_MAX_PARTS:100}
   port: 8000
 
 management:

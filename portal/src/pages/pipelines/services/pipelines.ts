@@ -13,6 +13,7 @@ import type {
   ScheduleSettings,
   ValidationResult,
 } from '../types';
+import { activeOntologyId } from '../../../features/ontology/ontologyContext';
 
 const base = '/api/ontology/v1';
 
@@ -20,7 +21,7 @@ export function pipelinesApi(accessToken: string) {
   async function response<T>(path: string, init: RequestInit = {}): Promise<{ data: T; etag?: string }> {
     const result = await fetch(`${base}${path}`, {
       ...init,
-      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', ...init.headers },
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', 'X-Ontology-Id': activeOntologyId(), 'X-Workspace-Id': activeOntologyId(), ...init.headers },
     });
     if (!result.ok) {
       const problem = await result.json().catch(() => ({ detail: '请求未能完成' })) as { detail?: string; requestId?: string };

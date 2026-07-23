@@ -68,10 +68,16 @@ final class DatasetMaterializationConsumer implements SmartLifecycle {
                             longValue(event.get("ontology_revision"), 1), message.getMessageId().toString()));
                     batch.messages.add(message);
                 } else if ("dataset.complete".equals(event.get("event_type"))) {
-                    finish(event, batch);
-                    for (Message<byte[]> rowMessage : batch.messages) consumer.acknowledge(rowMessage);
-                    consumer.acknowledge(message);
-                    batches.remove(correlationId);
+                    String runStatus = runStatus(event);
+                    if (!canDecideMaterialization(runStatus)) {
+                        consumer.negativeAcknowledge(message);
+                    } else {
+                        if (isSuccessfulMaterialization(runStatus)) finish(event, batch);
+                        else fail(event);
+                        for (Message<byte[]> rowMessage : batch.messages) consumer.acknowledge(rowMessage);
+                        consumer.acknowledge(message);
+                        batches.remove(correlationId);
+                    }
                 } else {
                     consumer.acknowledge(message);
                 }
@@ -112,6 +118,27 @@ final class DatasetMaterializationConsumer implements SmartLifecycle {
                     .param("revision", row.ontologyRevision()).param("entityKey", "dataset:" + datasetId + ":" + row.eventId())
                     .param("version", ++version).param("correlation", String.valueOf(completed.get("correlation_id"))).update();
         }
+    }
+
+    private String runStatus(Map<String, Object> completed) {
+        UUID runId = UUID.fromString(String.valueOf(completed.get("run_id")));
+        return jdbc.sql("SELECT status FROM control.pipeline_runs WHERE id=:id")
+                .param("id", runId).query(String.class).optional().orElse("FAILED");
+    }
+
+    private boolean canDecideMaterialization(String status) {
+        return isSuccessfulMaterialization(status)
+                || List.of("CANCELLED", "FAILED", "STOPPED").contains(status);
+    }
+
+    private boolean isSuccessfulMaterialization(String status) {
+        return List.of("COMPLETED", "DEGRADED", "PROJECTING").contains(status);
+    }
+
+    private void fail(Map<String, Object> completed) {
+        UUID datasetId = UUID.fromString(String.valueOf(completed.get("dataset_id")));
+        jdbc.sql("UPDATE control.datasets SET status='FAILED',row_count=0,schema='[]'::jsonb,updated_at=now() WHERE id=:id")
+                .param("id", datasetId).update();
     }
 
     private long longValue(Object value, long fallback) {

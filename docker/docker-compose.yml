@@ -2,41 +2,77 @@ name: ontology-platform
 
 x-flink-build: &flink-build
   context: ..
-  dockerfile: backend/flink-job/Dockerfile
-  args:
-    FLINK_BASE_IMAGE: ${FLINK_BASE_IMAGE}
-    FLINK_CONNECTOR_JDBC_SHA256: ${FLINK_CONNECTOR_JDBC_SHA256}
-    FLINK_CONNECTOR_JDBC_VERSION: ${FLINK_CONNECTOR_JDBC_VERSION}
-    FLINK_CONNECTOR_KAFKA_SHA256: ${FLINK_CONNECTOR_KAFKA_SHA256}
-    FLINK_CONNECTOR_KAFKA_VERSION: ${FLINK_CONNECTOR_KAFKA_VERSION}
-    FLINK_CONNECTOR_PULSAR_SHA256: ${FLINK_CONNECTOR_PULSAR_SHA256}
-    FLINK_CONNECTOR_PULSAR_VERSION: ${FLINK_CONNECTOR_PULSAR_VERSION}
-    FLINK_S3_HADOOP_SHA256: ${FLINK_S3_HADOOP_SHA256}
-    FLINK_S3_HADOOP_VERSION: ${FLINK_S3_HADOOP_VERSION}
-    MYSQL_DRIVER_SHA256: ${MYSQL_DRIVER_SHA256}
-    MYSQL_DRIVER_VERSION: ${MYSQL_DRIVER_VERSION}
-    POSTGRES_DRIVER_SHA256: ${POSTGRES_DRIVER_SHA256}
-    POSTGRES_DRIVER_VERSION: ${POSTGRES_DRIVER_VERSION}
+  dockerfile_inline: |
+    FROM flink:1.20.5-scala_2.12-java17@sha256:5a781c3a3bf694d4befba7709fbc192403a461c2d852fed533587a0970e03f5e
+    USER root
+    RUN set -eux; \
+        base=https://repo1.maven.org/maven2; \
+        curl -fsSL "$${base}/org/apache/flink/flink-connector-jdbc/3.3.0-1.20/flink-connector-jdbc-3.3.0-1.20.jar" -o /opt/flink/lib/flink-connector-jdbc.jar; \
+        echo "50d243cf0e1aac67c2c81c9fb2e9b32bb7d7124b9594df009efa8122e3df1c75  /opt/flink/lib/flink-connector-jdbc.jar" | sha256sum -c -; \
+        curl -fsSL "$${base}/org/apache/flink/flink-connector-kafka/3.4.0-1.20/flink-connector-kafka-3.4.0-1.20.jar" -o /opt/flink/lib/flink-connector-kafka.jar; \
+        echo "0deab094f7f54df9e8cb7c77c15b4392e1f9923f98f8972b4346f6ff384bf5e6  /opt/flink/lib/flink-connector-kafka.jar" | sha256sum -c -; \
+        curl -fsSL "$${base}/org/apache/flink/flink-connector-pulsar/4.2.0-1.20/flink-connector-pulsar-4.2.0-1.20.jar" -o /opt/flink/lib/flink-connector-pulsar.jar; \
+        echo "e57026a9578fe02e12cc7f35f300d1466ee7634a12d8f12f14bdd58977aa54b1  /opt/flink/lib/flink-connector-pulsar.jar" | sha256sum -c -; \
+        curl -fsSL "$${base}/org/postgresql/postgresql/42.7.7/postgresql-42.7.7.jar" -o /opt/flink/lib/postgresql.jar; \
+        echo "157963d60ae66d607e09466e8c0cdf8087e9cb20d0159899ffca96bca2528460  /opt/flink/lib/postgresql.jar" | sha256sum -c -; \
+        curl -fsSL "$${base}/com/mysql/mysql-connector-j/9.4.0/mysql-connector-j-9.4.0.jar" -o /opt/flink/lib/mysql-connector-j.jar; \
+        echo "49ed93c8b2bea9cb0929b85a8a28837b191d0f8eac6919fdcef16e36e2cd53b3  /opt/flink/lib/mysql-connector-j.jar" | sha256sum -c -; \
+        mkdir -p /opt/flink/plugins/s3-fs-hadoop; \
+        curl -fsSL "$${base}/org/apache/flink/flink-s3-fs-hadoop/1.20.5/flink-s3-fs-hadoop-1.20.5.jar" -o /opt/flink/plugins/s3-fs-hadoop/flink-s3-fs-hadoop.jar; \
+        echo "6fcda3e7fedfb0ce11d0b6700155ca9d7e0b68475bdff2203c056a9fabeeb792  /opt/flink/plugins/s3-fs-hadoop/flink-s3-fs-hadoop.jar" | sha256sum -c -
+    USER flink
 
 x-flink-common: &flink-common
-  image: ${FLINK_IMAGE}
+  image: ontology/flink:1.20.5-ontology.1
   build: *flink-build
   profiles: [compute]
   depends_on:
     minio-bootstrap:
       condition: service_completed_successfully
-  secrets:
-    - flink_workload_token
-    - minio_root_password
-    - minio_root_user
+  configs:
+    - source: flink-config
+      target: /opt/flink/conf/flink-conf.yaml
+  environment:
+    AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-ontology-minio}
+    AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-ontology-minio-password}
+    FLINK_WORKLOAD_TOKEN: ${FLINK_WORKLOAD_TOKEN:-local-flink-workload-token}
   volumes:
-    - ../deploy/config/flink/flink-conf.yaml:/opt/flink/conf/flink-conf.yaml:ro
     - flink-checkpoints-cache:/opt/flink/checkpoints-cache
   restart: unless-stopped
 
 x-java-build: &java-build
   context: ..
-  dockerfile: backend/Dockerfile
+  dockerfile_inline: &java-dockerfile |
+    FROM maven:3.9.9-eclipse-temurin-21@sha256:3a4ab3276a087bf276f79cae96b1af04f53731bec53fb2e651aca79e4b10211e AS agent
+    RUN --mount=type=cache,target=/tmp/skywalking-download \
+        archive=/tmp/skywalking-download/apache-skywalking-java-agent-9.6.0.tgz && \
+        checksum="64346286924aafcbd5e44358e4fd720a52900192bc5a32846283feee728aad90454ac8574683599b7fe4d59d587a4c1ae58744ed01028d5010847b1277906afa" && \
+        if ! echo "$${checksum}  $${archive}" | sha512sum -c - >/dev/null 2>&1; then \
+          rm -f "$${archive}" "$${archive}.part"; \
+          curl --retry 10 --retry-all-errors --retry-delay 2 -fsSL \
+            https://archive.apache.org/dist/skywalking/java-agent/9.6.0/apache-skywalking-java-agent-9.6.0.tgz \
+            -o "$${archive}.part"; \
+          mv "$${archive}.part" "$${archive}"; \
+        fi && \
+        echo "$${checksum}  $${archive}" | sha512sum -c - && \
+        mkdir -p /tmp/skywalking && tar -xzf "$${archive}" -C /tmp/skywalking --strip-components=1
+    FROM maven:3.9.9-eclipse-temurin-21@sha256:3a4ab3276a087bf276f79cae96b1af04f53731bec53fb2e651aca79e4b10211e AS build
+    WORKDIR /workspace
+    COPY .mvn .mvn
+    COPY backend backend
+    COPY mvnw pom.xml ./
+    RUN --mount=type=cache,target=/root/.m2 ./mvnw package -DskipTests
+    FROM eclipse-temurin:21.0.7_6-jre-jammy@sha256:c4e6542e774de504da9b4729ff8d761287c965c1d788528ca78da30024efdb23
+    RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+    ARG MODULE
+    WORKDIR /app
+    COPY --from=build "/workspace/backend/$${MODULE}/target/$${MODULE}-0.1.0-SNAPSHOT.jar" /app/app.jar
+    COPY --from=build /workspace/backend/flink-job/target/flink-job-0.1.0-SNAPSHOT.jar /app/flink-job.jar
+    COPY --from=agent /tmp/skywalking/skywalking-agent.jar /opt/skywalking/skywalking-agent.jar
+    COPY --from=agent /tmp/skywalking/config /opt/skywalking/config
+    COPY --from=agent /tmp/skywalking/plugins /opt/skywalking/plugins
+    ENV JAVA_TOOL_OPTIONS="-javaagent:/opt/skywalking/skywalking-agent.jar -Xms128m -Xmx384m"
+    ENTRYPOINT ["java", "-jar", "/app/app.jar"]
 
 x-java-common: &java-common
   environment:
@@ -45,12 +81,14 @@ x-java-common: &java-common
 
 x-app-java-build: &app-java-build
   context: ..
-  dockerfile: backend/Dockerfile
+  dockerfile_inline: *java-dockerfile
 
 services:
   apisix:
-    image: ${APISIX_IMAGE}
+    image: apache/apisix:3.17.0-debian@sha256:6cbf65f3085d1386bfd636b7e88400c163c3641841909e674af7896a5766b092
     profiles: [gateway]
+    environment:
+      APISIX_STAND_ALONE: "true"
     depends_on:
       frontend:
         condition: service_healthy
@@ -60,9 +98,11 @@ services:
         restart: true
     ports:
       - ${BIND_ADDRESS:-0.0.0.0}:9080:9080
-    volumes:
-      - ../deploy/config/apisix/apisix.yaml:/usr/local/apisix/conf/apisix.yaml:ro
-      - ../deploy/config/apisix/config.yaml:/usr/local/apisix/conf/config.yaml:ro
+    configs:
+      - source: apisix-routes
+        target: /usr/local/apisix/conf/apisix.yaml
+      - source: apisix-config
+        target: /usr/local/apisix/conf/config.yaml
     healthcheck:
       test: [CMD, bash, -ec, "exec 3<>/dev/tcp/127.0.0.1/9080; printf 'GET /healthz HTTP/1.1\r\nhost: localhost\r\nConnection: close\r\n\r\n' >&3; grep -q '200 OK' <&3"]
       interval: 10s
@@ -72,14 +112,12 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: ${POSTGRES_IMAGE}
+    image: postgres:17.9-alpine3.23@sha256:c7526c0f6c3f30260a563d7bcf8ad778effac59a44f8ffa86678c35418338609
     profiles: [core]
     environment:
       POSTGRES_DB: ontology
-      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ontology-postgres-password}
       POSTGRES_USER: ontology
-    secrets:
-      - postgres_password
     volumes:
       - postgres17-data:/var/lib/postgresql/data
     ports:
@@ -93,15 +131,12 @@ services:
     restart: unless-stopped
 
   minio:
-    image: ${MINIO_IMAGE}
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     profiles: [core, maintenance]
     command: server /data --console-address :9001
     environment:
-      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_root_password
-      MINIO_ROOT_USER_FILE: /run/secrets/minio_root_user
-    secrets:
-      - minio_root_password
-      - minio_root_user
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-ontology-minio-password}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-ontology-minio}
     volumes:
       - minio-data:/data
     ports:
@@ -116,37 +151,42 @@ services:
     restart: unless-stopped
 
   minio-bootstrap:
-    image: ${MINIO_MC_IMAGE}
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
     profiles: [core, maintenance]
     depends_on:
       minio:
         condition: service_healthy
-    entrypoint: [/bin/sh, /bootstrap/bootstrap-storage.sh]
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        mc alias set platform "$${MINIO_ENDPOINT}" "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
+        for bucket in aip-attachments backups exports flink-checkpoints import-staging quality-quarantine raw; do
+          mc mb --ignore-existing "platform/$${bucket}"
+          mc anonymous set none "platform/$${bucket}"
+        done
     environment:
       MINIO_ENDPOINT: http://minio:9000
-    secrets:
-      - minio_root_password
-      - minio_root_user
-    volumes:
-      - ../deploy/scripts:/bootstrap:ro
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-ontology-minio-password}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-ontology-minio}
     restart: "no"
 
   pulsar:
-    image: ${PULSAR_IMAGE}
+    image: apachepulsar/pulsar:4.0.12@sha256:ff64bce17db6f667e78dc6b98c7faaf55cb500f65fd6ea594adf2454e450452a
     profiles: [core]
     command:
       - /bin/bash
       - -ec
       - |
         bin/apply-config-from-env.py conf/standalone.conf
-        exec bin/pulsar standalone
+        exec bin/pulsar standalone --advertised-address pulsar --bookkeeper-port 3181
     environment:
       PULSAR_MEM: -Xms384m -Xmx384m -XX:MaxDirectMemorySize=256m
       PULSAR_PREFIX_allowAutoTopicCreation: "false"
+      PULSAR_PREFIX_advertisedAddress: pulsar
       PULSAR_PREFIX_brokerDeleteInactiveTopicsEnabled: "false"
       PULSAR_PREFIX_transactionCoordinatorEnabled: "true"
     volumes:
-      - pulsar-conf:/pulsar/conf
       - pulsar-data:/pulsar/data
     ports:
       - ${BIND_ADDRESS:-0.0.0.0}:6650:6650
@@ -160,16 +200,28 @@ services:
     restart: unless-stopped
 
   pulsar-bootstrap:
-    image: ${PULSAR_IMAGE}
+    image: apachepulsar/pulsar:4.0.12@sha256:ff64bce17db6f667e78dc6b98c7faaf55cb500f65fd6ea594adf2454e450452a
     profiles: [core]
     depends_on:
       pulsar:
         condition: service_healthy
-    command: [/bin/bash, /bootstrap/bootstrap-pulsar.sh]
+    command:
+      - /bin/bash
+      - -ec
+      - |
+        admin() { /pulsar/bin/pulsar-admin --admin-url "$${PULSAR_ADMIN_URL}" "$$@"; }
+        admin tenants create platform --allowed-clusters standalone 2>/dev/null || admin tenants update platform --allowed-clusters standalone
+        for namespace in commands dlq index ingestion quality system; do
+          admin namespaces create "platform/$${namespace}" 2>/dev/null || true
+          admin namespaces set-retention "platform/$${namespace}" --size 10G --time 7d
+        done
+        for spec in commands/mutation-batches:6 dlq/projection-events:3 index/rebuild-events:3 ingestion/dataset-events:6 ingestion/object-events:12 ingestion/relation-events:12 quality/quarantine:3 system/audit-events:6; do
+          topic=$${spec%:*}
+          partitions=$${spec##*:}
+          admin topics create-partitioned-topic "persistent://platform/$${topic}" --partitions "$${partitions}" 2>/dev/null || true
+        done
     environment:
       PULSAR_ADMIN_URL: http://pulsar:8080
-    volumes:
-      - ../deploy/scripts:/bootstrap:ro
     restart: "no"
 
   flink-jobmanager:
@@ -200,15 +252,19 @@ services:
       start_period: 30s
 
   hugegraph:
-    image: ${HUGEGRAPH_IMAGE}
+    image: hugegraph/hugegraph:1.7.0@sha256:077b89e1f2d5e228d99598bdb537161fb2e8a7b5abedf4724d97cf4de11529ba
     profiles: [core]
     environment:
       JAVA_OPTS: -Xms256m -Xmx512m
       PRELOAD: "false"
     volumes:
-      - ../deploy/scripts/start-hugegraph.sh:/opt/platform/start-hugegraph.sh:ro
       - hugegraph-data:/hugegraph/hugegraph-server/hugegraph-dist
-    command: [/bin/bash, /opt/platform/start-hugegraph.sh]
+    command:
+      - /bin/bash
+      - -ec
+      - |
+        sed -i 's/^#host: 127\.0\.0\.1$/host: 0.0.0.0/' /hugegraph-server/conf/gremlin-server.yaml
+        exec ./docker-entrypoint.sh
     ports:
       - ${BIND_ADDRESS:-0.0.0.0}:8088:8080
     healthcheck:
@@ -220,7 +276,7 @@ services:
     restart: unless-stopped
 
   opensearch:
-    image: ${OPENSEARCH_IMAGE}
+    image: opensearchproject/opensearch:3.7.0@sha256:44ba7ea58a319adf61c33ab16873f9ef5dbb30b291a832d375172f0b2d24e3c9
     profiles: [core, observability]
     environment:
       DISABLE_INSTALL_DEMO_CONFIG: "true"
@@ -245,28 +301,23 @@ services:
 
   ontology-core:
     <<: *java-common
-    image: ${ONTOLOGY_CORE_IMAGE}
+    image: ontology/ontology-core:0.1.0
     profiles: [core]
     build:
       <<: *java-build
       args:
-        JAVA_IMAGE: ${JAVA_IMAGE}
-        MAVEN_IMAGE: ${MAVEN_IMAGE}
         MODULE: ontology-core
-        SKYWALKING_JAVA_AGENT_SHA512: ${SKYWALKING_JAVA_AGENT_SHA512}
-        SKYWALKING_JAVA_AGENT_VERSION: ${SKYWALKING_JAVA_AGENT_VERSION}
     depends_on:
       postgres:
         condition: service_healthy
     environment:
+      connection_master_key: ${CONNECTION_MASTER_KEY:-MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=}
+      flink_workload_token: ${FLINK_WORKLOAD_TOKEN:-local-flink-workload-token}
+      minio_root_password: ${MINIO_ROOT_PASSWORD:-ontology-minio-password}
+      minio_root_user: ${MINIO_ROOT_USER:-ontology-minio}
+      postgres_password: ${POSTGRES_PASSWORD:-ontology-postgres-password}
       SW_AGENT_COLLECTOR_BACKEND_SERVICES: skywalking-oap:11800
       SW_AGENT_NAME: ontology-core
-    secrets:
-      - connection_master_key
-      - flink_workload_token
-      - minio_root_password
-      - minio_root_user
-      - postgres_password
     healthcheck:
       test: [CMD-SHELL, curl -fsS http://localhost:8000/actuator/health/readiness | grep -q '"status":"UP"']
       interval: 10s
@@ -276,16 +327,12 @@ services:
 
   projection-worker:
     <<: *java-common
-    image: ${PROJECTION_WORKER_IMAGE}
+    image: ontology/projection-worker:0.1.0
     profiles: [core]
     build:
       <<: *java-build
       args:
-        JAVA_IMAGE: ${JAVA_IMAGE}
-        MAVEN_IMAGE: ${MAVEN_IMAGE}
         MODULE: projection-worker
-        SKYWALKING_JAVA_AGENT_SHA512: ${SKYWALKING_JAVA_AGENT_SHA512}
-        SKYWALKING_JAVA_AGENT_VERSION: ${SKYWALKING_JAVA_AGENT_VERSION}
     depends_on:
       hugegraph:
         condition: service_healthy
@@ -298,24 +345,18 @@ services:
       pulsar-bootstrap:
         condition: service_completed_successfully
     environment:
-      SPRING_CONFIG_IMPORT: configtree:/run/secrets/
+      postgres_password: ${POSTGRES_PASSWORD:-ontology-postgres-password}
       SW_AGENT_COLLECTOR_BACKEND_SERVICES: skywalking-oap:11800
       SW_AGENT_NAME: projection-worker
-    secrets:
-      - postgres_password
 
   maintenance-runner:
     <<: *java-common
-    image: ${MAINTENANCE_RUNNER_IMAGE}
+    image: ontology/maintenance-runner:0.1.0
     profiles: [maintenance]
     build:
       <<: *java-build
       args:
-        JAVA_IMAGE: ${JAVA_IMAGE}
-        MAVEN_IMAGE: ${MAVEN_IMAGE}
         MODULE: maintenance-runner
-        SKYWALKING_JAVA_AGENT_SHA512: ${SKYWALKING_JAVA_AGENT_SHA512}
-        SKYWALKING_JAVA_AGENT_VERSION: ${SKYWALKING_JAVA_AGENT_VERSION}
     depends_on:
       minio-bootstrap:
         condition: service_completed_successfully
@@ -326,20 +367,22 @@ services:
       SW_AGENT_NAME: maintenance-runner
 
   agent-runtime:
-    image: ${AGENT_RUNTIME_IMAGE}
+    image: ontology/agent-runtime:0.1.0
     profiles: [apps]
     build:
       <<: *app-java-build
       args:
-        JAVA_IMAGE: ${JAVA_IMAGE}
-        MAVEN_IMAGE: ${MAVEN_IMAGE}
         MODULE: agent-runtime
-        SKYWALKING_JAVA_AGENT_SHA512: ${SKYWALKING_JAVA_AGENT_SHA512}
-        SKYWALKING_JAVA_AGENT_VERSION: ${SKYWALKING_JAVA_AGENT_VERSION}
     depends_on:
       ontology-core:
         condition: service_healthy
+    env_file:
+      - path: ../.env
+        required: false
     environment:
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
+      ONTOLOGY_CORE_URL: http://ontology-core:8000
+      postgres_password: ${POSTGRES_PASSWORD:-ontology-postgres-password}
       SW_AGENT_COLLECTOR_BACKEND_SERVICES: skywalking-oap:11800
       SW_AGENT_NAME: agent-runtime
     healthcheck:
@@ -351,16 +394,12 @@ services:
     restart: unless-stopped
 
   bff:
-    image: ${BFF_IMAGE}
+    image: ontology/bff:0.1.0
     profiles: [apps]
     build:
       <<: *app-java-build
       args:
-        JAVA_IMAGE: ${JAVA_IMAGE}
-        MAVEN_IMAGE: ${MAVEN_IMAGE}
         MODULE: bff
-        SKYWALKING_JAVA_AGENT_SHA512: ${SKYWALKING_JAVA_AGENT_SHA512}
-        SKYWALKING_JAVA_AGENT_VERSION: ${SKYWALKING_JAVA_AGENT_VERSION}
     depends_on:
       ontology-core:
         condition: service_healthy
@@ -376,14 +415,29 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: ${WEB_IMAGE}
+    image: ontology/portal:0.1.0
     profiles: [apps]
     build:
       context: ..
-      dockerfile: portal/Dockerfile
-      args:
-        NGINX_IMAGE: ${NGINX_IMAGE}
-        NODE_IMAGE: ${NODE_IMAGE}
+      dockerfile_inline: |
+        FROM node:22.22.0-alpine3.23@sha256:e4bf2a82ad0a4037d28035ae71529873c069b13eb0455466ae0bc13363826e34 AS build
+        WORKDIR /workspace
+        COPY portal/package.json portal/pnpm-lock.yaml portal/pnpm-workspace.yaml ./
+        RUN corepack enable && pnpm install --frozen-lockfile
+        COPY portal/eslint.config.js portal/index.html portal/tsconfig.app.json portal/tsconfig.json portal/tsconfig.node.json portal/vite.config.ts ./
+        COPY portal/src ./src
+        RUN pnpm build
+        FROM nginx:1.27.0-alpine3.19@sha256:208b70eefac13ee9be00e486f79c695b15cef861c680527171a27d253d834be9
+        RUN printf '%s\n' \
+          'server {' \
+          '  listen 80;' \
+          '  server_name _;' \
+          '  root /usr/share/nginx/html;' \
+          '  location = /healthz { add_header Content-Type text/plain; return 200 "ok\n"; }' \
+          '  location / { try_files $$uri $$uri/ /index.html; }' \
+          '}' > /etc/nginx/conf.d/default.conf
+        COPY --from=build /workspace/dist /usr/share/nginx/html
+        EXPOSE 80
     ports:
       - ${BIND_ADDRESS:-0.0.0.0}:3000:80
     healthcheck:
@@ -395,7 +449,7 @@ services:
     restart: unless-stopped
 
   skywalking-oap:
-    image: ${SKYWALKING_OAP_IMAGE}
+    image: apache/skywalking-oap-server:10.4.0@sha256:091d3a7f7ed5f3ec6fb43c2728cafedbe01372c63c7913a1332d51da581f8234
     profiles: [observability]
     depends_on:
       opensearch:
@@ -420,7 +474,7 @@ services:
     restart: unless-stopped
 
   skywalking-ui:
-    image: ${SKYWALKING_UI_IMAGE}
+    image: apache/skywalking-ui:10.4.0@sha256:7103481938b4b27e5fc22e4693675fd301c5f5293438e8aebcb29e97ca9fed68
     profiles: [observability]
     depends_on:
       skywalking-oap:
@@ -438,14 +492,15 @@ services:
     restart: unless-stopped
 
   otel-collector:
-    image: ${OTEL_COLLECTOR_IMAGE}
+    image: otel/opentelemetry-collector-contrib:0.153.0@sha256:93aad750175cbf1a973ae1c5886c3371f4d800f61be25cdd26870b8441ffe9fa
     profiles: [observability]
     command: [--config=/etc/otelcol-contrib/config.yaml]
     depends_on:
       skywalking-oap:
         condition: service_healthy
-    volumes:
-      - ../deploy/config/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    configs:
+      - source: otel-config
+        target: /etc/otelcol-contrib/config.yaml
     healthcheck:
       test: [CMD, /otelcol-contrib, components]
       interval: 15s
@@ -454,21 +509,149 @@ services:
       start_period: 20s
     restart: unless-stopped
 
+configs:
+  apisix-config:
+    content: |
+      apisix:
+        enable_admin: false
+        node_listen: 9080
+        ssl:
+          enable: false
+      deployment:
+        role: data_plane
+        role_data_plane:
+          config_provider: yaml
+      nginx_config:
+        http:
+          enable_access_log: true
+      plugins:
+        - openid-connect
+        - proxy-rewrite
+        - serverless-pre-function
+  apisix-routes:
+    content: |
+      routes:
+        - id: platform-health
+          uri: /healthz
+          priority: 100
+          plugins:
+            serverless-pre-function:
+              phase: rewrite
+              functions:
+                - return function(conf, ctx) ngx.status = 200; ngx.say("ok"); return ngx.exit(200) end
+        - id: ontology-api
+          uri: /api/ontology/*
+          priority: 90
+          plugins:
+            proxy-rewrite:
+              regex_uri: ["^/api/ontology/(.*)", "/$$1"]
+          upstream:
+            type: roundrobin
+            nodes:
+              ontology-core:8000: 1
+        - id: bff-api
+          uri: /api/bff/*
+          priority: 90
+          plugins:
+            proxy-rewrite:
+              regex_uri: ["^/api/bff/(.*)", "/$$1"]
+          upstream:
+            type: roundrobin
+            nodes:
+              bff:8001: 1
+        - id: agent-api
+          uri: /api/agent/*
+          priority: 90
+          plugins:
+            proxy-rewrite:
+              regex_uri: ["^/api/agent/(.*)", "/$$1"]
+          upstream:
+            type: roundrobin
+            nodes:
+              agent-runtime:8002: 1
+        - id: observability-ui
+          uri: /observability/*
+          priority: 80
+          plugins:
+            proxy-rewrite:
+              regex_uri: ["^/observability/(.*)", "/$$1"]
+          upstream:
+            type: roundrobin
+            nodes:
+              skywalking-ui:8080: 1
+        - id: portal
+          uri: /*
+          priority: 0
+          upstream:
+            type: roundrobin
+            nodes:
+              frontend:80: 1
+      #END
+  flink-config:
+    content: |
+      blob.server.port: 6124
+      env.java.opts.all: --add-exports=java.base/sun.net.util=ALL-UNNAMED --add-exports=java.rmi/sun.rmi.registry=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-exports=java.security.jgss/sun.security.krb5=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.text=ALL-UNNAMED --add-opens=java.base/java.time=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.locks=ALL-UNNAMED
+      jobmanager.bind-host: 0.0.0.0
+      jobmanager.memory.process.size: 768m
+      jobmanager.rpc.address: flink-jobmanager
+      jobmanager.rpc.port: 6123
+      metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
+      metrics.reporter.prom.port: 9249
+      parallelism.default: 2
+      rest.address: 0.0.0.0
+      rest.bind-address: 0.0.0.0
+      state.checkpoints.dir: s3://flink-checkpoints/checkpoints
+      state.savepoints.dir: s3://flink-checkpoints/savepoints
+      s3.endpoint: http://minio:9000
+      s3.path.style.access: true
+      taskmanager.bind-host: 0.0.0.0
+      taskmanager.host: flink-taskmanager
+      taskmanager.memory.process.size: 1024m
+      taskmanager.numberOfTaskSlots: 2
+  otel-config:
+    content: |
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+              endpoint: 0.0.0.0:4317
+        prometheus:
+          config:
+            scrape_configs:
+              - job_name: apisix
+                static_configs:
+                  - targets: [apisix:9091]
+              - job_name: flink
+                static_configs:
+                  - targets: [flink-jobmanager:9249, flink-taskmanager:9249]
+              - job_name: pulsar
+                metrics_path: /metrics
+                static_configs:
+                  - targets: [pulsar:8080]
+      processors:
+        batch: {}
+        memory_limiter:
+          check_interval: 1s
+          limit_mib: 384
+      exporters:
+        otlp/skywalking:
+          endpoint: skywalking-oap:11800
+          tls:
+            insecure: true
+      service:
+        pipelines:
+          metrics:
+            receivers: [otlp, prometheus]
+            processors: [memory_limiter, batch]
+            exporters: [otlp/skywalking]
+          traces:
+            receivers: [otlp]
+            processors: [memory_limiter, batch]
+            exporters: [otlp/skywalking]
+
 networks:
   default:
     name: ontology-platform
-
-secrets:
-  connection_master_key:
-    file: ${SECRET_DIR:-../deploy/secrets/examples}/connection_master_key
-  flink_workload_token:
-    file: ${SECRET_DIR:-../deploy/secrets/examples}/flink_workload_token
-  minio_root_password:
-    file: ${SECRET_DIR:-../deploy/secrets/examples}/minio_root_password
-  minio_root_user:
-    file: ${SECRET_DIR:-../deploy/secrets/examples}/minio_root_user
-  postgres_password:
-    file: ${SECRET_DIR:-../deploy/secrets/examples}/postgres_password
 
 volumes:
   flink-checkpoints-cache:
@@ -476,5 +659,4 @@ volumes:
   minio-data:
   opensearch-data:
   postgres17-data:
-  pulsar-conf:
   pulsar-data:

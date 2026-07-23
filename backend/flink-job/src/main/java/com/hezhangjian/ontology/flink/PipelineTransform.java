@@ -73,6 +73,10 @@ final class PipelineTransform extends RichFlatMapFunction<String, String> {
                 case "ONTOLOGY_RELATION" -> outputs.add(relationEvent(row, node, config));
                 case "DATASET_OUTPUT" -> outputs.add(datasetEvent(row, node, config));
                 case "QUALITY" -> { if (!qualityPasses(row, config) && "STOP".equals(config.get("failureAction"))) throw new IllegalStateException("Quality gate rejected a record"); }
+                case "RULE_TRANSFORM" -> {
+                    row = ruleTransform(row, config);
+                    if (row == null) return;
+                }
                 case "SELECT" -> row = select(row, config);
                 default -> { }
             }
@@ -90,6 +94,57 @@ final class PipelineTransform extends RichFlatMapFunction<String, String> {
         if (previewNodeId == null) {
             for (Map<String, Object> output : outputs) collector.collect(json.writeValueAsString(output));
         }
+    }
+
+    private Map<String, Object> ruleTransform(Map<String, Object> row, Map<String, Object> config) {
+        Map<String, Object> result = new LinkedHashMap<>(row);
+        Object rawRules = config.get("rules");
+        if (!(rawRules instanceof List<?> rules)) return result;
+        for (Object rawRule : rules) {
+            if (!(rawRule instanceof Map<?, ?> untyped)) continue;
+            Map<String, Object> rule = new LinkedHashMap<>();
+            untyped.forEach((key, value) -> rule.put(String.valueOf(key), value));
+            String field = text(rule.get("field"));
+            Object actual = result.get(field);
+            if (!ruleMatches(actual, rule)) continue;
+            String action = textOr(rule.get("action"), "REPLACE");
+            if ("DROP".equals(action)) return null;
+            if ("KEEP".equals(action)) continue;
+            if ("QUARANTINE".equals(action)) {
+                result.put(textOr(rule.get("statusField"), "_quality_status"), "QUARANTINED");
+                continue;
+            }
+            String originalField = text(rule.get("preserveOriginalAs"));
+            if (!originalField.isBlank()) result.putIfAbsent(originalField, actual);
+            result.put(field, rule.get("replacement"));
+            String statusField = text(rule.get("statusField"));
+            if (!statusField.isBlank()) result.put(statusField, "CLEANED");
+        }
+        return result;
+    }
+
+    private boolean ruleMatches(Object actual, Map<String, Object> rule) {
+        return switch (text(rule.get("operator"))) {
+            case "EQUALS" -> Objects.equals(text(actual), text(rule.get("value")));
+            case "GREATER_THAN" -> compareNumbers(actual, rule.get("value"), comparison -> comparison > 0);
+            case "IS_NULL" -> actual == null || text(actual).isBlank();
+            case "LESS_THAN" -> compareNumbers(actual, rule.get("value"), comparison -> comparison < 0);
+            case "OUTSIDE_RANGE" -> compareNumbers(actual, rule.get("min"), comparison -> comparison < 0)
+                    || compareNumbers(actual, rule.get("max"), comparison -> comparison > 0);
+            default -> false;
+        };
+    }
+
+    private boolean compareNumbers(Object left, Object right, java.util.function.IntPredicate predicate) {
+        BigDecimal leftNumber = decimalOrNull(left);
+        BigDecimal rightNumber = decimalOrNull(right);
+        return leftNumber != null && rightNumber != null && predicate.test(leftNumber.compareTo(rightNumber));
+    }
+
+    private BigDecimal decimalOrNull(Object value) {
+        if (value == null || text(value).isBlank()) return null;
+        try { return decimal(value); }
+        catch (NumberFormatException ignored) { return null; }
     }
 
     private List<Map<String, Object>> topologicalNodes() {
@@ -214,9 +269,11 @@ final class PipelineTransform extends RichFlatMapFunction<String, String> {
         String objectId = idFields.size() == 1 ? text(identity.get(idFields.get(0)))
                 : hash(json.writeValueAsBytes(identity));
         Map<String, Object> payload = new LinkedHashMap<>();
+        Map<String, Object> propertyTypes = map(config.get("propertyTypes"));
         map(config.get("mappings")).forEach((property, field) -> {
             String sourceField = text(field);
-            payload.put(property, typedValue(row.get(sourceField), schemaType(node, sourceField)));
+            payload.put(property, typedValue(row.get(sourceField),
+                    textOr(propertyTypes.get(property), schemaType(node, sourceField))));
         });
         String primaryPropertyKey = text(config.get("primaryPropertyKey"));
         if (!primaryPropertyKey.isBlank()) {
@@ -312,12 +369,15 @@ final class PipelineTransform extends RichFlatMapFunction<String, String> {
     }
 
     private Object typedValue(Object value, String type) {
-        if (value == null || text(value).isBlank()) return value;
+        if (value == null || text(value).isBlank()) return null;
         return switch (type) {
             case "BOOLEAN" -> value instanceof Boolean ? value : Boolean.parseBoolean(text(value));
             case "DECIMAL", "DOUBLE", "FLOAT" -> value instanceof Number ? value : decimal(value);
-            case "INT", "INTEGER", "LONG" -> value instanceof Number ? value : Long.parseLong(text(value));
+            case "INT", "INTEGER", "LONG" -> value instanceof Number number
+                    ? number.longValue()
+                    : Long.parseLong(text(value));
             case "JSON" -> value instanceof Map<?, ?> || value instanceof List<?> ? value : parseJson(value);
+            case "DATE", "DATETIME", "ENUM", "STRING", "TEXT" -> text(value);
             default -> value;
         };
     }

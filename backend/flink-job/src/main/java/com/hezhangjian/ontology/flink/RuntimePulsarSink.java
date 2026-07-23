@@ -25,6 +25,8 @@ final class RuntimePulsarSink extends RichSinkFunction<String> {
     private transient Producer<byte[]> datasetProducer;
     private transient PulsarClient pulsar;
     private long written;
+    private long datasetWritten;
+    private long projectionWritten;
     private transient Set<String> emittedEventIds;
     private String datasetId;
     private String correlationId;
@@ -61,10 +63,13 @@ final class RuntimePulsarSink extends RichSinkFunction<String> {
         if (dataset) {
             datasetId = String.valueOf(event.get("dataset_id"));
             correlationId = String.valueOf(event.get("correlation_id"));
+            datasetWritten++;
+        } else {
+            projectionWritten++;
         }
         written++;
         if (written % 100 == 0) {
-            client.progress("PUBLISHING", written, written, 0, "正在向平台 Pulsar 发布本体事件");
+            reportProgress("正在向平台 Pulsar 发布管道结果");
         }
     }
 
@@ -75,17 +80,22 @@ final class RuntimePulsarSink extends RichSinkFunction<String> {
                     "correlation_id", correlationId,
                     "dataset_id", datasetId,
                     "event_type", "dataset.complete",
-                    "row_count", written,
+                    "row_count", datasetWritten,
                     "run_id", runId.toString());
             datasetProducer.newMessage().key(datasetId)
                     .value(json.writeValueAsBytes(completed)).send();
         }
         if (client != null && written % 100 != 0) {
-            client.progress("PUBLISHING", written, written, 0, "管道结果已发布到平台 Pulsar");
+            reportProgress("管道结果已发布到平台 Pulsar");
         }
         if (datasetProducer != null) datasetProducer.close();
         if (objectProducer != null) objectProducer.close();
         if (relationProducer != null) relationProducer.close();
         if (pulsar != null) pulsar.close();
+    }
+
+    private void reportProgress(String message) {
+        client.progress("PUBLISHING", written, written, 0, message,
+                Map.of("projectionWrittenCount", projectionWritten));
     }
 }

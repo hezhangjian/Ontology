@@ -100,7 +100,8 @@ public class FlinkGateway {
                     .header("Content-Type", "multipart/form-data; boundary=" + boundary)
                     .timeout(Duration.ofSeconds(60)).POST(HttpRequest.BodyPublishers.ofByteArray(body)).build();
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() / 100 != 2) throw new IllegalStateException("Flink JAR upload failed with HTTP " + response.statusCode());
+            if (response.statusCode() / 100 != 2) throw new IllegalStateException("Flink JAR upload failed with HTTP "
+                    + response.statusCode() + responseDetails(response.body()));
             Map<String, Object> payload = json.readValue(response.body(), new TypeReference<>() { });
             String filename = String.valueOf(payload.get("filename"));
             jarId = filename.substring(filename.lastIndexOf('/') + 1);
@@ -119,7 +120,8 @@ public class FlinkGateway {
             if (body == null) builder.method(method, HttpRequest.BodyPublishers.noBody());
             else builder.header("Content-Type", "application/json").method(method, HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)));
             HttpResponse<String> response = http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() / 100 != 2) throw new IllegalStateException("Flink REST " + method + " " + path + " failed with HTTP " + response.statusCode());
+            if (response.statusCode() / 100 != 2) throw new IllegalStateException("Flink REST " + method + " " + path
+                    + " failed with HTTP " + response.statusCode() + responseDetails(response.body()));
             if (response.body() == null || response.body().isBlank()) return Map.of();
             return json.readValue(response.body(), new TypeReference<>() { });
         } catch (JsonProcessingException cause) {
@@ -130,5 +132,11 @@ public class FlinkGateway {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Flink REST request interrupted", cause);
         }
+    }
+
+    private String responseDetails(String body) {
+        if (body == null || body.isBlank()) return "";
+        String sanitized = body.replaceAll("[\\r\\n\\t]+", " ").trim();
+        return ": " + (sanitized.length() <= 1000 ? sanitized : sanitized.substring(0, 1000) + "…");
     }
 }

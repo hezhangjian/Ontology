@@ -29,10 +29,6 @@ dist/
 
 # Environment overrides
 *.local
-deploy/env/.env
-deploy/secrets/*
-!deploy/secrets/examples/
-!deploy/secrets/examples/**
 
 # Test output
 coverage/

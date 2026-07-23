@@ -43,6 +43,14 @@ public final class ExplorerModels {
 
     public record AggregationBucket(Object value, long count, double metric) { }
 
+    public record AggregateRequest(ObjectSetRequest query, List<UUID> dimensionPropertyIds,
+                                   UUID measurePropertyId, UUID divisorPropertyId,
+                                   String aggregation) { }
+
+    public record AggregateResponse(UUID objectTypeId, long ontologyRevision,
+                                    String queryFingerprint, Instant calculatedAt,
+                                    List<AggregationBucket> buckets) { }
+
     public record SearchRequest(String query, String mode, String tab, Integer size) { }
 
     public record SearchResponse(List<ObjectSummary> objects, List<ObjectTypeDefinition> objectTypes,

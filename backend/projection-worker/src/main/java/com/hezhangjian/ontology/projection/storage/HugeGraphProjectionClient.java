@@ -21,6 +21,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class HugeGraphProjectionClient {
+    private static final int EDGE_BATCH_ID_BUDGET = 12_000;
     private static final String OBJECT_LABEL = "ontology_object";
     private static final String RELATION_LABEL = "ontology_relation";
     private static final String BATCH_SCRIPT = """
@@ -176,6 +177,9 @@ public class HugeGraphProjectionClient {
         if (events.stream().allMatch(event -> !event.relation() && !event.deleted())) {
             return upsertObjectsBatch(events);
         }
+        if (events.stream().allMatch(event -> event.relation() && !event.deleted())) {
+            return upsertRelationsBatch(events);
+        }
         ArrayNode edits = objectMapper.createArrayNode();
         events.forEach(event -> edits.add(batchEdit(event)));
         ObjectNode body = objectMapper.createObjectNode();
@@ -224,13 +228,15 @@ public class HugeGraphProjectionClient {
                     "GRAPH_RESPONSE_INVALID", "HugeGraph omitted batch vertex ids", true);
         }
         Map<String, String> idsByObjectKey = new LinkedHashMap<>();
-        Iterator<String> objectKeys = uniqueEvents.keySet().iterator();
+        Iterator<String> fallbackKeys = uniqueEvents.keySet().iterator();
         for (JsonNode vertex : stored) {
             if (!vertex.hasNonNull("id")) {
                 throw new ProjectionException(
                         "GRAPH_RESPONSE_INVALID", "HugeGraph omitted a batch vertex id", true);
             }
-            idsByObjectKey.put(objectKeys.next(), vertex.path("id").asText());
+            String objectKey = vertex.path("properties").path("object_key").asText();
+            idsByObjectKey.put(objectKey.isBlank() ? fallbackKeys.next() : objectKey,
+                    vertex.path("id").asText());
         }
         List<String> ids = new ArrayList<>();
         for (ValidatedEvent event : events) {
@@ -239,6 +245,100 @@ public class HugeGraphProjectionClient {
                     event.event().objectId())));
         }
         return List.copyOf(ids);
+    }
+
+    private List<String> upsertRelationsBatch(List<ValidatedEvent> events) {
+        Map<String, ValidatedEvent> uniqueEvents = new LinkedHashMap<>();
+        for (ValidatedEvent event : events) {
+            uniqueEvents.put(relationKey(event.event().relationType(), event.event().relationId()), event);
+        }
+        Map<String, String> idsByRelationKey = new LinkedHashMap<>();
+        List<ValidatedEvent> chunk = new ArrayList<>();
+        int chunkIdSize = 0;
+        for (ValidatedEvent event : uniqueEvents.values()) {
+            int edgeIdSize = estimatedEdgeIdSize(event.event());
+            if (!chunk.isEmpty() && chunkIdSize + edgeIdSize > EDGE_BATCH_ID_BUDGET) {
+                idsByRelationKey.putAll(upsertRelationChunk(chunk));
+                chunk.clear();
+                chunkIdSize = 0;
+            }
+            chunk.add(event);
+            chunkIdSize += edgeIdSize;
+        }
+        if (!chunk.isEmpty()) {
+            idsByRelationKey.putAll(upsertRelationChunk(chunk));
+        }
+        List<String> ids = new ArrayList<>();
+        for (ValidatedEvent event : events) {
+            ids.add(idsByRelationKey.get(relationKey(
+                    event.event().relationType(), event.event().relationId())));
+        }
+        return List.copyOf(ids);
+    }
+
+    private Map<String, String> upsertRelationChunk(List<ValidatedEvent> events) {
+        ArrayNode edges = objectMapper.createArrayNode();
+        ObjectNode strategies = null;
+        for (ValidatedEvent validated : events) {
+            OntologyEventEnvelope event = validated.event();
+            ObjectNode properties = relationProperties(event);
+            ObjectNode edge = objectMapper.createObjectNode();
+            edge.put("label", RELATION_LABEL);
+            edge.put("outV", objectLabelId + ":" + objectKey(event.sourceObjectType(), event.sourceObjectId()));
+            edge.put("inV", objectLabelId + ":" + objectKey(event.targetObjectType(), event.targetObjectId()));
+            edge.put("outVLabel", OBJECT_LABEL);
+            edge.put("inVLabel", OBJECT_LABEL);
+            edge.set("properties", properties);
+            edges.add(edge);
+            if (strategies == null) {
+                strategies = overrideStrategies(properties);
+            }
+        }
+        ObjectNode body = objectMapper.createObjectNode();
+        body.set("edges", edges);
+        body.set("update_strategies", strategies);
+        body.put("check_vertex", true);
+        body.put("create_if_not_exist", true);
+        JsonNode response;
+        try {
+            response = http.requireSuccess("PUT", uri("graph/edges/batch"), body);
+        } catch (ProjectionException exception) {
+            if ("STORAGE_HTTP_400".equals(exception.code())) {
+                throw new ProjectionException(
+                        "GRAPH_RELATION_ENDPOINT_PENDING",
+                        "A relation batch arrived before all endpoint objects were available",
+                        true,
+                        exception);
+            }
+            throw exception;
+        }
+        JsonNode stored = response.path("edges");
+        if (!stored.isArray() || stored.size() != events.size()) {
+            throw new ProjectionException(
+                    "GRAPH_RESPONSE_INVALID", "HugeGraph omitted batch edge ids", true);
+        }
+        Map<String, String> idsByRelationKey = new LinkedHashMap<>();
+        Iterator<String> fallbackKeys = events.stream()
+                .map(event -> relationKey(event.event().relationType(), event.event().relationId()))
+                .iterator();
+        for (JsonNode edge : stored) {
+            if (!edge.hasNonNull("id")) {
+                throw new ProjectionException(
+                        "GRAPH_RESPONSE_INVALID", "HugeGraph omitted a batch edge id", true);
+            }
+            String relationKey = edge.path("properties").path("relation_key").asText();
+            idsByRelationKey.put(relationKey.isBlank() ? fallbackKeys.next() : relationKey,
+                    edge.path("id").asText());
+        }
+        return idsByRelationKey;
+    }
+
+    private int estimatedEdgeIdSize(OntologyEventEnvelope event) {
+        return String.valueOf(objectLabelId).length() * 2
+                + objectKey(event.sourceObjectType(), event.sourceObjectId()).length()
+                + objectKey(event.targetObjectType(), event.targetObjectId()).length()
+                + relationKey(event.relationType(), event.relationId()).length()
+                + 24;
     }
 
     public List<GraphObject> listObjects() {

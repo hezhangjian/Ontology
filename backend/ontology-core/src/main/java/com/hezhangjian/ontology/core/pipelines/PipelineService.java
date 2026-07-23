@@ -20,6 +20,7 @@ import com.hezhangjian.ontology.core.connections.ConnectionCrypto;
 import com.hezhangjian.ontology.core.connections.ConnectionModels.DataSource;
 import com.hezhangjian.ontology.core.connections.ConnectionProblem;
 import com.hezhangjian.ontology.core.deletion.ResourceDeletionService;
+import com.hezhangjian.ontology.core.security.WorkspaceContext;
 import com.hezhangjian.ontology.core.connections.DataConnectionService;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.DuplicateKeyException;
@@ -72,20 +73,20 @@ public class PipelineService {
             default -> "p.updated_at DESC";
         };
         String where = """
-                WHERE (lower(p.name) LIKE ? OR lower(coalesce(p.description,'')) LIKE ?)
+                WHERE p.workspace_id=? AND (lower(p.name) LIKE ? OR lower(coalesce(p.description,'')) LIKE ?)
                   AND (?='' OR p.mode=?) AND (?='' OR p.lifecycle=?)
                   AND (?='' OR p.run_status=?) AND (?='' OR p.owner_id=?)
                 """;
         List<Pipeline> items = jdbc.query(PIPELINE_SELECT + where + " ORDER BY " + order + " LIMIT ? OFFSET ?",
-                this::mapPipeline, pattern, pattern, empty(mode), empty(mode), empty(lifecycle), empty(lifecycle),
+                this::mapPipeline, WorkspaceContext.id(), pattern, pattern, empty(mode), empty(mode), empty(lifecycle), empty(lifecycle),
                 empty(runStatus), empty(runStatus), empty(owner), empty(owner), safeSize, safePage * safeSize);
         Long total = jdbc.queryForObject("SELECT count(*) FROM control.pipelines p " + where, Long.class,
-                pattern, pattern, empty(mode), empty(mode), empty(lifecycle), empty(lifecycle),
+                WorkspaceContext.id(), pattern, pattern, empty(mode), empty(mode), empty(lifecycle), empty(lifecycle),
                 empty(runStatus), empty(runStatus), empty(owner), empty(owner));
         Map<String, Integer> counts = new LinkedHashMap<>();
-        jdbc.query("SELECT lifecycle,count(*) FROM control.pipelines GROUP BY lifecycle ORDER BY lifecycle",
-                (org.springframework.jdbc.core.RowCallbackHandler) row -> counts.put(row.getString(1), row.getInt(2)));
-        counts.put("ALL", Objects.requireNonNull(jdbc.queryForObject("SELECT count(*) FROM control.pipelines", Integer.class)));
+        jdbc.query("SELECT lifecycle,count(*) FROM control.pipelines WHERE workspace_id=? GROUP BY lifecycle ORDER BY lifecycle",
+                (org.springframework.jdbc.core.RowCallbackHandler) row -> counts.put(row.getString(1), row.getInt(2)), WorkspaceContext.id());
+        counts.put("ALL", Objects.requireNonNull(jdbc.queryForObject("SELECT count(*) FROM control.pipelines WHERE workspace_id=?", Integer.class, WorkspaceContext.id())));
         return new PipelinePage(items, safePage, safeSize, total == null ? 0 : total, counts,
                 Map.of("lifecycle", empty(lifecycle), "mode", empty(mode), "owner", empty(owner),
                         "runStatus", empty(runStatus), "search", empty(search), "sort", empty(sort)));
@@ -118,12 +119,12 @@ public class PipelineService {
         try {
             jdbc.update("""
                     INSERT INTO control.pipelines(id,name,normalized_name,description,template,data_source_id,source_asset_id,
-                      mode,status,lifecycle,run_status,target_summary,schedule_summary,owner_id,owner_name,created_at,updated_at)
-                    VALUES (?,?,?,?,?,?,?,?,'DRAFT','DRAFT','NEVER_RUN',?,'MANUAL',?,?,?,?)
+                      mode,status,lifecycle,run_status,target_summary,schedule_summary,owner_id,owner_name,created_at,updated_at,workspace_id)
+                    VALUES (?,?,?,?,?,?,?,?,'DRAFT','DRAFT','NEVER_RUN',?,'MANUAL',?,?,?,?,?)
                     """, id, request.name().trim(), normalize(request.name()), safeDescription(request.description()), template,
                     request.dataSourceId(), request.sourceAssetId(), request.mode().name(), targetSummary(graph),
                     valueOr(request.ownerId(), actor.id()), valueOr(request.ownerName(), actor.name()),
-                    Timestamp.from(now), Timestamp.from(now));
+                    Timestamp.from(now), Timestamp.from(now), WorkspaceContext.id());
         } catch (DuplicateKeyException cause) {
             throw new ConnectionProblem("PIPELINE_NAME_CONFLICT", "管道名称已存在（名称不区分大小写）");
         }
@@ -138,7 +139,7 @@ public class PipelineService {
     }
 
     public Pipeline get(UUID id) {
-        List<Pipeline> pipelines = jdbc.query(PIPELINE_SELECT + " WHERE p.id=?", this::mapPipeline, id);
+        List<Pipeline> pipelines = jdbc.query(PIPELINE_SELECT + " WHERE p.id=? AND p.workspace_id=?", this::mapPipeline, id, WorkspaceContext.id());
         if (pipelines.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "管道不存在");
         Pipeline value = pipelines.getFirst();
         PipelineDraft draft = jdbc.query("SELECT * FROM control.pipeline_drafts WHERE pipeline_id=?", this::mapDraft, id)
@@ -559,7 +560,18 @@ public class PipelineService {
                 .map(node -> node.type() + node.config().get("idFields") + node.config().get("idField") + node.config().get("sourceIdField") + node.config().get("targetIdField")).sorted().toList().toString();
         String draftOutput = pipeline.draft().graph().nodes().stream().filter(node -> node.type().startsWith("ONTOLOGY_") || node.type().equals("DATASET_OUTPUT"))
                 .map(node -> node.type() + node.config().get("idFields") + node.config().get("idField") + node.config().get("sourceIdField") + node.config().get("targetIdField")).sorted().toList().toString();
-        return !baseOutput.equals(draftOutput) || !Objects.equals(pipeline.draft().runtime().offsetPolicy(), "EARLIEST");
+        String publishedOffsetPolicy = publishedOffsetPolicy(base);
+        boolean streamingOffsetChanged = pipeline.mode() == PipelineMode.STREAMING
+                && !Objects.equals(pipeline.draft().runtime().offsetPolicy(), publishedOffsetPolicy);
+        return !baseOutput.equals(draftOutput) || streamingOffsetChanged;
+    }
+
+    private String publishedOffsetPolicy(PipelineVersion version) {
+        Object runtimeSettings = version.pipelineIr().get("runtime");
+        if (runtimeSettings instanceof Map<?, ?> settings && settings.get("offsetPolicy") != null) {
+            return String.valueOf(settings.get("offsetPolicy"));
+        }
+        return "EARLIEST";
     }
 
     private String lastConnectedNode(Pipeline pipeline) {

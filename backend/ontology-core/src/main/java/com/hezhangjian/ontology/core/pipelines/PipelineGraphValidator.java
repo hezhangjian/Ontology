@@ -44,6 +44,7 @@ public class PipelineGraphValidator {
                 type("ONTOLOGY_OBJECT", "本体对象输出", "输出", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, true, "映射对象 ID 与属性"),
                 type("ONTOLOGY_RELATION", "本体关系输出", "输出", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, true, "映射关系端点与属性"),
                 type("QUALITY", "质量门禁", "治理", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, false, "执行版本化质量规则"),
+                type("RULE_TRANSFORM", "规则清洗", "治理", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, false, "按声明式条件替换、保留、丢弃或隔离记录"),
                 type("SELECT", "选择/重命名", "转换", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 1, 1, false, false, "选择、重命名和排序字段"),
                 type("SOURCE", "数据源", "输入", List.of(PipelineMode.BATCH, PipelineMode.STREAMING), 0, 0, true, false, "受控连接与资产源"),
                 type("WINDOW", "窗口", "转换", List.of(PipelineMode.STREAMING), 1, 1, false, false, "滚动、滑动或会话窗口")
@@ -178,6 +179,38 @@ public class PipelineGraphValidator {
                 if (name.isBlank()) issue(issues, "derive.name." + node.id(), "SCHEMA", "ERROR", node.id(), "派生字段缺少名称", "尚未配置派生字段。", "填写字段名称和安全表达式");
                 else derived.add(new FieldSchema(name, textOr(config.get("type"), "STRING"), true, false, node.id()));
                 yield derived;
+            }
+            case "RULE_TRANSFORM" -> {
+                Object rawRules = config.get("rules");
+                if (!(rawRules instanceof List<?> rules) || rules.isEmpty()) {
+                    issue(issues, "rule_transform.rules." + node.id(), "SEMANTICS", "ERROR", node.id(),
+                            "规则清洗至少需要一条规则", "节点没有声明式规则。", "配置字段、条件和命中动作");
+                    yield input;
+                }
+                Set<String> fields = input.stream().map(FieldSchema::name).collect(Collectors.toSet());
+                for (int index = 0; index < rules.size(); index++) {
+                    Object rawRule = rules.get(index);
+                    if (!(rawRule instanceof Map<?, ?> rule)) {
+                        issue(issues, "rule_transform.invalid." + node.id() + "." + index, "SEMANTICS", "ERROR", node.id(),
+                                "清洗规则格式无效", "规则必须是对象。", "重新配置该规则");
+                        continue;
+                    }
+                    String field = text(rule.get("field"));
+                    String operator = text(rule.get("operator"));
+                    if (!fields.contains(field)) {
+                        issue(issues, "rule_transform.field." + node.id() + "." + index, "SCHEMA", "ERROR", node.id(),
+                                "清洗字段不存在", field, "选择现有上游字段");
+                    }
+                    if (!Set.of("EQUALS", "GREATER_THAN", "IS_NULL", "LESS_THAN", "OUTSIDE_RANGE").contains(operator)) {
+                        issue(issues, "rule_transform.operator." + node.id() + "." + index, "SEMANTICS", "ERROR", node.id(),
+                                "清洗操作符无效", operator, "选择受支持的声明式操作符");
+                    }
+                    if ("OUTSIDE_RANGE".equals(operator) && (rule.get("min") == null || rule.get("max") == null)) {
+                        issue(issues, "rule_transform.range." + node.id() + "." + index, "SEMANTICS", "ERROR", node.id(),
+                                "范围规则缺少上下界", field, "同时填写 min 和 max");
+                    }
+                }
+                yield input;
             }
             case "AGGREGATE" -> {
                 if (mode == PipelineMode.STREAMING && incoming.getOrDefault(node.id(), List.of()).stream()

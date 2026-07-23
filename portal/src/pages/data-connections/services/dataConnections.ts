@@ -12,6 +12,7 @@ import type {
   PipelineSummary,
   Problem,
 } from '../types';
+import { activeOntologyId } from '../../../features/ontology/ontologyContext';
 
 const base = '/api/ontology/v1';
 
@@ -32,6 +33,8 @@ export function dataConnectionsApi(accessToken: string) {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
+        'X-Ontology-Id': activeOntologyId(),
+        'X-Workspace-Id': activeOntologyId(),
         ...init.headers,
       },
     });
@@ -46,7 +49,7 @@ export function dataConnectionsApi(accessToken: string) {
   async function multipart<T>(path: string, body: FormData): Promise<T> {
     const response = await fetch(`${base}${path}`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `Bearer ${accessToken}`, 'X-Ontology-Id': activeOntologyId(), 'X-Workspace-Id': activeOntologyId() },
       body,
     });
     if (!response.ok) {

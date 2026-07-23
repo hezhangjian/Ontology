@@ -21,6 +21,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hezhangjian.ontology.core.deletion.ResourceDeletionService;
+import com.hezhangjian.ontology.core.security.WorkspaceContext;
 import io.minio.BucketExistsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
@@ -161,10 +162,10 @@ public class DataConnectionService {
         try {
             jdbc.update("""
                     INSERT INTO control.data_sources
-                      (id,name,normalized_name,description,source_type,owner_id,owner_name,tags,config,secret_ref,
+                      (id,workspace_id,name,normalized_name,description,source_type,owner_id,owner_name,tags,config,secret_ref,
                        connection_status,asset_count,last_checked_at,created_by,created_at,updated_at)
-                    VALUES (?,?,?,?,?,?,?,string_to_array(?, E'\\u001f'),?::jsonb,?,?,?,?,?,?,?)
-                    """, id, name.trim(), normalizeName(name), safeDescription(description),
+                    VALUES (?,?,?,?,?,?,?,?,string_to_array(?, E'\\u001f'),?::jsonb,?,?,?,?,?,?,?)
+                    """, id, WorkspaceContext.id(), name.trim(), normalizeName(name), safeDescription(description),
                     type.name(), ownerId(requestedOwnerId, actor), ownerName(requestedOwnerName, actor), joinTags(tags),
                     writeJson(config), secretId, outcome.status().name(), outcome.assets().size(), Timestamp.from(now),
                     actor.id(), Timestamp.from(now), Timestamp.from(now));
@@ -183,7 +184,7 @@ public class DataConnectionService {
         int safeSize = Math.max(1, Math.min(100, size));
         String pattern = "%" + (search == null ? "" : search.trim().toLowerCase()) + "%";
         String query = DATA_SOURCE_SELECT + """
-             WHERE d.deleted_at IS NULL
+             WHERE d.workspace_id=? AND d.deleted_at IS NULL
                AND (lower(d.name) LIKE ? OR lower(coalesce(d.description,'')) LIKE ?)
                AND (? = '' OR d.source_type = ?)
                AND (? = '' OR d.connection_status = ?)
@@ -192,15 +193,15 @@ public class DataConnectionService {
                       d.updated_at DESC
              LIMIT ? OFFSET ?
             """;
-        List<DataSource> items = jdbc.query(query, this::mapDataSource, pattern, pattern,
+        List<DataSource> items = jdbc.query(query, this::mapDataSource, WorkspaceContext.id(), pattern, pattern,
                 empty(type), empty(type), empty(status), empty(status), empty(owner), empty(owner), safeSize, safePage * safeSize);
         Long total = jdbc.queryForObject("""
-                SELECT count(*) FROM control.data_sources d WHERE d.deleted_at IS NULL
+                SELECT count(*) FROM control.data_sources d WHERE d.workspace_id=? AND d.deleted_at IS NULL
                  AND (lower(d.name) LIKE ? OR lower(coalesce(d.description,'')) LIKE ?)
                  AND (? = '' OR d.source_type = ?) AND (? = '' OR d.connection_status = ?) AND (? = '' OR d.owner_id = ?)
-                """, Long.class, pattern, pattern, empty(type), empty(type), empty(status), empty(status), empty(owner), empty(owner));
+                """, Long.class, WorkspaceContext.id(), pattern, pattern, empty(type), empty(type), empty(status), empty(status), empty(owner), empty(owner));
         Map<String, Integer> counts = new LinkedHashMap<>();
-        counts.put("all", Objects.requireNonNull(jdbc.queryForObject("SELECT count(*) FROM control.data_sources WHERE deleted_at IS NULL", Integer.class)));
+        counts.put("all", Objects.requireNonNull(jdbc.queryForObject("SELECT count(*) FROM control.data_sources WHERE workspace_id=? AND deleted_at IS NULL", Integer.class, WorkspaceContext.id())));
         counts.put("healthy", countStatus("HEALTHY") + countStatus("HEALTHY_RESTRICTED"));
         counts.put("error", countStatus("ERROR"));
         counts.put("untested", countStatus("UNTESTED"));
@@ -209,7 +210,7 @@ public class DataConnectionService {
     }
 
     public DataSource get(UUID id) {
-        List<DataSource> rows = jdbc.query(DATA_SOURCE_SELECT + " WHERE d.id=? AND d.deleted_at IS NULL", this::mapDataSource, id);
+        List<DataSource> rows = jdbc.query(DATA_SOURCE_SELECT + " WHERE d.id=? AND d.workspace_id=? AND d.deleted_at IS NULL", this::mapDataSource, id, WorkspaceContext.id());
         if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "数据连接不存在");
         return rows.getFirst();
     }
@@ -666,7 +667,7 @@ public class DataConnectionService {
     }
 
     private int countStatus(String status) {
-        return Objects.requireNonNull(jdbc.queryForObject("SELECT count(*) FROM control.data_sources WHERE deleted_at IS NULL AND connection_status=?", Integer.class, status));
+        return Objects.requireNonNull(jdbc.queryForObject("SELECT count(*) FROM control.data_sources WHERE workspace_id=? AND deleted_at IS NULL AND connection_status=?", Integer.class, WorkspaceContext.id(), status));
     }
 
     private List<LocalCsvFile> validateLocalCsvFiles(List<MultipartFile> files) {

@@ -25,24 +25,26 @@ import org.springframework.web.bind.annotation.RestController;
 @PreAuthorize("hasAnyRole('Viewer','Builder','Admin')")
 public class ModelingController {
     private final ModelingService service;
+    private final OntologyCatalogService catalogs;
 
-    public ModelingController(ModelingService service) {
+    public ModelingController(ModelingService service, OntologyCatalogService catalogs) {
         this.service = service;
+        this.catalogs = catalogs;
     }
 
     @GetMapping("/summary")
-    ModelingSummary summary() { return service.summary(); }
+    ModelingSummary summary(@RequestHeader(value = "X-Ontology-Id", required = false) String ontology) { return service.summary(catalogs.resolve(ontology)); }
 
     @GetMapping("/search")
-    List<SearchResult> search(@RequestParam(defaultValue = "") String query) { return service.search(query); }
+    List<SearchResult> search(@RequestParam(defaultValue = "") String query, @RequestHeader(value = "X-Ontology-Id", required = false) String ontology) { return service.search(catalogs.resolve(ontology), query); }
 
     @GetMapping("/object-types")
-    List<ResourceView> objectTypes(@RequestParam(required = false) String search) { return service.list(ResourceKind.OBJECT_TYPE, search); }
+    List<ResourceView> objectTypes(@RequestParam(required = false) String search, @RequestHeader(value = "X-Ontology-Id", required = false) String ontology) { return service.list(catalogs.resolve(ontology), ResourceKind.OBJECT_TYPE, search); }
 
     @PostMapping("/object-types")
     @PreAuthorize("hasAnyRole('Builder','Admin')")
-    ResponseEntity<ResourceView> createObjectType(@RequestBody ResourceDraftRequest request, Authentication authentication) {
-        return created(service.create(ResourceKind.OBJECT_TYPE, request, actor(authentication)));
+    ResponseEntity<ResourceView> createObjectType(@RequestBody ResourceDraftRequest request, Authentication authentication, @RequestHeader(value = "X-Ontology-Id", required = false) String ontology) {
+        return created(service.create(catalogs.resolve(ontology), ResourceKind.OBJECT_TYPE, request, actor(authentication)));
     }
 
     @GetMapping("/object-types/{id}")
@@ -64,7 +66,7 @@ public class ModelingController {
     }
 
     @GetMapping("/properties")
-    List<PropertyView> properties(@RequestParam(required = false) UUID objectTypeId) { return service.properties(objectTypeId); }
+    List<PropertyView> properties(@RequestParam(required = false) UUID objectTypeId, @RequestHeader(value = "X-Ontology-Id", required = false) String ontology) { return service.propertiesForOntology(catalogs.resolve(ontology), objectTypeId); }
 
     @GetMapping("/properties/{id}")
     PropertyView property(@PathVariable UUID id) {
@@ -73,12 +75,12 @@ public class ModelingController {
     }
 
     @GetMapping("/link-types")
-    List<ResourceView> linkTypes(@RequestParam(required = false) String search) { return service.list(ResourceKind.LINK_TYPE, search); }
+    List<ResourceView> linkTypes(@RequestParam(required = false) String search, @RequestHeader(value = "X-Ontology-Id", required = false) String ontology) { return service.list(catalogs.resolve(ontology), ResourceKind.LINK_TYPE, search); }
 
     @PostMapping("/link-types")
     @PreAuthorize("hasAnyRole('Builder','Admin')")
-    ResponseEntity<ResourceView> createLinkType(@RequestBody ResourceDraftRequest request, Authentication authentication) {
-        return created(service.create(ResourceKind.LINK_TYPE, request, actor(authentication)));
+    ResponseEntity<ResourceView> createLinkType(@RequestBody ResourceDraftRequest request, Authentication authentication, @RequestHeader(value = "X-Ontology-Id", required = false) String ontology) {
+        return created(service.create(catalogs.resolve(ontology), ResourceKind.LINK_TYPE, request, actor(authentication)));
     }
 
     @GetMapping("/link-types/{id}")
@@ -92,12 +94,12 @@ public class ModelingController {
     }
 
     @GetMapping("/interfaces")
-    List<ResourceView> interfaces(@RequestParam(required = false) String search) { return service.list(ResourceKind.INTERFACE, search); }
+    List<ResourceView> interfaces(@RequestParam(required = false) String search, @RequestHeader(value = "X-Ontology-Id", required = false) String ontology) { return service.list(catalogs.resolve(ontology), ResourceKind.INTERFACE, search); }
 
     @PostMapping("/interfaces")
     @PreAuthorize("hasAnyRole('Builder','Admin')")
-    ResponseEntity<ResourceView> createInterface(@RequestBody ResourceDraftRequest request, Authentication authentication) {
-        return created(service.create(ResourceKind.INTERFACE, request, actor(authentication)));
+    ResponseEntity<ResourceView> createInterface(@RequestBody ResourceDraftRequest request, Authentication authentication, @RequestHeader(value = "X-Ontology-Id", required = false) String ontology) {
+        return created(service.create(catalogs.resolve(ontology), ResourceKind.INTERFACE, request, actor(authentication)));
     }
 
     @GetMapping("/interfaces/{id}")
@@ -111,12 +113,12 @@ public class ModelingController {
     }
 
     @GetMapping("/actions")
-    List<ResourceView> actions(@RequestParam(required = false) String search) { return service.list(ResourceKind.ACTION, search); }
+    List<ResourceView> actions(@RequestParam(required = false) String search, @RequestHeader(value = "X-Ontology-Id", required = false) String ontology) { return service.list(catalogs.resolve(ontology), ResourceKind.ACTION, search); }
 
     @PostMapping("/actions")
     @PreAuthorize("hasAnyRole('Builder','Admin')")
-    ResponseEntity<ResourceView> createAction(@RequestBody ResourceDraftRequest request, Authentication authentication) {
-        return created(service.create(ResourceKind.ACTION, request, actor(authentication)));
+    ResponseEntity<ResourceView> createAction(@RequestBody ResourceDraftRequest request, Authentication authentication, @RequestHeader(value = "X-Ontology-Id", required = false) String ontology) {
+        return created(service.create(catalogs.resolve(ontology), ResourceKind.ACTION, request, actor(authentication)));
     }
 
     @GetMapping("/actions/{id}")
@@ -136,17 +138,39 @@ public class ModelingController {
         return service.previewAction(id, request, actor(authentication));
     }
 
+    @PostMapping("/actions/{id}/execute")
+    @PreAuthorize("hasAnyRole('Builder','Admin')")
+    ResponseEntity<ActionExecution> executeAction(@PathVariable UUID id,
+                                                   @RequestBody ActionExecuteRequest request,
+                                                   Authentication authentication) {
+        return ResponseEntity.accepted().body(service.executeAction(id, request, actor(authentication)));
+    }
+
+    @GetMapping("/action-executions/{id}")
+    ActionExecution actionExecution(@PathVariable UUID id, Authentication authentication) {
+        return service.actionExecution(id, actor(authentication));
+    }
+
     @GetMapping("/functions")
-    List<ResourceView> functions(@RequestParam(required = false) String search) { return service.list(ResourceKind.FUNCTION, search); }
+    List<ResourceView> functions(@RequestParam(required = false) String search, @RequestHeader(value = "X-Ontology-Id", required = false) String ontology) { return service.list(catalogs.resolve(ontology), ResourceKind.FUNCTION, search); }
 
     @PostMapping("/functions")
     @PreAuthorize("hasAnyRole('Builder','Admin')")
-    ResponseEntity<ResourceView> createFunction(@RequestBody ResourceDraftRequest request, Authentication authentication) {
-        return created(service.create(ResourceKind.FUNCTION, request, actor(authentication)));
+    ResponseEntity<ResourceView> createFunction(@RequestBody ResourceDraftRequest request, Authentication authentication, @RequestHeader(value = "X-Ontology-Id", required = false) String ontology) {
+        return created(service.create(catalogs.resolve(ontology), ResourceKind.FUNCTION, request, actor(authentication)));
     }
 
     @GetMapping("/functions/{id}")
     ResourceView function(@PathVariable UUID id) { return requireKind(id, ResourceKind.FUNCTION); }
+
+    @PostMapping("/functions/{id}/draft")
+    @PreAuthorize("hasAnyRole('Builder','Admin')")
+    ResponseEntity<ResourceView> createFunctionDraft(@PathVariable UUID id,
+                                                      @RequestBody ResourceDraftRequest request,
+                                                      @RequestHeader("If-Match") long expectedEtag,
+                                                      Authentication authentication) {
+        return created(service.createFunctionDraft(id, request, expectedEtag, actor(authentication)));
+    }
 
     @DeleteMapping("/functions/{id}")
     ResponseEntity<Void> deleteFunction(@PathVariable UUID id, Authentication authentication) {
@@ -162,12 +186,12 @@ public class ModelingController {
     }
 
     @GetMapping("/proposals")
-    List<ProposalView> proposals() { return service.proposals(); }
+    List<ProposalView> proposals(@RequestHeader(value = "X-Ontology-Id", required = false) String ontology) { return service.proposals(catalogs.resolve(ontology)); }
 
     @PostMapping("/proposals")
     @PreAuthorize("hasAnyRole('Builder','Admin')")
-    ResponseEntity<ProposalView> createProposal(@RequestBody ProposalRequest request, Authentication authentication) {
-        ProposalView proposal = service.createProposal(request, actor(authentication));
+    ResponseEntity<ProposalView> createProposal(@RequestBody ProposalRequest request, Authentication authentication, @RequestHeader(value = "X-Ontology-Id", required = false) String ontology) {
+        ProposalView proposal = service.createProposal(catalogs.resolve(ontology), request, actor(authentication));
         return ResponseEntity.created(URI.create("/v1/modeling/proposals/" + proposal.id())).body(proposal);
     }
 

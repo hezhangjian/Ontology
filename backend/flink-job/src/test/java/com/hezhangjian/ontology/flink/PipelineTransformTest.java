@@ -2,6 +2,7 @@ package com.hezhangjian.ontology.flink;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -121,6 +122,55 @@ class PipelineTransformTest {
         assertEquals("dataset.row", first.get("event_type"));
         assertEquals(Map.of("total_tokens", 42), first.get("payload"));
         assertNotEquals(first.get("event_id"), second.get("event_id"));
+    }
+
+    @Test
+    void replacesOutOfRangeValuesAndPreservesRawEvidence() throws Exception {
+        Map<String, Object> graph = Map.of(
+                "edges", List.of(Map.of("id", "e1", "source", "source-1", "target", "clean-1")),
+                "nodes", List.of(
+                        Map.of("config", Map.of(), "id", "source-1", "type", "SOURCE"),
+                        Map.of("config", Map.of("rules", List.of(Map.of(
+                                        "action", "REPLACE",
+                                        "field", "reading",
+                                        "max", 9999,
+                                        "min", 1,
+                                        "operator", "OUTSIDE_RANGE",
+                                        "preserveOriginalAs", "raw_reading",
+                                        "replacement", 0,
+                                        "statusField", "cleaning_status"))),
+                                "id", "clean-1", "type", "RULE_TRANSFORM")));
+        PipelineTransform transform = new PipelineTransform(graph, Map.of(), "preview:clean", "clean-1");
+        transform.open(new Configuration());
+        List<String> values = new ArrayList<>();
+
+        transform.flatMap("{\"reading\":27048}", collector(values));
+
+        Map<String, Object> row = json.readValue(values.get(0), new TypeReference<>() { });
+        assertEquals(0, row.get("reading"));
+        assertEquals(27048, row.get("raw_reading"));
+        assertEquals("CLEANED", row.get("cleaning_status"));
+        assertTrue(row.containsKey("raw_reading"));
+    }
+
+    @Test
+    void leavesBlankNumericReadingsUntouched() throws Exception {
+        Map<String, Object> graph = Map.of(
+                "edges", List.of(Map.of("id", "e1", "source", "source-1", "target", "clean-1")),
+                "nodes", List.of(
+                        Map.of("config", Map.of(), "id", "source-1", "type", "SOURCE"),
+                        Map.of("config", Map.of("rules", List.of(Map.of(
+                                        "action", "REPLACE", "field", "reading", "max", 9999, "min", 1,
+                                        "operator", "OUTSIDE_RANGE", "replacement", 0))),
+                                "id", "clean-1", "type", "RULE_TRANSFORM")));
+        PipelineTransform transform = new PipelineTransform(graph, Map.of(), "preview:blank", "clean-1");
+        transform.open(new Configuration());
+        List<String> values = new ArrayList<>();
+
+        transform.flatMap("{\"reading\":\"\"}", collector(values));
+
+        Map<String, Object> row = json.readValue(values.get(0), new TypeReference<>() { });
+        assertEquals("", row.get("reading"));
     }
 
     private Map<String, Object> event(Map<String, Object> graph, Map<String, Object> source,

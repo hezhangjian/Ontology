@@ -2,7 +2,6 @@ package com.hezhangjian.ontology.core.modeling;
 
 import static com.hezhangjian.ontology.core.modeling.ModelingModels.PropertyDraft;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hezhangjian.ontology.core.connections.ConnectionProblem;
 import java.util.HashSet;
@@ -46,13 +45,24 @@ public class ModelingPolicy {
     }
 
     public void validateFunctionDsl(Map<String, Object> dsl) {
-        try {
-            String value = json.writeValueAsString(dsl == null ? Map.of() : dsl).toLowerCase(Locale.ROOT);
-            for (String forbidden : List.of("mutation", "update", "delete", "create", "script", "gremlin", "opensearch", "sql", "webhook")) {
-                if (value.contains(forbidden)) throw problem("FUNCTION_DSL_WRITE_FORBIDDEN", "Function 只允许受限只读 DSL");
+        validateFunctionNode(dsl == null ? Map.of() : dsl);
+    }
+
+    private void validateFunctionNode(Object node) {
+        if (node instanceof Map<?, ?> values) {
+            for (Map.Entry<?, ?> entry : values.entrySet()) {
+                String key = Objects.toString(entry.getKey(), "").toLowerCase(Locale.ROOT);
+                if (List.of("mutation", "script", "gremlin", "opensearch", "sql", "webhook").contains(key)) {
+                    throw problem("FUNCTION_DSL_WRITE_FORBIDDEN", "Function 只允许受限只读 DSL");
+                }
+                if ("tool".equals(key) && List.of("update", "delete", "create", "mutation", "execute_action")
+                        .contains(Objects.toString(entry.getValue(), "").toLowerCase(Locale.ROOT))) {
+                    throw problem("FUNCTION_DSL_WRITE_FORBIDDEN", "Function 只允许受限只读 DSL");
+                }
+                validateFunctionNode(entry.getValue());
             }
-        } catch (JsonProcessingException failure) {
-            throw problem("FUNCTION_DSL_INVALID", "Function DSL 无法解析");
+        } else if (node instanceof List<?> values) {
+            values.forEach(this::validateFunctionNode);
         }
     }
 

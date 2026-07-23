@@ -54,9 +54,14 @@ final class RuntimeClient {
     }
 
     void progress(String phase, long read, long written, long rejected, String message) {
+        progress(phase, read, written, rejected, message, Map.of());
+    }
+
+    void progress(String phase, long read, long written, long rejected, String message,
+                  Map<String, Object> safeDetails) {
         request("/internal/v1/pipeline-runs/" + runId + "/progress", Map.of(
                 "message", message, "phase", phase, "readCount", read,
-                "rejectedCount", rejected, "safeDetails", Map.of(), "writtenCount", written));
+                "rejectedCount", rejected, "safeDetails", safeDetails, "writtenCount", written));
     }
 
     private Map<String, Object> request(String path, Map<String, Object> body) {
@@ -68,7 +73,8 @@ final class RuntimeClient {
                     .POST(HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(body))).build();
             HttpResponse<String> response = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
                     .send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() / 100 != 2) throw new IllegalStateException("Ontology Core runtime endpoint returned HTTP " + response.statusCode());
+            if (response.statusCode() / 100 != 2) throw new IllegalStateException("Ontology Core runtime endpoint returned HTTP "
+                    + response.statusCode() + responseDetails(response.body()));
             if (response.body().isBlank()) return Map.of();
             return JSON.readValue(response.body(), new TypeReference<>() { });
         } catch (IOException cause) {
@@ -79,7 +85,15 @@ final class RuntimeClient {
         }
     }
 
+    private String responseDetails(String body) {
+        if (body == null || body.isBlank()) return "";
+        String sanitized = body.replaceAll("[\\r\\n\\t]+", " ").trim();
+        return ": " + (sanitized.length() <= 1000 ? sanitized : sanitized.substring(0, 1000) + "…");
+    }
+
     private String workloadToken() {
+        String token = System.getenv("FLINK_WORKLOAD_TOKEN");
+        if (token != null && !token.isBlank()) return token.trim();
         try { return Files.readString(Path.of("/run/secrets/flink_workload_token"), StandardCharsets.UTF_8).trim(); }
         catch (IOException cause) { throw new IllegalStateException("Flink workload identity is unavailable", cause); }
     }

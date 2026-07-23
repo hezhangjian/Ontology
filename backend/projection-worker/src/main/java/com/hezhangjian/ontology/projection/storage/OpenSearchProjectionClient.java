@@ -102,7 +102,10 @@ public class OpenSearchProjectionClient {
             int status = result == null ? 500 : result.path("status").asInt(500);
             boolean deleteMissing = item.has("delete") && status == 404;
             if ((status < 200 || status >= 300) && !deleteMissing) {
-                throw storageFailure(status, "apply bulk index document");
+                throw new ProjectionException(
+                        "SEARCH_BULK_ITEM_" + status,
+                        "OpenSearch rejected a bulk item: " + result.path("error"),
+                        status == 408 || status == 429 || status >= 500);
             }
         }
     }

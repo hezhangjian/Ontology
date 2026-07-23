@@ -10,6 +10,7 @@ import com.hezhangjian.ontology.core.explorer.ExplorerStorageClient.GraphEdge;
 import com.hezhangjian.ontology.core.explorer.ExplorerStorageClient.GraphObject;
 import com.hezhangjian.ontology.core.explorer.ExplorerStorageClient.RawSearchHit;
 import com.hezhangjian.ontology.core.explorer.ExplorerStorageClient.SearchHit;
+import com.hezhangjian.ontology.core.security.WorkspaceContext;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.sql.ResultSet;
@@ -127,6 +128,23 @@ public class ExplorerService {
                 query, dimensionPropertyIds, measurePropertyId, divisorPropertyId, aggregation, actor);
     }
 
+    public AggregateResponse aggregate(AggregateRequest request, Actor actor) {
+        if (request == null || request.query() == null) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "聚合查询不能为空");
+        }
+        ObjectTypeDefinition type = type(request.query().objectTypeId());
+        ValidatedQuery query = policy.validate(request.query(), type);
+        String aggregation = request.aggregation() == null
+                ? "count" : request.aggregation().trim().toLowerCase(java.util.Locale.ROOT);
+        if (!Set.of("approx_distinct", "avg", "count", "max", "min", "sum", "sum_per_distinct")
+                .contains(aggregation)) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "不支持的聚合操作");
+        }
+        List<AggregationBucket> buckets = storage.aggregate(query, request.dimensionPropertyIds(),
+                request.measurePropertyId(), request.divisorPropertyId(), aggregation, actor);
+        return new AggregateResponse(type.id(), type.ontologyRevision(), query.fingerprint(), Instant.now(), buckets);
+    }
+
     ObjectDetail object(UUID objectTypeId, String objectId, Actor actor) {
         ObjectTypeDefinition type = type(objectTypeId);
         GraphObject graph = storage.getObject(type.physicalKey(), objectId);
@@ -226,8 +244,8 @@ public class ExplorerService {
                 FROM control.saved_explorations e
                 JOIN control.ontology_resources r ON r.id=e.object_type_id
                 JOIN control.saved_exploration_versions v ON v.exploration_id=e.id AND v.version=e.current_version
-                WHERE e.owner_id=:owner OR e.visibility='SHARED' ORDER BY e.updated_at DESC
-                """).param("owner", actor.id()).query((rs, row) -> exploration(rs)).list();
+                WHERE r.ontology_id=:workspace AND (e.owner_id=:owner OR e.visibility='SHARED') ORDER BY e.updated_at DESC
+                """).param("workspace", WorkspaceContext.id()).param("owner", actor.id()).query((rs, row) -> exploration(rs)).list();
     }
 
     ExplorationView exploration(UUID id, Actor actor) {
@@ -236,8 +254,8 @@ public class ExplorerService {
                 FROM control.saved_explorations e
                 JOIN control.ontology_resources r ON r.id=e.object_type_id
                 JOIN control.saved_exploration_versions v ON v.exploration_id=e.id AND v.version=e.current_version
-                WHERE e.id=:id AND (e.owner_id=:owner OR e.visibility='SHARED')
-                """).param("id", id).param("owner", actor.id()).query((rs, row) -> exploration(rs)).optional()
+                WHERE e.id=:id AND r.ontology_id=:workspace AND (e.owner_id=:owner OR e.visibility='SHARED')
+                """).param("id", id).param("workspace", WorkspaceContext.id()).param("owner", actor.id()).query((rs, row) -> exploration(rs)).optional()
                 .orElseThrow(() -> notFound("探索不存在或无权访问"));
     }
 
@@ -301,9 +319,9 @@ public class ExplorerService {
                 SELECT l.*,r.display_name object_type_name,count(i.object_id) item_count
                 FROM control.object_lists l JOIN control.ontology_resources r ON r.id=l.object_type_id
                 LEFT JOIN control.object_list_items i ON i.list_id=l.id
-                WHERE l.owner_id=:owner OR l.visibility='SHARED'
+                WHERE r.ontology_id=:workspace AND (l.owner_id=:owner OR l.visibility='SHARED')
                 GROUP BY l.id,r.display_name ORDER BY l.updated_at DESC
-                """).param("owner", actor.id()).query((rs, row) -> objectList(rs)).list();
+                """).param("workspace", WorkspaceContext.id()).param("owner", actor.id()).query((rs, row) -> objectList(rs)).list();
     }
 
     ObjectListView list(UUID id, Actor actor) {
@@ -311,9 +329,9 @@ public class ExplorerService {
                 SELECT l.*,r.display_name object_type_name,count(i.object_id) item_count
                 FROM control.object_lists l JOIN control.ontology_resources r ON r.id=l.object_type_id
                 LEFT JOIN control.object_list_items i ON i.list_id=l.id
-                WHERE l.id=:id AND (l.owner_id=:owner OR l.visibility='SHARED')
+                WHERE l.id=:id AND r.ontology_id=:workspace AND (l.owner_id=:owner OR l.visibility='SHARED')
                 GROUP BY l.id,r.display_name
-                """).param("id", id).param("owner", actor.id()).query((rs, row) -> objectList(rs)).optional()
+                """).param("id", id).param("workspace", WorkspaceContext.id()).param("owner", actor.id()).query((rs, row) -> objectList(rs)).optional()
                 .orElseThrow(() -> notFound("对象清单不存在或无权访问"));
     }
 
@@ -603,8 +621,8 @@ public class ExplorerService {
                 SELECT r.id,r.api_name,r.physical_key,r.display_name,r.maturity,COALESCE(ar.revision,1) ontology_revision
                 FROM control.ontology_resources r
                 CROSS JOIN LATERAL (SELECT revision FROM control.ontology_revisions WHERE status='ACTIVE') ar
-                WHERE r.id=:id AND r.kind='OBJECT_TYPE' AND r.active_version IS NOT NULL AND r.tombstoned=false
-                """).param("id", id).query((rs, row) -> new ObjectTypeDefinition(rs.getObject("id", UUID.class),
+                WHERE r.id=:id AND r.ontology_id=:workspace AND r.kind='OBJECT_TYPE' AND r.active_version IS NOT NULL AND r.tombstoned=false
+                """).param("id", id).param("workspace", WorkspaceContext.id()).query((rs, row) -> new ObjectTypeDefinition(rs.getObject("id", UUID.class),
                         rs.getString("api_name"), rs.getString("physical_key"), rs.getString("display_name"), rs.getString("maturity"),
                         rs.getLong("ontology_revision"), properties(rs.getObject("id", UUID.class)))).optional()
                 .orElseThrow(() -> notFound("对象类型不存在或尚未发布"));
@@ -615,9 +633,9 @@ public class ExplorerService {
                 SELECT r.id,r.api_name,r.physical_key,r.display_name,r.maturity,ar.revision ontology_revision
                 FROM control.ontology_resources r
                 CROSS JOIN LATERAL (SELECT revision FROM control.ontology_revisions WHERE status='ACTIVE') ar
-                WHERE r.kind='OBJECT_TYPE' AND r.active_version IS NOT NULL AND r.tombstoned=false
+                WHERE r.ontology_id=:workspace AND r.kind='OBJECT_TYPE' AND r.active_version IS NOT NULL AND r.tombstoned=false
                 ORDER BY r.promoted DESC,r.display_name
-                """).query((rs, row) -> new ObjectTypeDefinition(rs.getObject("id", UUID.class),
+                """).param("workspace", WorkspaceContext.id()).query((rs, row) -> new ObjectTypeDefinition(rs.getObject("id", UUID.class),
                 rs.getString("api_name"), rs.getString("physical_key"), rs.getString("display_name"), rs.getString("maturity"),
                 rs.getLong("ontology_revision"), properties(rs.getObject("id", UUID.class)))).list();
     }
@@ -645,8 +663,8 @@ public class ExplorerService {
     private LinkDefinition findLink(String apiName) {
         return jdbc.sql("""
                 SELECT id,display_name FROM control.ontology_resources
-                WHERE kind='LINK_TYPE' AND api_name=:api AND active_version IS NOT NULL AND tombstoned=false
-                """).param("api", apiName).query((rs, row) -> new LinkDefinition(rs.getObject("id", UUID.class),
+                WHERE ontology_id=:workspace AND kind='LINK_TYPE' AND api_name=:api AND active_version IS NOT NULL AND tombstoned=false
+                """).param("workspace", WorkspaceContext.id()).param("api", apiName).query((rs, row) -> new LinkDefinition(rs.getObject("id", UUID.class),
                 rs.getString("display_name"))).optional().orElse(null);
     }
 

@@ -91,6 +91,35 @@ class ProjectionProcessorTest {
     }
 
     @Test
+    void projectsObjectsBeforeRelationsRegardlessOfDeliveryOrder() {
+        OntologyEventEnvelope relation = relationEvent("10000000-0000-4000-8000-000000000005");
+        OntologyEventEnvelope object = event("10000000-0000-4000-8000-000000000006", "E-5", 1);
+        ValidatedEvent validatedRelation = new ValidatedEvent(
+                relation, "relation:WorksAt:R-1", 1, relation.payload(), false, true);
+        ValidatedEvent validatedObject = validated(object);
+        when(validator.validate(relation)).thenReturn(validatedRelation);
+        when(validator.validate(object)).thenReturn(validatedObject);
+        when(repository.register(any(), anyString(), anyString(), anyString(), anyLong(),
+                anyString(), anyLong(), anyString()))
+                .thenReturn(ledger(relation, "RECEIVED", 0, null), ledger(object, "RECEIVED", 0, null));
+        when(repository.beginAttempt(relation.eventId())).thenReturn(ledger(relation, "RECEIVED", 1, null));
+        when(repository.beginAttempt(object.eventId())).thenReturn(ledger(object, "RECEIVED", 1, null));
+        when(graph.applyBatch(List.of(validatedObject))).thenReturn(List.of("graph-object"));
+        when(graph.applyBatch(List.of(validatedRelation))).thenReturn(List.of("graph-relation"));
+
+        processor.processBatch("topic", "message", List.of(relation, object));
+
+        InOrder ordered = inOrder(graph, repository, search);
+        ordered.verify(graph).applyBatch(List.of(validatedObject));
+        ordered.verify(repository).graphAppliedBatch(List.of(new GraphUpdate(object.eventId(), "graph-object")));
+        ordered.verify(graph).applyBatch(List.of(validatedRelation));
+        ordered.verify(repository).graphAppliedBatch(List.of(new GraphUpdate(relation.eventId(), "graph-relation")));
+        ordered.verify(search).applyBatch(
+                List.of(validatedRelation, validatedObject),
+                List.of("graph-relation", "graph-object"));
+    }
+
+    @Test
     void preservesGraphProgressWhenSearchIsUnavailable() {
         OntologyEventEnvelope event = event("10000000-0000-4000-8000-000000000004", "E-4", 1);
         ValidatedEvent validated = validated(event);
@@ -147,15 +176,44 @@ class ProjectionProcessorTest {
                 false);
     }
 
+    private OntologyEventEnvelope relationEvent(String eventId) {
+        return new OntologyEventEnvelope(
+                UUID.fromString(eventId),
+                "relation.upsert",
+                1,
+                1,
+                Instant.parse("2026-07-20T00:00:00Z"),
+                "test",
+                "correlation-R-1",
+                null,
+                null,
+                null,
+                null,
+                null,
+                "WorksAt",
+                "R-1",
+                1L,
+                "Employee",
+                "E-5",
+                "Company",
+                "C-1",
+                objectMapper.createObjectNode(),
+                null);
+    }
+
     private LedgerEntry ledger(
             OntologyEventEnvelope event,
             String status,
             int attempts,
             String graphElementId) {
+        String entityKey = event.relationType() == null
+                ? "object:Employee:" + event.objectId()
+                : "relation:" + event.relationType() + ":" + event.relationId();
+        long entityVersion = event.relationVersion() == null ? event.objectVersion() : event.relationVersion();
         return new LedgerEntry(
                 event.eventId(),
-                "object:Employee:" + event.objectId(),
-                event.objectVersion(),
+                entityKey,
+                entityVersion,
                 status,
                 attempts,
                 graphElementId);

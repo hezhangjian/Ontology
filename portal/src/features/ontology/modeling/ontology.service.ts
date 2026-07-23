@@ -1,5 +1,6 @@
 import { ApiProblem } from '../../../pages/data-connections/services/dataConnections';
 import type { Deployment, HealthIssue, HistoryEntry, ModelingSummary, OntologyResource, Proposal, PropertyView, ResourceKind } from './ontology.types';
+import { activeOntologyId } from '../ontologyContext';
 
 const base = '/api/ontology/v1/modeling';
 const segment: Record<ResourceKind, string> = {
@@ -8,7 +9,7 @@ const segment: Record<ResourceKind, string> = {
 
 export function modelingApi(accessToken: string) {
   async function response<T>(path: string, init: RequestInit = {}): Promise<{ data: T; etag?: string }> {
-    const result = await fetch(`${base}${path}`, { ...init, headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', ...init.headers } });
+    const result = await fetch(`${base}${path}`, { ...init, headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', 'X-Ontology-Id': activeOntologyId(), 'X-Workspace-Id': activeOntologyId(), ...init.headers } });
     if (!result.ok) {
       const problem = await result.json().catch(() => ({ detail: '请求未能完成' })) as { detail?: string; requestId?: string };
       throw new ApiProblem(problem.detail ?? '请求未能完成', problem.requestId, result.status);

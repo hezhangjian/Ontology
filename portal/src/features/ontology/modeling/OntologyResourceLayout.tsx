@@ -17,5 +17,5 @@ const items = [
 
 export default function OntologyResourceLayout({ children, navigate, path }: { children: ReactNode; navigate: (path: string) => void; path: string }) {
   const selected = items.find((item) => item.key !== '/ontology' && path.startsWith(item.key))?.key ?? '/ontology';
-  return <div className="ontology-workspace"><aside className="ontology-subnav"><div className="ontology-subnav-title">本体管理</div><Menu items={items} mode="inline" onClick={({ key }) => navigate(key)} selectedKeys={[selected]} /></aside><main className="ontology-main">{children}</main></div>;
+  return <div className="ontology-workspace"><aside className="ontology-subnav"><div className="ontology-subnav-title">本体建模</div><Menu items={items} mode="inline" onClick={({ key }) => navigate(key)} selectedKeys={[selected]} /></aside><main className="ontology-main">{children}</main></div>;
 }

@@ -3,43 +3,22 @@ SHELL := /bin/sh
 JAVA_HOME ?= $(shell if [ -d /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ]; then printf '%s' /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home; elif command -v /usr/libexec/java_home >/dev/null 2>&1; then /usr/libexec/java_home -v 21 2>/dev/null; fi)
 PNPM := pnpm --dir portal
 
-.PHONY: build compose-build compose-config compose-down compose-up e2e-connections e2e-dashboards e2e-explorer e2e-modeling e2e-pipelines e2e-platform-foundation e2e-storage frontend-build frontend-install frontend-lint frontend-typecheck openapi-check test verify-fast
+.PHONY: build compose-build compose-config compose-down compose-up frontend-build frontend-install frontend-lint frontend-typecheck openapi-check test verify-fast
 
 build: frontend-build
 	JAVA_HOME="$(JAVA_HOME)" ./mvnw package -DskipTests
 
 compose-config:
-	docker compose --env-file deploy/versions.env --env-file deploy/env/.env.example --profile '*' -f docker/docker-compose.yml config --quiet
+	docker compose --profile '*' -f docker/docker-compose.yml config --quiet
 
 compose-build:
-	deploy/scripts/compose.sh --profile '*' build
+	docker compose --profile '*' -f docker/docker-compose.yml build
 
 compose-down:
-	deploy/scripts/compose.sh --profile '*' down
+	docker compose --profile '*' -f docker/docker-compose.yml down
 
 compose-up:
-	deploy/scripts/compose.sh --profile core --profile compute --profile gateway --profile apps --profile maintenance --profile observability up -d --wait
-
-e2e-platform-foundation:
-	deploy/scripts/e2e-verify.sh
-
-e2e-connections:
-	deploy/scripts/e2e-connections.sh
-
-e2e-pipelines:
-	deploy/scripts/e2e-pipelines.sh
-
-e2e-modeling:
-	deploy/scripts/e2e-modeling.sh
-
-e2e-explorer:
-	deploy/scripts/e2e-explorer.sh
-
-e2e-dashboards:
-	deploy/scripts/e2e-dashboards.sh
-
-e2e-storage:
-	deploy/scripts/e2e-storage.sh
+	docker compose --profile core --profile compute --profile gateway --profile apps --profile maintenance --profile observability -f docker/docker-compose.yml up -d --wait
 
 frontend-build:
 	$(PNPM) build

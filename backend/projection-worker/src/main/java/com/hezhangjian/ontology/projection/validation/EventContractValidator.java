@@ -96,9 +96,15 @@ public class EventContractValidator {
         boolean valid = switch (type) {
             case "BOOLEAN" -> value.isBoolean();
             case "DECIMAL" -> value.isNumber();
-            case "INTEGER" -> value.isIntegralNumber();
+            case "INTEGER", "LONG" -> value.isIntegralNumber();
+            case "INTEGER_ARRAY" -> value.isArray()
+                    && java.util.stream.StreamSupport.stream(value.spliterator(), false)
+                    .allMatch(JsonNode::isIntegralNumber);
             case "JSON" -> value.isContainerNode();
-            case "DATE", "TEXT" -> value.isTextual();
+            case "STRING_ARRAY" -> value.isArray()
+                    && java.util.stream.StreamSupport.stream(value.spliterator(), false)
+                    .allMatch(JsonNode::isTextual);
+            case "DATE", "DATETIME", "ENUM", "STRING", "TEXT" -> value.isTextual();
             default -> false;
         };
         require(valid, "Invalid value type for property: " + field);

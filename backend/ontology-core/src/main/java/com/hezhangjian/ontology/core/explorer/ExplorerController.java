@@ -51,6 +51,11 @@ public class ExplorerController {
         return service.facets(request, actor(authentication));
     }
 
+    @PostMapping("/object-sets/aggregate")
+    AggregateResponse aggregate(@RequestBody AggregateRequest request, Authentication authentication) {
+        return service.aggregate(request, actor(authentication));
+    }
+
     @PostMapping("/object-sets/search-around")
     LinkPage searchAround(@RequestBody SearchAroundRequest request, Authentication authentication) {
         return service.links(request.objectTypeId(), request.objectId(),

@@ -13,6 +13,11 @@
     <name>Ontology Core</name>
     <dependencies>
         <dependency>
+            <groupId>com.hezhangjian.ontology</groupId>
+            <artifactId>platform-contracts</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>

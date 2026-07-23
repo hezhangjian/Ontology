@@ -1,1 +1,0 @@
-{"event_id":"66666666-6666-4666-8666-666666666666","event_type":"object.upsert","schema_version":1,"ontology_revision":1,"occurred_at":"2026-07-20T08:33:00Z","producer":"e2e/p02","correlation_id":"p02-invalid","object_type":"Employee","object_id":"E-P02-BAD","object_version":1,"payload":{"name":"Invalid","unknown_secret":"must-not-project"}}

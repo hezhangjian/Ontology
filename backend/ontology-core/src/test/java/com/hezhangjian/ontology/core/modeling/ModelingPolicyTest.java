@@ -38,7 +38,11 @@ class ModelingPolicyTest {
     @Test
     void permitsReadOnlyFunctionDslAndRejectsWriteEscapeHatches() {
         assertThatCode(() -> policy.validateFunctionDsl(Map.of("from", "Employee", "aggregate", "count"))).doesNotThrowAnyException();
+        assertThatCode(() -> policy.validateFunctionDsl(Map.of("result", Map.of("actionName", "UpdateEquipmentQualityPolicy"))))
+                .doesNotThrowAnyException();
         assertThatThrownBy(() -> policy.validateFunctionDsl(Map.of("script", "g.V().drop()")))
+                .isInstanceOf(ConnectionProblem.class).hasMessageContaining("只读");
+        assertThatThrownBy(() -> policy.validateFunctionDsl(Map.of("steps", List.of(Map.of("tool", "execute_action")))))
                 .isInstanceOf(ConnectionProblem.class).hasMessageContaining("只读");
     }
 

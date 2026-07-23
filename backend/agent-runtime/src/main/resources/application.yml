@@ -1,6 +1,18 @@
 spring:
   application:
     name: agent-runtime
+  datasource:
+    password: ${postgres_password}
+    url: ${ONTOLOGY_POSTGRES_URL:jdbc:postgresql://postgres:5432/ontology}
+    username: ${ONTOLOGY_POSTGRES_USER:ontology}
+
+agent:
+  deepseek:
+    api-key: ${DEEP_SEEK_API_KEY:${DEEPSEEK_API_KEY:}}
+    base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+    model: ${DEEPSEEK_MODEL:deepseek-v4-flash}
+  ontology-core-url: ${ONTOLOGY_CORE_URL:http://ontology-core:8000}
+  max-tool-rounds: ${AGENT_MAX_TOOL_ROUNDS:12}
 
 server:
   port: 8002

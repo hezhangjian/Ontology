@@ -76,7 +76,7 @@
   - `make verify-fast`：通过；9 个 Maven reactor project、frontend lint/typecheck/build、OpenAPI lint 和全 profile Compose config 均通过。
   - `make compose-build`：7 个项目镜像全部成功；SkyWalking agent SHA-512 与六个 Flink 制品 SHA-256 均在构建或运行时复核。
   - `make compose-up`：17 个长期服务健康，Maintenance/Projection 非 Web 进程保持运行，MinIO/Pulsar bootstrap 重复执行均 exit 0。
-  - `make e2e-platform-foundation`：通过；验证 arm64 镜像解析、OIDC discovery、APISIX portal/API 路由、无 token 的 401、7 个私有 buckets 和 7 个显式 partitioned topics。
+  - 历史 `E:platform-foundation`：通过；验证 arm64 镜像解析、OIDC discovery、APISIX portal/API 路由、无 token 的 401、7 个私有 buckets 和 7 个显式 partitioned topics。
   - `git diff --check`：通过。
 - 内置浏览器手测：
   - 从全新页签打开 `http://localhost:9080/data/connections`，确认显示 OIDC + PKCE 登录页。
@@ -112,8 +112,8 @@
 - 自动验证：
   - `make verify-fast`：通过；9 个 Maven reactor project、5 个 Java tests、frontend lint/typecheck/build、OpenAPI lint 和全 profile Compose config 全部通过。
   - `make compose-build`：Agent Runtime、BFF、Flink、Maintenance Runner、Ontology Core、Portal 和 Projection Worker 镜像全部成功构建。
-  - `make compose-up` + `deploy/scripts/healthcheck.sh`：所有声明健康检查的长期服务 healthy；Maintenance Runner 与无 Web 端口的 Projection Worker 保持 running；两个 bootstrap 服务 completed。
-  - `make e2e-storage`：在完整镜像重建后重复通过，验证 event/batch 幂等、v2 覆盖与 v1 stale、三 edit 原子事务、关系双写、tombstone、敏感字段过滤、永久错误 DLQ、搜索恢复、alias 重建和 Postgres 数据所有权。
+  - `make compose-up` + `docker compose --profile '*' -f docker/docker-compose.yml ps`：所有声明健康检查的长期服务 healthy；Maintenance Runner 与无 Web 端口的 Projection Worker 保持 running；两个 bootstrap 服务 completed。
+  - 历史 `E:storage-e2e`：在完整镜像重建后重复通过，验证 event/batch 幂等、v2 覆盖与 v1 stale、三 edit 原子事务、关系双写、tombstone、敏感字段过滤、永久错误 DLQ、搜索恢复、alias 重建和 Postgres 数据所有权。
   - `git diff --check`、两个 shell 脚本 `sh -n`：通过。
 - 前端/内置浏览器：P02 没有新增或修改用户界面，按用户规则无需浏览器点击；P00/P01 的认证外壳未改变。
 - 真实故障恢复证据：
@@ -145,7 +145,7 @@
   - OIDC 前端增加 access-token 自动续期和过期存储会话恢复，角色从 access token `realm_access` 解析。
 - 自动验证：
   - `make verify-fast`：通过；9 个 Maven reactor project、11 个 Java tests、frontend lint/typecheck/build、OpenAPI recommended lint 和全 profile Compose config 全部通过。
-  - `make e2e-connections`：最终通过；真实验证 MinIO、加密/secret hygiene、测试令牌、发现、Schema、预览、duplicate rollback、乐观锁、Viewer/Builder/Admin、停用/恢复/删除和审计。
+  - 历史 `E:connections-page`：最终通过；真实验证 MinIO、加密/secret hygiene、测试令牌、发现、Schema、预览、duplicate rollback、乐观锁、Viewer/Builder/Admin、停用/恢复/删除和审计。
   - Ontology Core/Portal 最终镜像构建成功，完整依赖服务健康；`git diff --check` 与脚本语法检查通过。
 - 内置浏览器手测：
   - 使用 Admin OIDC 会话从空列表进入 `/data/connections/new`，逐步点击选择 MinIO/S3、填写 Bucket/Prefix 与 Docker Secret 引用、执行五阶段真实测试、确认并创建。
@@ -182,7 +182,7 @@
   - 交付紧凑管道表格、URL 筛选、全屏模板向导、React Flow DAG 编辑器、节点库/配置/底部面板、审核/历史和九阶段运行详情。
 - 自动验证：
   - `make verify-fast`：通过；9 个 Maven reactor project、18 个 Java tests、frontend lint/typecheck/build、OpenAPI recommended lint 和全 profile Compose config 全部通过。
-  - `make e2e-pipelines`：通过；真实验证 MinIO CSV → 有界 Flink preview → 不可变发布 → 正式 Flink → Pulsar → Projection ack，并覆盖 masking、ETag 409、提议审批、v2、回滚、SSE 重放、Viewer 403、审计和 secret hygiene。
+  - 历史 `E:pipelines-page`：通过；真实验证 MinIO CSV → 有界 Flink preview → 不可变发布 → 正式 Flink → Pulsar → Projection ack，并覆盖 masking、ETag 409、提议审批、v2、回滚、SSE 重放、Viewer 403、审计和 secret hygiene。
   - Ontology Core/Flink Job/Portal 镜像构建成功，完整依赖服务健康；`git diff --check` 与脚本语法检查通过。
 - 内置浏览器手测：
   - 从 `http://localhost:9080` 使用 Builder OIDC 登录，点击侧栏“管道构建”，确认 7 条 E2E 管道、生命周期/运行状态分列、模式、调度和负责人均正确；直接访问 frontend 调试端口不作为平台入口。
@@ -219,8 +219,8 @@
   - 交付共享本体概览、搜索、完整内部导航、资源列表、四步对象向导、资源详情/多 Tab、属性目录、Proposal 审核/发布、健康和历史页面；Viewer 可读，Builder 可起草/提交，Admin 批准/发布。
 - 自动验证：
   - `make verify-fast`：通过；9 个 Maven reactor project、22 个 Java tests、frontend lint/typecheck/build、OpenAPI recommended lint 和全 profile Compose config 全部通过。
-  - `make e2e-modeling`：通过；真实验证五类规范资源、多资源审核、Viewer/Builder/Admin、主键与敏感字段规则、Action Preview、Function 权限/版本绑定、OpenSearch 故障下 Saga 保旧 revision、恢复重试、精确 revision Pulsar 投影、敏感字段过滤和审计。
-  - Ontology Core/Portal 镜像重建成功，Flyway V6 已应用且完整依赖服务健康；`git diff --check` 与 `deploy/scripts/e2e-modeling.sh` 语法检查通过。
+  - 历史 `E:modeling-page`：通过；真实验证五类规范资源、多资源审核、Viewer/Builder/Admin、主键与敏感字段规则、Action Preview、Function 权限/版本绑定、OpenSearch 故障下 Saga 保旧 revision、恢复重试、精确 revision Pulsar 投影、敏感字段过滤和审计。
+  - Ontology Core/Portal 镜像重建成功，Flyway V6 已应用且完整依赖服务健康；`git diff --check` 与历史 E2E 脚本语法检查通过。
 - 内置浏览器手测：
   - 使用 Builder OIDC 从全局侧栏进入“本体管理”，核对 Revision 4 概览、资源统计、最近资源、模型关系图和完整内部导航。
   - 点击“新建对象类型”，逐步填写 `BrowserAcceptanceAsset`、来源、主键/标题属性并在复核页确认所有跨步骤字段，保存为 DRAFT 后检查稳定 API 名、物理键、属性、数据映射、索引投影和不可变版本。
@@ -251,8 +251,8 @@
   - 交付探索首页、全局搜索、最近/收藏/保存探索/对象清单、对象类型工作区、筛选器、Table/Card/快速分析/关系图/比较、Panel 与 Full 两类详情及属性/关系/Action/Function/活动/来源 Tab。
 - 自动验证：
   - `make verify-fast`：通过；Maven reactor、Java tests、frontend lint/typecheck/build、OpenAPI recommended lint 和全 profile Compose config 全部通过。
-  - `make e2e-explorer`：通过；真实验证 storage-authorized search/Facet/cursor、HugeGraph detail/relation/degradation、redaction、compare、saved references、signed selection、MinIO export、Action gate、RBAC 和审计。
-  - Ontology Core/Portal 最终镜像重建成功，Flyway V7 已应用且完整依赖服务健康；`git diff --check` 与 `deploy/scripts/e2e-explorer.sh` 语法检查通过。
+  - 历史 `E:explorer-page`：通过；真实验证 storage-authorized search/Facet/cursor、HugeGraph detail/relation/degradation、redaction、compare、saved references、signed selection、MinIO export、Action gate、RBAC 和审计。
+  - Ontology Core/Portal 最终镜像重建成功，Flyway V7 已应用且完整依赖服务健康；`git diff --check` 与历史 E2E 脚本语法检查通过。
 - 内置浏览器手测：
   - 使用 Viewer OIDC 从全局侧栏进入“对象探索”，核对 5 个对象类型和 HEALTHY 能力；全局搜索精确找到 E2E Employee 且 email 未泄露。
   - 打开 Full 详情，逐项点击属性、关系、Action、Function、活动和来源，确认 Viewer 不显示可执行 Action、投影活动和 revision 5 字段血缘可见。
@@ -285,8 +285,8 @@
   - 交付紧凑看板表格、查看/全屏/版本/固定版本路由、24 列三栏全屏编辑器、页面导航、数据源、指标/柱状图/饼图/对象表格/受限 Markdown/分节标题组件、检查器、自动保存、验证和发布。
 - 自动验证：
   - `make verify-fast`：通过；Maven reactor、26 个 Java tests、frontend lint/typecheck/build、OpenAPI recommended lint 和全 profile Compose config 全部通过。
-  - `make e2e-dashboards`：通过；真实验证 ETag 草稿/租约、v1/v2 不可变发布、失败候选保旧版本、权限作用域查询/缓存、筛选、小群体抑制、下钻、收藏、复制、归档/恢复和审计。
-  - Ontology Core/Portal 最终镜像重建成功，Flyway V8 已应用且完整依赖服务健康；`git diff --check` 与 `deploy/scripts/e2e-dashboards.sh` 语法检查通过。
+  - 历史 `E:dashboards-page`：通过；真实验证 ETag 草稿/租约、v1/v2 不可变发布、失败候选保旧版本、权限作用域查询/缓存、筛选、小群体抑制、下钻、收藏、复制、归档/恢复和审计。
+  - Ontology Core/Portal 最终镜像重建成功，Flyway V8 已应用且完整依赖服务健康；`git diff --check` 与历史 E2E 脚本语法检查通过。
 - 内置浏览器手测：
   - 使用 Builder OIDC 从全局侧栏进入“分析看板”，确认 E2E v2 看板的状态、页面/组件数量、组织可见范围、刷新策略和健康状态，并创建“P09 浏览器手测看板”。
   - 在全屏编辑器选择 Employee revision 5 Object Set，添加指标卡、部门柱状图、对象表格和受限 Markdown；新增并重命名第二页、添加指标，等待 2 秒自动保存后点击“验证”和“发布”。

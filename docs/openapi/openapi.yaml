@@ -14,7 +14,55 @@ servers:
 security:
   - bearerAuth: []
 paths:
+  /agent/v1/conversations:
+    get: {operationId: listAgentConversations, summary: List conversations in the current Agent Runtime, responses: {'200': {description: Conversations, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/AgentConversation'}}}}}, '401': {$ref: '#/components/responses/Unauthorized'}}}
+    post: {operationId: createAgentConversation, summary: Create an empty conversation, requestBody: {content: {application/json: {schema: {type: object, properties: {title: {type: string, maxLength: 240}}}}}}, responses: {'201': {description: Conversation, content: {application/json: {schema: {$ref: '#/components/schemas/AgentConversation'}}}}, '401': {$ref: '#/components/responses/Unauthorized'}}}
+  /agent/v1/conversations/{conversationId}:
+    parameters: [{name: conversationId, in: path, required: true, schema: {type: string, format: uuid}}]
+    get: {operationId: getAgentConversation, summary: Get conversation messages and grounded tool traces, responses: {'200': {description: Conversation, content: {application/json: {schema: {$ref: '#/components/schemas/AgentConversation'}}}}, '404': {$ref: '#/components/responses/NotFound'}}}
+  /agent/v1/conversations/{conversationId}/messages:
+    parameters: [{name: conversationId, in: path, required: true, schema: {type: string, format: uuid}}]
+    post: {operationId: sendAgentMessage, summary: Stream persisted messages, tool calls, tool results, and answer deltas in execution order, requestBody: {required: true, content: {application/json: {schema: {type: object, required: [content], properties: {content: {type: string, maxLength: 10000}}}}}}, responses: {'200': {description: Server-sent Agent events, content: {text/event-stream: {schema: {type: string}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}}}
+  /agent/v1/conversations/{conversationId}/confirm-action:
+    parameters: [{name: conversationId, in: path, required: true, schema: {type: string, format: uuid}}]
+    post: {operationId: confirmAgentAction, summary: Confirm a caller-bound Action preview from a conversation, requestBody: {required: true, content: {application/json: {schema: {type: object, required: [actionId, previewToken, idempotencyKey], properties: {actionId: {type: string, format: uuid}, previewToken: {type: string}, idempotencyKey: {type: string}}}}}}, responses: {'200': {description: Submitted Action execution, content: {application/json: {schema: {$ref: '#/components/schemas/ActionExecution'}}}}, '401': {$ref: '#/components/responses/Unauthorized'}}}
+  /agent/v1/conversations/{conversationId}/confirm-rule-transform:
+    parameters: [{name: conversationId, in: path, required: true, schema: {type: string, format: uuid}}]
+    post: {operationId: confirmAgentRuleTransform, summary: Insert a reviewed generic RULE_TRANSFORM node into a pipeline draft, requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: true}}}}, responses: {'200': {description: Updated pipeline draft, content: {application/json: {schema: {type: object, additionalProperties: true}}}}, '409': {$ref: '#/components/responses/Conflict'}}}
+  /ontology/v1/ontologies:
+    get:
+      operationId: listScenarioWorkspaces
+      summary: List scenario workspaces available to the caller
+      description: A scenario workspace scopes data sources, pipelines, datasets, ontology resources, object exploration, and dashboards.
+      responses:
+        '200':
+          description: Available scenario workspaces
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/OntologyWorkspace'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      operationId: createScenarioWorkspace
+      summary: Create an independent ontology scenario workspace
+      description: The new workspace starts empty and scopes its own data sources, pipelines, datasets, ontology resources, object exploration, and dashboards.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateOntologyWorkspaceRequest'}
+      responses:
+        '201':
+          description: Created ontology workspace
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OntologyWorkspace'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/InvalidRequest'}
   /ontology/v1/data-sources:
+    parameters: [{$ref: '#/components/parameters/WorkspaceId'}]
     get:
       operationId: listDataSources
       summary: List data sources visible to builders and administrators
@@ -767,6 +815,16 @@ paths:
       summary: Compile an action edit plan and short-lived preview token without writing objects
       requestBody: {content: {application/json: {schema: {type: object, additionalProperties: true}}}}
       responses: {'200': {description: Action preview and diff, content: {application/json: {schema: {type: object, additionalProperties: true}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}}
+  /ontology/v1/modeling/actions/{modelingResourceId}/execute:
+    parameters: [{$ref: '#/components/parameters/ModelingResourceId'}]
+    post:
+      operationId: executeOntologyAction
+      summary: Execute an unexpired caller-bound preview as an idempotent ontology mutation batch
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [previewToken, idempotencyKey], properties: {previewToken: {type: string}, idempotencyKey: {type: string, maxLength: 240}}}}}}
+      responses: {'202': {description: Action execution, content: {application/json: {schema: {$ref: '#/components/schemas/ActionExecution'}}}}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/InvalidRequest'}}
+  /ontology/v1/modeling/action-executions/{modelingResourceId}:
+    parameters: [{$ref: '#/components/parameters/ModelingResourceId'}]
+    get: {operationId: getOntologyActionExecution, summary: Get caller-authorized projection status for one action execution, responses: {'200': {description: Action execution, content: {application/json: {schema: {$ref: '#/components/schemas/ActionExecution'}}}}, '404': {$ref: '#/components/responses/NotFound'}}}
   /ontology/v1/modeling/functions:
     get:
       operationId: listOntologyFunctions
@@ -794,6 +852,18 @@ paths:
       summary: Test a read-only function with caller permissions and exact version binding
       requestBody: {content: {application/json: {schema: {type: object, additionalProperties: true}}}}
       responses: {'200': {description: Permission-scoped function result, content: {application/json: {schema: {type: object, additionalProperties: true}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}}
+  /ontology/v1/modeling/functions/{modelingResourceId}/draft:
+    parameters: [{$ref: '#/components/parameters/ModelingResourceId'}]
+    post:
+      operationId: createOntologyFunctionVersionDraft
+      summary: Create a governed draft version of an existing function
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          schema: {type: integer, format: int64}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ModelingResourceDraft'}}}}
+      responses: {'201': {description: Function version draft, content: {application/json: {schema: {$ref: '#/components/schemas/OntologyResource'}}}}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/InvalidRequest'}}
   /ontology/v1/modeling/proposals:
     get:
       operationId: listOntologyProposals
@@ -864,6 +934,12 @@ paths:
       responses: {'200': {description: Authorized object page, content: {application/json: {schema: {$ref: '#/components/schemas/ObjectSetPage'}}}}, '410': {$ref: '#/components/responses/Gone'}, '422': {$ref: '#/components/responses/InvalidRequest'}, '503': {$ref: '#/components/responses/Unavailable'}}
   /ontology/v1/object-sets/facets:
     post: {operationId: facetObjectSet, summary: Calculate up to ten permission-filtered facets, requestBody: {required: true, content: {application/json: {schema: {type: object, required: [query, propertyIds], properties: {query: {$ref: '#/components/schemas/ObjectSetRequest'}, propertyIds: {type: array, maxItems: 10, items: {type: string, format: uuid}}}}}}}, responses: {'200': {description: Facets, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ObjectFacet'}}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}}}
+  /ontology/v1/object-sets/aggregate:
+    post:
+      operationId: aggregateObjectSet
+      summary: Execute a permission-scoped typed aggregation without exposing storage query languages
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ObjectAggregateRequest'}}}}
+      responses: {'200': {description: Grounded aggregate result, content: {application/json: {schema: {$ref: '#/components/schemas/ObjectAggregateResponse'}}}}, '422': {$ref: '#/components/responses/InvalidRequest'}, '503': {$ref: '#/components/responses/Unavailable'}}
   /ontology/v1/object-sets/search-around:
     post: {operationId: searchAroundObject, summary: Expand one authorized HugeGraph relationship hop, requestBody: {required: true, content: {application/json: {schema: {type: object, required: [objectTypeId, objectId], properties: {objectTypeId: {type: string, format: uuid}, objectId: {type: string}, linkTypeIds: {type: array, items: {type: string, format: uuid}}, pageSize: {type: integer, minimum: 1, maximum: 100}}}}}}, responses: {'200': {description: Authorized links, content: {application/json: {schema: {$ref: '#/components/schemas/ObjectLinkPage'}}}}, '404': {$ref: '#/components/responses/NotFound'}}}
   /ontology/v1/object-sets/compare:
@@ -1115,6 +1191,11 @@ components:
       scheme: bearer
       bearerFormat: JWT
   parameters:
+    WorkspaceId:
+      name: X-Workspace-Id
+      in: header
+      description: Active scenario workspace. Defaults to the Token consumption workspace for backward compatibility.
+      schema: {type: string, format: uuid}
     AssetId: {name: assetId, in: path, required: true, schema: {type: string, format: uuid}}
     DataSourceId: {name: dataSourceId, in: path, required: true, schema: {type: string, format: uuid}}
     DeploymentId: {name: deploymentId, in: path, required: true, schema: {type: string, format: uuid}}
@@ -1154,10 +1235,34 @@ components:
     TooManyRequests:
       description: User and target rate limit exceeded
       content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+    Unauthorized:
+      description: Missing or invalid caller credentials
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
     Unavailable:
       description: Required object search, graph or export storage is unavailable
       content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
   schemas:
+    CreateOntologyWorkspaceRequest:
+      type: object
+      required: [apiName, displayName, color]
+      properties:
+        apiName: {type: string, pattern: '^[a-z][a-z0-9_]{1,159}$'}
+        displayName: {type: string, minLength: 1, maxLength: 240}
+        description: {type: string, maxLength: 1000, default: ''}
+        color: {type: string, pattern: '^#[0-9a-fA-F]{6}$', default: '#3157d5'}
+    OntologyWorkspace:
+      type: object
+      required: [id, apiName, displayName, description, icon, color, objectTypeCount, linkTypeCount, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        apiName: {type: string}
+        displayName: {type: string}
+        description: {type: string}
+        icon: {type: string}
+        color: {type: string}
+        objectTypeCount: {type: integer, format: int64}
+        linkTypeCount: {type: integer, format: int64}
+        updatedAt: {type: string, format: date-time}
     DatasetField:
       type: object
       required: [name, type, nullable, samples]
@@ -1982,6 +2087,37 @@ components:
     ModelingResourceKind:
       type: string
       enum: [OBJECT_TYPE, LINK_TYPE, INTERFACE, ACTION, FUNCTION]
+    AgentConversation:
+      type: object
+      required: [id, ontologyId, title, createdAt, updatedAt, messages]
+      properties:
+        id: {type: string, format: uuid}
+        ontologyId: {type: string, format: uuid}
+        title: {type: string}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        messages: {type: array, items: {$ref: '#/components/schemas/AgentMessage'}}
+    AgentMessage:
+      type: object
+      required: [id, role, content, createdAt, tools]
+      properties:
+        id: {type: string, format: uuid}
+        role: {type: string, enum: [assistant, user]}
+        content: {type: string}
+        createdAt: {type: string, format: date-time}
+        tools: {type: array, items: {type: object, additionalProperties: true}}
+    ActionExecution:
+      type: object
+      required: [id, actionId, previewId, status, correlationId, submittedAt]
+      properties:
+        id: {type: string, format: uuid}
+        actionId: {type: string, format: uuid}
+        previewId: {type: string, format: uuid}
+        status: {type: string, enum: [SUBMITTED, PROJECTING, SUCCEEDED, DEGRADED, FAILED]}
+        correlationId: {type: string}
+        safeError: {type: string}
+        submittedAt: {type: string, format: date-time}
+        completedAt: {type: string, format: date-time}
     ModelingResourceDraft:
       type: object
       required: [displayName, apiName]
@@ -2218,6 +2354,24 @@ components:
         propertyId: {type: string, format: uuid}
         displayName: {type: string}
         buckets: {type: array, maxItems: 100, items: {type: object, required: [value, count], properties: {value: {}, count: {type: integer, format: int64}}}}
+    ObjectAggregateRequest:
+      type: object
+      required: [query, dimensionPropertyIds, aggregation]
+      properties:
+        query: {$ref: '#/components/schemas/ObjectSetRequest'}
+        dimensionPropertyIds: {type: array, minItems: 1, maxItems: 3, items: {type: string, format: uuid}}
+        measurePropertyId: {type: string, format: uuid}
+        divisorPropertyId: {type: string, format: uuid}
+        aggregation: {type: string, enum: [approx_distinct, avg, count, max, min, sum, sum_per_distinct]}
+    ObjectAggregateResponse:
+      type: object
+      required: [objectTypeId, ontologyRevision, queryFingerprint, calculatedAt, buckets]
+      properties:
+        objectTypeId: {type: string, format: uuid}
+        ontologyRevision: {type: integer, format: int64}
+        queryFingerprint: {type: string, pattern: '^[a-f0-9]{64}$'}
+        calculatedAt: {type: string, format: date-time}
+        buckets: {type: array, items: {type: object, required: [value, count, metric], properties: {value: {}, count: {type: integer, format: int64}, metric: {type: number}}}}
     ObjectSearchRequest:
       type: object
       required: [query]

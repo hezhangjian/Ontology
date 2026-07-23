@@ -87,12 +87,28 @@ export default function NodeConfigPanel({ pipeline, node, linkTypes, objectTypes
     {node.type === 'WINDOW' && <><ConfigLabel label="窗口类型"><Select onChange={(windowType) => update({ windowType })} options={['TUMBLING', 'SLIDING', 'SESSION'].map((value) => ({ label: value, value }))} value={config.windowType as string ?? 'TUMBLING'} /></ConfigLabel><ConfigLabel label="窗口大小（毫秒）"><InputNumber min={1000} onChange={(windowSizeMs) => update({ windowSizeMs })} value={config.windowSizeMs as number ?? 60000} /></ConfigLabel></>}
     {node.type === 'AGGREGATE' && <><ConfigLabel label="Group By"><Select mode="multiple" onChange={(groupBy) => update({ groupBy })} options={availableFields} value={config.groupBy as string[] ?? []} /></ConfigLabel><ConfigLabel label="指标"><Select onChange={(aggregation) => update({ aggregation })} options={['COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'COUNT_DISTINCT'].map((value) => ({ label: value, value }))} value={config.aggregation as string ?? 'COUNT'} /></ConfigLabel></>}
     {node.type === 'QUALITY' && <><ConfigLabel label="字段"><Select onChange={(field) => update({ field })} options={availableFields} value={config.field as string} /></ConfigLabel><ConfigLabel label="规则"><Select onChange={(rule) => update({ rule })} options={['NOT_NULL', 'TYPE', 'RANGE', 'REGEX', 'UNIQUE', 'REFERENCE'].map((value) => ({ label: value, value }))} value={config.rule as string ?? 'NOT_NULL'} /></ConfigLabel><ConfigLabel label="失败动作"><Select onChange={(failureAction) => update({ failureAction })} options={[{ label: '停止', value: 'STOP' }, { label: '跳过', value: 'SKIP' }, { label: '受限隔离', value: 'QUARANTINE' }]} value={config.failureAction as string ?? 'STOP'} /></ConfigLabel></>}
+    {node.type === 'RULE_TRANSFORM' && <RuleTransform config={config} fields={node.inputSchema.map((field) => field.name)} update={update} />}
     {node.type === 'DATASET_OUTPUT' && <DatasetOutput config={config} fields={node.inputSchema.map((field) => field.name)} update={update} />}
     {node.type === 'ONTOLOGY_OBJECT' && <ObjectMapping config={config} fields={node.inputSchema.map((field) => field.name)} objectTypes={objectTypes} update={update} />}
     {node.type === 'ONTOLOGY_RELATION' && <><ConfigLabel label="生成哪种关系"><Select onChange={(relationTypeId) => update({ relationTypeId })} options={linkTypes.map((item) => ({ label: item.displayName, value: item.id }))} placeholder="选择一个已创建的关系" value={config.relationTypeId as string} /></ConfigLabel><ConfigLabel label="起点本体"><Select onChange={(sourceObjectTypeId) => update({ sourceObjectTypeId })} options={objectTypes.map((item) => ({ label: item.displayName, value: item.id }))} value={config.sourceObjectTypeId as string} /></ConfigLabel><ConfigLabel label="起点唯一标识字段"><Select onChange={(sourceIdField) => update({ sourceIdField })} options={availableFields} value={config.sourceIdField as string} /></ConfigLabel><ConfigLabel label="终点本体"><Select onChange={(targetObjectTypeId) => update({ targetObjectTypeId })} options={objectTypes.map((item) => ({ label: item.displayName, value: item.id }))} value={config.targetObjectTypeId as string} /></ConfigLabel><ConfigLabel label="终点唯一标识字段"><Select onChange={(targetIdField) => update({ targetIdField })} options={availableFields} value={config.targetIdField as string} /></ConfigLabel></>}
     <Divider />
     <Text type="secondary">输入 Schema：{node.inputSchema.length} 字段 · 输出 Schema：{node.outputSchema.length} 字段</Text>
   </aside>;
+}
+
+function RuleTransform({ config, fields, update }: { config: Record<string, unknown>; fields: string[]; update: (values: Record<string, unknown>) => void }) {
+  const configured = Array.isArray(config.rules) && config.rules.length > 0 ? config.rules[0] as Record<string, unknown> : {};
+  const change = (values: Record<string, unknown>) => update({ rules: [{ action: 'REPLACE', ...configured, ...values }] });
+  const operator = String(configured.operator ?? 'OUTSIDE_RANGE');
+  return <>
+    <Alert message="规则以配置形式进入不可变管道版本；原值可保留为审计字段。" showIcon type="info" />
+    <ConfigLabel label="目标字段"><Select onChange={(field) => change({ field })} options={fields.map((field) => ({ label: field, value: field }))} value={configured.field as string} /></ConfigLabel>
+    <ConfigLabel label="命中条件"><Select onChange={(value) => change({ operator: value })} options={['OUTSIDE_RANGE', 'GREATER_THAN', 'LESS_THAN', 'EQUALS', 'IS_NULL'].map((value) => ({ label: value, value }))} value={operator} /></ConfigLabel>
+    {operator === 'OUTSIDE_RANGE' ? <><ConfigLabel label="最小值"><InputNumber onChange={(min) => change({ min })} value={configured.min as number} /></ConfigLabel><ConfigLabel label="最大值"><InputNumber onChange={(max) => change({ max })} value={configured.max as number} /></ConfigLabel></> : operator !== 'IS_NULL' && <ConfigLabel label="比较值"><Input onChange={(event) => change({ value: event.target.value })} value={String(configured.value ?? '')} /></ConfigLabel>}
+    <ConfigLabel label="替换值"><InputNumber onChange={(replacement) => change({ replacement })} value={configured.replacement as number ?? 0} /></ConfigLabel>
+    <ConfigLabel label="原值审计字段"><Input onChange={(event) => change({ preserveOriginalAs: event.target.value })} placeholder="例如 raw_reading" value={String(configured.preserveOriginalAs ?? '')} /></ConfigLabel>
+    <ConfigLabel label="状态字段"><Input onChange={(event) => change({ statusField: event.target.value })} placeholder="例如 cleaning_status" value={String(configured.statusField ?? '')} /></ConfigLabel>
+  </>;
 }
 
 function DatasetOutput({ config, fields, update }: { config: Record<string, unknown>; fields: string[]; update: (values: Record<string, unknown>) => void }) {

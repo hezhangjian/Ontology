@@ -12,6 +12,7 @@ import com.hezhangjian.ontology.core.explorer.ExplorerModels.ObjectSetPage;
 import com.hezhangjian.ontology.core.explorer.ExplorerModels.ObjectSetRequest;
 import com.hezhangjian.ontology.core.explorer.ExplorerService;
 import com.hezhangjian.ontology.core.deletion.ResourceDeletionService;
+import com.hezhangjian.ontology.core.security.WorkspaceContext;
 import com.hezhangjian.ontology.core.datasets.DatasetModels;
 import com.hezhangjian.ontology.core.datasets.DatasetService;
 import java.sql.ResultSet;
@@ -78,13 +79,13 @@ public class DashboardService {
                 FROM control.dashboards d
                 LEFT JOIN control.dashboard_versions v ON v.id=d.current_version_id
                 LEFT JOIN control.dashboard_drafts dr ON dr.id=d.active_draft_id
-                WHERE (:search='' OR lower(d.name) LIKE '%'||:search||'%' OR lower(d.description) LIKE '%'||:search||'%')
+                WHERE d.workspace_id=:workspace AND (:search='' OR lower(d.name) LIKE '%'||:search||'%' OR lower(d.description) LIKE '%'||:search||'%')
                   AND (:status='' OR d.lifecycle=:status)
                   AND (:favorites=false OR EXISTS(SELECT 1 FROM control.dashboard_favorites f WHERE f.dashboard_id=d.id AND f.user_id=:actor))
                   AND (d.owner_id=:actor OR d.visibility IN ('TEAM','ORGANIZATION')
                        OR EXISTS(SELECT 1 FROM control.dashboard_permissions p WHERE p.dashboard_id=d.id AND p.subject_type='USER' AND p.subject_id=:actor))
                 ORDER BY d.updated_at DESC,d.id
-                """).param("actor", actor.id()).param("search", search).param("status", status)
+                """).param("workspace", WorkspaceContext.id()).param("actor", actor.id()).param("search", search).param("status", status)
                 .param("favorites", favoritesOnly).query(this::summary).list();
     }
 
@@ -98,9 +99,9 @@ public class DashboardService {
         UUID draftId = UUID.randomUUID();
         DashboardDefinition definition = blankDefinition();
         jdbc.sql("""
-                INSERT INTO control.dashboards(id,name,description,owner_id,owner_name,visibility,lifecycle,refresh_policy,tags,active_draft_id)
-                VALUES (:id,:name,:description,:owner,:ownerName,:visibility,'DRAFT',:refresh,CAST(:tags AS text[]),NULL)
-                """).param("id", dashboardId).param("name", name).param("description", text(request.description(), 4000))
+                INSERT INTO control.dashboards(id,workspace_id,name,description,owner_id,owner_name,visibility,lifecycle,refresh_policy,tags,active_draft_id)
+                VALUES (:id,:workspace,:name,:description,:owner,:ownerName,:visibility,'DRAFT',:refresh,CAST(:tags AS text[]),NULL)
+                """).param("id", dashboardId).param("workspace", WorkspaceContext.id()).param("name", name).param("description", text(request.description(), 4000))
                 .param("owner", actor.id()).param("ownerName", actor.name()).param("visibility", visibility)
                 .param("refresh", refresh).param("tags", pgArray(request.tags())).update();
         jdbc.sql("""
@@ -1013,8 +1014,8 @@ public class DashboardService {
     }
 
     private String requireAccess(UUID id, Actor actor, String required) {
-        AccessRow row = jdbc.sql("SELECT owner_id,visibility FROM control.dashboards WHERE id=:id")
-                .param("id", id).query((rs, index) -> new AccessRow(rs.getString("owner_id"), rs.getString("visibility")))
+        AccessRow row = jdbc.sql("SELECT owner_id,visibility FROM control.dashboards WHERE id=:id AND workspace_id=:workspace")
+                .param("id", id).param("workspace", WorkspaceContext.id()).query((rs, index) -> new AccessRow(rs.getString("owner_id"), rs.getString("visibility")))
                 .optional().orElseThrow(() -> notFound("看板不存在"));
         String role;
         if (row.ownerId().equals(actor.id())) role = "OWNER";

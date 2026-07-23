@@ -60,22 +60,33 @@ final class DatasetStorageClient {
     }
 
     List<Map<String, Object>> rows(UUID datasetId) {
+        String scrollId = null;
         try {
-            String response = request("POST", "/" + index(datasetId) + "/_search",
-                    Map.of("size", 10000, "sort", List.of("_doc"), "query", Map.of("match_all", Map.of())), true);
+            String response = request("POST", "/" + index(datasetId) + "/_search?scroll=1m",
+                    Map.of("size", 1000, "sort", List.of("_doc"), "query", Map.of("match_all", Map.of())), true);
             if (response == null) return List.of();
-            Map<String, Object> root = json.readValue(response, new TypeReference<>() { });
-            Object hitsValue = root.get("hits");
-            if (!(hitsValue instanceof Map<?, ?> hits) || !(hits.get("hits") instanceof List<?> values)) return List.of();
             List<Map<String, Object>> rows = new ArrayList<>();
-            for (Object value : values) if (value instanceof Map<?, ?> hit && hit.get("_source") instanceof Map<?, ?> source) {
-                Map<String, Object> row = new LinkedHashMap<>();
-                source.forEach((key, item) -> row.put(String.valueOf(key), item));
-                rows.add(row);
+            while (response != null) {
+                Map<String, Object> root = json.readValue(response, new TypeReference<>() { });
+                scrollId = root.get("_scroll_id") == null ? scrollId : String.valueOf(root.get("_scroll_id"));
+                Object hitsValue = root.get("hits");
+                if (!(hitsValue instanceof Map<?, ?> hits) || !(hits.get("hits") instanceof List<?> values)
+                        || values.isEmpty()) break;
+                for (Object value : values) if (value instanceof Map<?, ?> hit && hit.get("_source") instanceof Map<?, ?> source) {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    source.forEach((key, item) -> row.put(String.valueOf(key), item));
+                    rows.add(row);
+                }
+                if (scrollId == null) break;
+                response = request("POST", "/_search/scroll", Map.of("scroll", "1m", "scroll_id", scrollId), false);
             }
             return List.copyOf(rows);
         } catch (Exception cause) {
             throw new IllegalStateException("Dataset OpenSearch 查询副本不可用", cause);
+        } finally {
+            if (scrollId != null) try {
+                request("DELETE", "/_search/scroll", Map.of("scroll_id", List.of(scrollId)), true);
+            } catch (Exception ignored) { }
         }
     }
 

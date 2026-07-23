@@ -73,18 +73,11 @@ public class ProjectionProcessor {
                 .filter(context -> context.ledger().graphElementId() == null
                         || "RECEIVED".equals(context.ledger().status()))
                 .toList();
-        List<String> graphIds = graph.applyBatch(graphPending.stream()
-                .map(BatchContext::validated)
+        applyGraphBatch(graphPending.stream()
+                .filter(context -> !context.validated().relation())
                 .toList());
-        for (int index = 0; index < graphPending.size(); index++) {
-            BatchContext context = graphPending.get(index);
-            String graphId = graphIds.get(index);
-            context.setGraphElementId(graphId);
-        }
-        repository.graphAppliedBatch(graphPending.stream()
-                .map(context -> new GraphUpdate(
-                        context.validated().event().eventId(),
-                        context.ledger().graphElementId()))
+        applyGraphBatch(graphPending.stream()
+                .filter(context -> context.validated().relation())
                 .toList());
 
         List<BatchContext> searchPending = contexts.stream()
@@ -117,6 +110,23 @@ public class ProjectionProcessor {
             results.add(new ProjectionResult("PROJECTED", context.ledger().attempts()));
         }
         return List.copyOf(results);
+    }
+
+    private void applyGraphBatch(List<BatchContext> contexts) {
+        if (contexts.isEmpty()) {
+            return;
+        }
+        List<String> graphIds = graph.applyBatch(contexts.stream()
+                .map(BatchContext::validated)
+                .toList());
+        for (int index = 0; index < contexts.size(); index++) {
+            contexts.get(index).setGraphElementId(graphIds.get(index));
+        }
+        repository.graphAppliedBatch(contexts.stream()
+                .map(context -> new GraphUpdate(
+                        context.validated().event().eventId(),
+                        context.ledger().graphElementId()))
+                .toList());
     }
 
     private BatchContext prepare(String topic, String messageId, ValidatedEvent validated) {

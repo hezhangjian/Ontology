@@ -82,9 +82,15 @@ public class StorageHttpClient {
 
     private JsonNode requireSuccess(URI uri, Response response) {
         if (response.status() < 200 || response.status() >= 300) {
+            String details = response.rawBody() == null ? "" : response.rawBody()
+                    .replaceAll("[\\r\\n\\t]+", " ").trim();
+            if (details.length() > 1000) {
+                details = details.substring(0, 1000) + "…";
+            }
             throw new ProjectionException(
                     "STORAGE_HTTP_" + response.status(),
-                    "Storage request failed with HTTP " + response.status() + " at " + uri.getPath(),
+                    "Storage request failed with HTTP " + response.status() + " at " + uri.getPath()
+                            + (details.isBlank() ? "" : ": " + details),
                     response.status() == 408 || response.status() == 429 || response.status() >= 500);
         }
         return response.json();

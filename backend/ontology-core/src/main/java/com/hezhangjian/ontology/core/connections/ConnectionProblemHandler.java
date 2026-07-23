@@ -14,6 +14,7 @@ import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
@@ -48,6 +49,12 @@ public class ConnectionProblemHandler {
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     ResponseEntity<Map<String, Object>> methodNotAllowed(HttpRequestMethodNotSupportedException problem) {
         return response(HttpStatus.METHOD_NOT_ALLOWED, "METHOD_NOT_ALLOWED", "该资源不支持此操作");
+    }
+
+    @ExceptionHandler(MultipartException.class)
+    ResponseEntity<Map<String, Object>> multipartProblem(MultipartException problem) {
+        return response(HttpStatus.PAYLOAD_TOO_LARGE, "MULTIPART_LIMIT_EXCEEDED",
+                "上传文件数量、分段数量或总大小超过平台限制");
     }
 
     @ExceptionHandler(Exception.class)

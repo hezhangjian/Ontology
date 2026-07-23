@@ -34,6 +34,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hezhangjian.ontology.core.connections.ConnectionProblem;
 import com.hezhangjian.ontology.core.connections.ConnectionProperties;
 import com.hezhangjian.ontology.core.pipelines.PipelineService;
+import com.hezhangjian.ontology.core.security.WorkspaceContext;
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -61,14 +62,14 @@ public class DatasetService {
         String term = search == null ? "" : search.trim().toLowerCase(Locale.ROOT);
         List<Dataset> items = jdbc.sql("""
                 SELECT d.*,p.name pipeline_name FROM control.datasets d JOIN control.pipelines p ON p.id=d.pipeline_id
-                WHERE (:term='' OR lower(d.name) LIKE '%' || :term || '%') ORDER BY d.updated_at DESC
-                """).param("term", term).query(this::mapDataset).list();
+                WHERE d.workspace_id=:workspace AND (:term='' OR lower(d.name) LIKE '%' || :term || '%') ORDER BY d.updated_at DESC
+                """).param("workspace", WorkspaceContext.id()).param("term", term).query(this::mapDataset).list();
         return new DatasetPage(items, items.size());
     }
 
     public Dataset get(UUID id) {
-        return jdbc.sql("SELECT d.*,p.name pipeline_name FROM control.datasets d JOIN control.pipelines p ON p.id=d.pipeline_id WHERE d.id=:id")
-                .param("id", id).query(this::mapDataset).optional()
+        return jdbc.sql("SELECT d.*,p.name pipeline_name FROM control.datasets d JOIN control.pipelines p ON p.id=d.pipeline_id WHERE d.id=:id AND d.workspace_id=:workspace")
+                .param("id", id).param("workspace", WorkspaceContext.id()).query(this::mapDataset).optional()
                 .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "数据集不存在"));
     }
 
@@ -83,8 +84,8 @@ public class DatasetService {
 
     @Transactional
     public Dataset materialize(UUID pipelineId, MaterializeRequest request, Actor actor) {
-        Map<String, Object> pipeline = jdbc.sql("SELECT p.*,d.graph::text graph FROM control.pipelines p JOIN control.pipeline_drafts d ON d.pipeline_id=p.id WHERE p.id=:id")
-                .param("id", pipelineId).query(this::mapRow).list().stream().findFirst().orElseThrow(() -> new ConnectionProblem("PIPELINE_NOT_FOUND", "管道不存在或没有可运行草稿"));
+        Map<String, Object> pipeline = jdbc.sql("SELECT p.*,d.graph::text graph FROM control.pipelines p JOIN control.pipeline_drafts d ON d.pipeline_id=p.id WHERE p.id=:id AND p.workspace_id=:workspace")
+                .param("id", pipelineId).param("workspace", WorkspaceContext.id()).query(this::mapRow).list().stream().findFirst().orElseThrow(() -> new ConnectionProblem("PIPELINE_NOT_FOUND", "管道不存在或没有可运行草稿"));
         PipelineGraph graph = read(String.valueOf(pipeline.get("graph")), PipelineGraph.class);
         PipelineNode output = graph.nodes().stream().filter(node -> "DATASET_OUTPUT".equals(node.type())).findFirst()
                 .orElseThrow(() -> new ConnectionProblem("DATASET_OUTPUT_REQUIRED", "管道需要一个数据集输出节点"));
@@ -93,15 +94,17 @@ public class DatasetService {
         UUID datasetId = jdbc.sql("SELECT id FROM control.datasets WHERE pipeline_id=:id ORDER BY updated_at DESC LIMIT 1")
                 .param("id", pipelineId).query(UUID.class).optional().orElse(UUID.randomUUID());
         jdbc.sql("""
-                INSERT INTO control.datasets(id,name,normalized_name,description,pipeline_id,status,owner_id,owner_name)
-                VALUES (:id,:name,:normalized,:description,:pipeline,'BUILDING',:ownerId,:ownerName)
+                INSERT INTO control.datasets(id,workspace_id,name,normalized_name,description,pipeline_id,status,owner_id,owner_name)
+                VALUES (:id,:workspace,:name,:normalized,:description,:pipeline,'BUILDING',:ownerId,:ownerName)
                 ON CONFLICT(id) DO UPDATE SET name=excluded.name,normalized_name=excluded.normalized_name,
                   description=excluded.description,schema='[]'::jsonb,row_count=0,status='BUILDING',updated_at=now()
-                """).param("id", datasetId).param("name", name.trim()).param("normalized", normalize(name))
+                """).param("id", datasetId).param("workspace", WorkspaceContext.id()).param("name", name.trim()).param("normalized", normalize(name))
                 .param("description", description).param("pipeline", pipelineId).param("ownerId", actor.id()).param("ownerName", actor.name()).update();
 
         Pipeline current = pipelines.get(pipelineId);
-        if (current.publishedVersion() == null) {
+        boolean draftChanged = current.publishedVersion() == null
+                || Boolean.TRUE.equals(pipelines.diff(pipelineId).get("changed"));
+        if (draftChanged) {
             pipelines.publish(pipelineId, new PublishRequest(true, true, null), actor);
         } else {
             pipelines.run(pipelineId, actor);
@@ -297,7 +300,9 @@ public class DatasetService {
 
     private List<Field> inferFields(List<Map<String, Object>> rows) {
         if (rows.isEmpty()) return List.of();
-        return rows.get(0).keySet().stream().map(name -> {
+        Set<String> fieldNames = new LinkedHashSet<>();
+        rows.forEach(row -> fieldNames.addAll(row.keySet()));
+        return fieldNames.stream().map(name -> {
             List<Object> values = rows.stream().map(row -> row.get(name)).filter(Objects::nonNull).limit(3).toList();
             Object sample = values.stream().findFirst().orElse("");
             String type = sample instanceof Number ? (sample instanceof BigDecimal ? "DECIMAL" : "INTEGER") : inferredTextType(sample);

@@ -25,8 +25,6 @@ make verify-fast
 ```bash
 make compose-build
 make compose-up
-make e2e-platform-foundation
-make e2e-storage
 ```
 
 浏览器访问 `http://localhost:9080/data/connections`，无需登录。当前 Compose 会在 `${BIND_ADDRESS:-0.0.0.0}` 暴露 Portal、Flink、Pulsar、MinIO、OpenSearch、HugeGraph、PostgreSQL 和 SkyWalking 管理端口；部署到公网服务器前请使用防火墙或将 `BIND_ADDRESS` 设为内网地址。
@@ -34,10 +32,9 @@ make e2e-storage
 ## 目录
 
 - `backend/`：平台 Java 服务、契约和测试支持
-- `deploy/`：部署配置、验证数据、Secret 示例和运维脚本
-- `docker/`：唯一的 Compose 入口 `docker-compose.yml`
-- `docs/`：ADR、架构、OpenAPI、验证证据和运行手册
+- `docker/`：单文件本地开发入口 `docker-compose.yml`
+- `docs/`：OpenAPI
 - `examples/`：可重复生成的无敏感样例
 - `portal/`：产品前端
 
-每个 P00—P17 Phase 只产生一个 signed-off Conventional Commit；进度和验证证据记录在 [timeline.md](timeline.md)。
+Commit；进度和验证证据记录在 [timeline.md](timeline.md)。

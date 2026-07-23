@@ -24,6 +24,7 @@ import org.apache.pulsar.client.api.Message;
 import org.apache.pulsar.client.api.Producer;
 import org.apache.pulsar.client.api.PulsarClient;
 import org.apache.pulsar.client.api.Schema;
+import org.apache.pulsar.client.api.SubscriptionInitialPosition;
 import org.apache.pulsar.client.api.SubscriptionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,7 +33,10 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class PulsarProjectionConsumer implements SmartLifecycle {
+    private static final int BATCH_COLLECTION_WAIT_MILLIS = 100;
     private static final int MAX_EVENT_BATCH_SIZE = 200;
+    private static final int RELATION_DEPENDENCY_MAX_RETRIES = 60;
+    private static final int TRANSIENT_STORAGE_MAX_RETRIES = 20;
     private static final Logger log = LoggerFactory.getLogger(PulsarProjectionConsumer.class);
     private static final String DLQ_TOPIC = "persistent://platform/dlq/projection-events";
     private static final List<String> INPUT_TOPICS = List.of(
@@ -80,6 +84,7 @@ public class PulsarProjectionConsumer implements SmartLifecycle {
             consumer = client.newConsumer(Schema.BYTES)
                     .topics(INPUT_TOPICS)
                     .subscriptionName("ontology-projection-v1")
+                    .subscriptionInitialPosition(SubscriptionInitialPosition.Earliest)
                     .subscriptionType(SubscriptionType.Key_Shared)
                     .negativeAckRedeliveryDelay(properties.retryDelay().toMillis(), TimeUnit.MILLISECONDS)
                     .subscribe();
@@ -100,7 +105,8 @@ public class PulsarProjectionConsumer implements SmartLifecycle {
                     List<Message<byte[]>> messages = new ArrayList<>();
                     messages.add(message);
                     while (messages.size() < MAX_EVENT_BATCH_SIZE) {
-                        Message<byte[]> additional = consumer.receive(10, TimeUnit.MILLISECONDS);
+                        Message<byte[]> additional = consumer.receive(
+                                BATCH_COLLECTION_WAIT_MILLIS, TimeUnit.MILLISECONDS);
                         if (additional == null) {
                             break;
                         }
@@ -142,6 +148,30 @@ public class PulsarProjectionConsumer implements SmartLifecycle {
         if (messages.isEmpty()) {
             return;
         }
+        List<Message<byte[]>> objectMessages = new ArrayList<>();
+        List<ProjectionInput> objectInputs = new ArrayList<>();
+        List<Message<byte[]>> relationMessages = new ArrayList<>();
+        List<ProjectionInput> relationInputs = new ArrayList<>();
+        for (int index = 0; index < inputs.size(); index++) {
+            ProjectionInput input = inputs.get(index);
+            if (input.event().eventType().startsWith("relation.")) {
+                relationMessages.add(messages.get(index));
+                relationInputs.add(input);
+            } else {
+                objectMessages.add(messages.get(index));
+                objectInputs.add(input);
+            }
+        }
+        flushHomogeneousEvents(objectMessages, objectInputs);
+        flushHomogeneousEvents(relationMessages, relationInputs);
+        messages.clear();
+        inputs.clear();
+    }
+
+    private void flushHomogeneousEvents(List<Message<byte[]>> messages, List<ProjectionInput> inputs) {
+        if (messages.isEmpty()) {
+            return;
+        }
         try {
             projectionProcessor.processBatch(inputs);
             for (Message<byte[]> message : messages) {
@@ -149,18 +179,16 @@ public class PulsarProjectionConsumer implements SmartLifecycle {
             }
         } catch (Exception exception) {
             ProjectionException failure = classify(exception);
+            log.warn("Projection batch of {} messages failed with {}", messages.size(), failure.code(), failure);
             if (!failure.retryable()) {
                 for (Message<byte[]> message : messages) {
                     handle(message);
                 }
             } else {
                 for (int index = 0; index < messages.size(); index++) {
-                    fail(messages.get(index), inputs.get(index).event().eventId(), failure);
+                    retryOrDlq(messages.get(index), inputs.get(index).event().eventId(), failure);
                 }
             }
-        } finally {
-            messages.clear();
-            inputs.clear();
         }
     }
 
@@ -191,10 +219,18 @@ public class PulsarProjectionConsumer implements SmartLifecycle {
 
     private void fail(Message<byte[]> message, UUID eventId, ProjectionException failure) {
         log.warn("Projection message failed with {}", failure.code(), failure);
+        retryOrDlq(message, eventId, failure);
+    }
+
+    private void retryOrDlq(Message<byte[]> message, UUID eventId, ProjectionException failure) {
         int attempt = message.getRedeliveryCount() + 1;
         repository.recordFailure(eventId, failure.code(), failure.retryable(), attempt, failure.getMessage());
-        if (failure.retryable() && attempt < properties.maxRetries()) {
-            log.warn("Projection attempt {} failed and will be retried: {}", attempt, failure.code());
+        int maxRetries = "GRAPH_RELATION_ENDPOINT_PENDING".equals(failure.code())
+                ? RELATION_DEPENDENCY_MAX_RETRIES
+                : "STORAGE_UNAVAILABLE".equals(failure.code())
+                ? TRANSIENT_STORAGE_MAX_RETRIES
+                : properties.maxRetries();
+        if (failure.retryable() && attempt < maxRetries) {
             consumer.negativeAcknowledge(message);
             return;
         }

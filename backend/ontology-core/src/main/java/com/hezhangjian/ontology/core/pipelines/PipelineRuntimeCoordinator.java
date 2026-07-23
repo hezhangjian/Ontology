@@ -23,6 +23,7 @@ import com.hezhangjian.ontology.core.connections.ConnectionCrypto;
 import com.hezhangjian.ontology.core.connections.ConnectionModels.RuntimeMaterial;
 import com.hezhangjian.ontology.core.connections.ConnectionProblem;
 import com.hezhangjian.ontology.core.connections.DataConnectionService;
+import com.hezhangjian.ontology.core.security.WorkspaceContext;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.http.HttpStatus;
@@ -82,6 +83,11 @@ public class PipelineRuntimeCoordinator {
         if (request == null || request.previewId() == null || request.jobSignature() == null) {
             throw new ConnectionProblem("PREVIEW_WORKLOAD_REQUEST_INVALID", "预览工作负载请求不完整");
         }
+        UUID workspaceId = workspaceForPreview(request.previewId());
+        return WorkspaceContext.call(workspaceId, () -> exchangePreviewInWorkspace(request));
+    }
+
+    private PreviewExchangeResponse exchangePreviewInWorkspace(PreviewExchangeRequest request) {
         Map<String, Object> preview = jdbc.query("""
                 SELECT pr.*,p.data_source_id,p.source_asset_id,p.mode,a.full_path source_asset_path
                 FROM control.pipeline_preview_runs pr JOIN control.pipelines p ON p.id=pr.pipeline_id
@@ -133,6 +139,10 @@ public class PipelineRuntimeCoordinator {
 
     public void completePreview(UUID previewId, PreviewResultRequest request, String token) {
         requireServiceToken(token);
+        WorkspaceContext.run(workspaceForPreview(previewId), () -> completePreviewInWorkspace(previewId, request));
+    }
+
+    private void completePreviewInWorkspace(UUID previewId, PreviewResultRequest request) {
         PreviewRun preview = previewById(previewId);
         if (!List.of("RUNNING", "SUBMITTED").contains(preview.status())) return;
         Pipeline pipeline = pipelines.get(preview.pipelineId());
@@ -324,6 +334,10 @@ public class PipelineRuntimeCoordinator {
     public WorkloadExchangeResponse exchange(WorkloadExchangeRequest request, String token) {
         requireServiceToken(token);
         if (request == null || request.runId() == null || request.jobSignature() == null) throw new ConnectionProblem("WORKLOAD_REQUEST_INVALID", "工作负载请求不完整");
+        return WorkspaceContext.call(workspaceForRun(request.runId()), () -> exchangeInWorkspace(request));
+    }
+
+    private WorkloadExchangeResponse exchangeInWorkspace(WorkloadExchangeRequest request) {
         Map<String, Object> grant = jdbc.query("""
                 SELECT g.*,r.pipeline_id,r.pipeline_version_id,r.correlation_id,r.status run_status,p.data_source_id,p.source_asset_id,
                   p.mode pipeline_mode,a.full_path source_asset_path,v.version pipeline_version,v.graph,v.job_spec,v.pipeline_ir
@@ -400,6 +414,15 @@ public class PipelineRuntimeCoordinator {
                 return new PipelineNode(node.id(), node.type(), node.name(), node.position(), config,
                         node.inputSchema(), node.outputSchema(), node.invalidReasons());
             }
+            if (node.type().equals("ONTOLOGY_RELATION")) {
+                Map<String, Object> config = new LinkedHashMap<>(node.config());
+                RelationBinding relation = relationType(String.valueOf(config.getOrDefault("relationTypeId", "")));
+                config.put("relationTypeId", relation.physicalKey());
+                config.put("sourceObjectTypeId", relation.sourceObjectTypeKey());
+                config.put("targetObjectTypeId", relation.targetObjectTypeKey());
+                return new PipelineNode(node.id(), node.type(), node.name(), node.position(), config,
+                        node.inputSchema(), node.outputSchema(), node.invalidReasons());
+            }
             if (!node.type().equals("ONTOLOGY_OBJECT")) return node;
             Map<String, Object> config = new LinkedHashMap<>(node.config());
             TypeBinding type = objectType(String.valueOf(config.getOrDefault("objectTypeId", "")));
@@ -408,12 +431,23 @@ public class PipelineRuntimeCoordinator {
                 config.put("primaryPropertyKey", type.primaryPropertyKey());
             }
             if (config.get("mappings") instanceof Map<?, ?> mappings) {
-                Map<String, String> properties = jdbc.query("SELECT api_name,physical_key FROM control.properties WHERE object_type_id=?",
-                        (row, number) -> Map.entry(row.getString("api_name"), row.getString("physical_key")), type.id()).stream()
-                        .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                List<Map<String, String>> propertyBindings = jdbc.query("""
+                        SELECT p.api_name,p.physical_key,pv.value_type
+                        FROM control.properties p
+                        JOIN control.property_versions pv ON pv.property_id=p.id
+                        JOIN control.ontology_resource_versions v ON v.id=pv.object_type_version_id
+                        JOIN control.ontology_resources r ON r.id=v.resource_id AND r.latest_version=v.version
+                        WHERE p.object_type_id=? AND p.tombstoned=false
+                        """, (row, number) -> Map.of("apiName", row.getString("api_name"),
+                        "physicalKey", row.getString("physical_key"), "valueType", row.getString("value_type")), type.id());
+                Map<String, String> properties = propertyBindings.stream().collect(java.util.stream.Collectors.toMap(
+                        binding -> binding.get("apiName"), binding -> binding.get("physicalKey")));
+                Map<String, String> propertyTypes = propertyBindings.stream().collect(java.util.stream.Collectors.toMap(
+                        binding -> binding.get("physicalKey"), binding -> binding.get("valueType")));
                 Map<String, Object> translated = new LinkedHashMap<>();
                 mappings.forEach((property, field) -> translated.put(properties.getOrDefault(String.valueOf(property), String.valueOf(property)), field));
                 config.put("mappings", translated);
+                config.put("propertyTypes", propertyTypes);
             }
             return new PipelineNode(node.id(), node.type(), node.name(), node.position(), config,
                     node.inputSchema(), node.outputSchema(), node.invalidReasons());
@@ -443,10 +477,37 @@ public class PipelineRuntimeCoordinator {
                 .orElseThrow(() -> new ConnectionProblem("PIPELINE_OBJECT_TYPE_NOT_FOUND", "对象输出引用的已发布对象类型不存在"));
     }
 
+    private RelationBinding relationType(String identifier) {
+        return jdbc.query("""
+                SELECT relation.id,relation.physical_key,
+                       source.physical_key AS source_object_type_key,
+                       target.physical_key AS target_object_type_key
+                FROM control.ontology_resources relation
+                JOIN control.ontology_resource_versions version
+                  ON version.resource_id=relation.id AND version.version=relation.latest_version
+                JOIN control.link_type_versions link ON link.version_id=version.id
+                JOIN control.ontology_resources source ON source.id=link.left_object_type_id
+                JOIN control.ontology_resources target ON target.id=link.right_object_type_id
+                WHERE relation.kind='LINK_TYPE' AND version.lifecycle='PUBLISHED'
+                  AND (relation.api_name=? OR relation.physical_key=? OR relation.id::text=?)
+                """, (row, number) -> new RelationBinding(row.getObject("id", UUID.class),
+                        row.getString("physical_key"), row.getString("source_object_type_key"),
+                        row.getString("target_object_type_key")), identifier, identifier, identifier)
+                .stream().findFirst()
+                .orElseThrow(() -> new ConnectionProblem("PIPELINE_RELATION_TYPE_NOT_FOUND", "关系输出引用的已发布关系类型不存在"));
+    }
+
     private record TypeBinding(UUID id, String physicalKey, String primaryPropertyKey) { }
+
+    private record RelationBinding(UUID id, String physicalKey, String sourceObjectTypeKey,
+                                   String targetObjectTypeKey) { }
 
     public void progress(UUID runId, RuntimeProgressRequest request, String token) {
         requireServiceToken(token);
+        WorkspaceContext.run(workspaceForRun(runId), () -> progressInWorkspace(runId, request));
+    }
+
+    private void progressInWorkspace(UUID runId, RuntimeProgressRequest request) {
         PipelineRun run = pipelines.runById(runId);
         if (!ACTIVE_STATUSES.contains(run.status()) && !run.status().equals("STOPPING")) throw new ConnectionProblem("PIPELINE_RUN_NOT_ACTIVE", "运行已结束");
         String phase = allowedPhase(request.phase());
@@ -478,6 +539,10 @@ public class PipelineRuntimeCoordinator {
         if (request == null || request.runId() == null || request.correlationId() == null) {
             throw new ConnectionProblem("PROJECTION_ACK_INVALID", "Projection ack 请求不完整");
         }
+        WorkspaceContext.run(workspaceForRun(request.runId()), () -> projectionAckInWorkspace(request));
+    }
+
+    private void projectionAckInWorkspace(ProjectionAckRequest request) {
         PipelineRun run = pipelines.runById(request.runId());
         if (!run.correlationId().equals(request.correlationId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Projection ack correlation ID 不匹配");
@@ -560,6 +625,27 @@ public class PipelineRuntimeCoordinator {
     }
 
     private void submit(UUID runId) {
+        UUID workspaceId = workspaceForRun(runId);
+        if (workspaceId != null) WorkspaceContext.run(workspaceId, () -> submitInWorkspace(runId));
+    }
+
+    private UUID workspaceForRun(UUID runId) {
+        return jdbc.query("""
+                SELECT p.workspace_id FROM control.pipeline_runs r
+                JOIN control.pipelines p ON p.id=r.pipeline_id WHERE r.id=?
+                """, (row, number) -> row.getObject(1, UUID.class), runId).stream().findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "管道运行不存在"));
+    }
+
+    private UUID workspaceForPreview(UUID previewId) {
+        return jdbc.query("""
+                SELECT p.workspace_id FROM control.pipeline_preview_runs pr
+                JOIN control.pipelines p ON p.id=pr.pipeline_id WHERE pr.id=?
+                """, (row, number) -> row.getObject(1, UUID.class), previewId).stream().findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "管道预览不存在"));
+    }
+
+    private void submitInWorkspace(UUID runId) {
         try {
             PipelineRun run = pipelines.runById(runId);
             Pipeline pipeline = pipelines.get(run.pipelineId());
@@ -592,6 +678,12 @@ public class PipelineRuntimeCoordinator {
     }
 
     private void synchronize(PipelineRun run) {
+        UUID workspaceId = jdbc.queryForObject("SELECT workspace_id FROM control.pipelines WHERE id=?",
+                UUID.class, run.pipelineId());
+        if (workspaceId != null) WorkspaceContext.run(workspaceId, () -> synchronizeInWorkspace(run));
+    }
+
+    private void synchronizeInWorkspace(PipelineRun run) {
         if (run.flinkJobId() == null) return;
         String state = flink.state(run.flinkJobId());
         if (state.equals("RUNNING") && List.of("COMPILING", "QUEUED", "STARTING", "SUBMITTED").contains(run.status())) {
@@ -619,19 +711,32 @@ public class PipelineRuntimeCoordinator {
 
     private void beginProjection(PipelineRun run) {
         if (run.status().equals("PROJECTING")) { synchronizeProjection(run); return; }
+        long expectedEvents = projectionExpectedEvents(run);
         jdbc.update("UPDATE control.pipeline_runs SET status='PROJECTING',projection_status='PENDING',updated_at=now() WHERE id=?", run.id());
         jdbc.update("""
                 INSERT INTO control.projection_batches(id,pipeline_run_id,correlation_id,expected_events,status)
                 VALUES (?,?,?,?,'PENDING') ON CONFLICT(pipeline_run_id,correlation_id) DO NOTHING
-                """, UUID.randomUUID(), run.id(), run.correlationId(), run.writtenCount());
-        event(run.id(), "PROJECTION_WAIT_STARTED", "PROJECTING", "Flink 发布完成，等待 Projection batch ack", Map.of("expectedEvents", run.writtenCount()));
+                """, UUID.randomUUID(), run.id(), run.correlationId(), expectedEvents);
+        event(run.id(), "PROJECTION_WAIT_STARTED", "PROJECTING", "Flink 发布完成，等待 Projection batch ack", Map.of("expectedEvents", expectedEvents));
         synchronizeProjection(pipelines.runById(run.id()));
     }
 
     private void synchronizeProjection(PipelineRun run) {
-        long expected = run.writtenCount();
-        Long acknowledged = jdbc.queryForObject("SELECT count(*) FROM control.projection_ledger WHERE correlation_id=? AND status IN ('PROJECTED','STALE')", Long.class, run.correlationId());
-        Long failed = jdbc.queryForObject("SELECT count(*) FROM control.projection_ledger WHERE correlation_id=? AND status IN ('DEGRADED','DLQ')", Long.class, run.correlationId());
+        Long recordedExpected = jdbc.queryForObject("SELECT expected_events FROM control.projection_batches WHERE pipeline_run_id=? AND correlation_id=?",
+                Long.class, run.id(), run.correlationId());
+        long expected = recordedExpected == null ? run.writtenCount() : recordedExpected;
+        Long acknowledged = jdbc.queryForObject("""
+                SELECT count(*) FROM control.projection_ledger
+                WHERE correlation_id=?
+                  AND event_type IN ('object.upsert','object.delete','relation.upsert','relation.delete')
+                  AND status IN ('PROJECTED','STALE')
+                """, Long.class, run.correlationId());
+        Long failed = jdbc.queryForObject("""
+                SELECT count(*) FROM control.projection_ledger
+                WHERE correlation_id=?
+                  AND event_type IN ('object.upsert','object.delete','relation.upsert','relation.delete')
+                  AND status IN ('DEGRADED','DLQ')
+                """, Long.class, run.correlationId());
         long ack = acknowledged == null ? 0 : acknowledged;
         long errors = failed == null ? 0 : failed;
         jdbc.update("UPDATE control.projection_batches SET acknowledged_events=?,failed_events=?,status=? WHERE pipeline_run_id=?",
@@ -645,6 +750,17 @@ public class PipelineRuntimeCoordinator {
             jdbc.update("UPDATE control.pipelines SET run_status='HEALTHY',updated_at=now() WHERE id=?", run.pipelineId());
             event(run.id(), "PIPELINE_RUN_COMPLETED", "COMPLETED", "Flink 与 Projection 均已完成", Map.of("acknowledgedEvents", ack));
         }
+    }
+
+    private long projectionExpectedEvents(PipelineRun run) {
+        return jdbc.query("""
+                SELECT (safe_details->>'projectionWrittenCount')::bigint AS projection_count
+                FROM control.pipeline_run_events
+                WHERE pipeline_run_id=? AND event_type='RUNTIME_PROGRESS'
+                  AND jsonb_exists(safe_details, 'projectionWrittenCount')
+                ORDER BY sequence DESC LIMIT 1
+                """, (row, number) -> row.getLong("projection_count"), run.id()).stream().findFirst()
+                .orElse(run.writtenCount());
     }
 
     private void completeStopped(PipelineRun run) {
@@ -702,6 +818,8 @@ public class PipelineRuntimeCoordinator {
                 """, writeJson(Map.of("code", code, "reason", reason, "requestId", UUID.randomUUID(),
                 "recoveryAction", "修复配置或依赖后使用重试创建新 run ID")), runId);
         jdbc.update("UPDATE control.pipelines SET run_status='FAILED',updated_at=now() WHERE id=?", run.pipelineId());
+        jdbc.update("UPDATE control.datasets SET status='FAILED',updated_at=now() WHERE pipeline_id=? AND status='BUILDING'",
+                run.pipelineId());
         event(runId, "RUN_FAILED", "FAILED", reason, Map.of("code", code));
     }
 

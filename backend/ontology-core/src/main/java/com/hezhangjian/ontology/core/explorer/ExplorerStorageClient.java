@@ -33,7 +33,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
 @Component
-final class ExplorerStorageClient {
+public final class ExplorerStorageClient {
     private final URI graphBase;
     private final URI searchBase;
     private final ObjectMapper objectMapper;
@@ -242,7 +242,7 @@ final class ExplorerStorageClient {
         return List.copyOf(buckets);
     }
 
-    GraphObject getObject(String objectType, String objectId) {
+    public GraphObject getObject(String objectType, String objectId) {
         String labelId = objectLabelId();
         String key = Base64.getUrlEncoder().withoutPadding()
                 .encodeToString((objectType + "\u0000" + objectId).getBytes(StandardCharsets.UTF_8));
@@ -490,8 +490,8 @@ final class ExplorerStorageClient {
     record RawSearchHit(String objectType, String objectId, long version, long ontologyRevision,
                         JsonNode properties, Instant updatedAt) { }
     record SearchPage(List<SearchHit> hits, long total, boolean lowerBound, Instant indexUpdatedAt) { }
-    record GraphObject(String graphId, String objectType, String objectId, long version,
-                       long ontologyRevision, JsonNode payload, String correlationId, Instant updatedAt) { }
+    public record GraphObject(String graphId, String objectType, String objectId, long version,
+                              long ontologyRevision, JsonNode payload, String correlationId, Instant updatedAt) { }
     record GraphEdge(String relationId, String relationType, String direction,
                      GraphObject target, JsonNode properties) { }
     private record HttpResult(int status, JsonNode json) { }

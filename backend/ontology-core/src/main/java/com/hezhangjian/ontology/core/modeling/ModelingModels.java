@@ -90,6 +90,12 @@ public final class ModelingModels {
                                 List<Map<String, Object>> edits, List<String> requiredApprovals,
                                 Map<String, Object> diff) { }
 
+    public record ActionExecuteRequest(String previewToken, String idempotencyKey) { }
+
+    public record ActionExecution(UUID id, UUID actionId, UUID previewId, String status,
+                                  String correlationId, String safeError,
+                                  Instant submittedAt, Instant completedAt) { }
+
     public record FunctionTestRequest(Map<String, Object> inputs) { }
 
     public record FunctionTestResult(UUID functionId, String versionBinding, String outputType,
