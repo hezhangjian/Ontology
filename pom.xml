@@ -18,7 +18,7 @@
     <name>Ontology</name>
 
     <properties>
-        <java.version>21</java.version>
+        <java.version>25</java.version>
         <!-- This application is not published as a Maven library. -->
         <maven.deploy.skip>true</maven.deploy.skip>
         <!-- dependency -->
