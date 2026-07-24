@@ -7,6 +7,7 @@ servers:
   - url: http://localhost:4242
     description: Local development server
 tags:
+  - name: Dataset
   - name: Ontology
 paths:
   "/v1/ontologies":
@@ -85,8 +86,308 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/Ontology"
+  "/v1/ontologies/{ontologyId}/datasets":
+    get:
+      tags:
+        - Dataset
+      summary: List Datasets
+      operationId: listDatasets
+      parameters:
+        - in: path
+          name: ontologyId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: cursor
+          schema:
+            type: string
+            maxLength: 2048
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - in: query
+          name: search
+          schema:
+            type: string
+            maxLength: 120
+      responses:
+        "200":
+          description: Dataset Page
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/DatasetPage"
+  "/v1/ontologies/{ontologyId}/datasets/{datasetId}":
+    get:
+      tags:
+        - Dataset
+      summary: Get Dataset metadata and current version
+      operationId: getDataset
+      parameters:
+        - in: path
+          name: ontologyId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: datasetId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Dataset
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Dataset"
+    delete:
+      tags:
+        - Dataset
+      summary: Delete an unreferenced Dataset
+      operationId: deleteDataset
+      parameters:
+        - in: path
+          name: ontologyId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: datasetId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+  "/v1/ontologies/{ontologyId}/datasets/{datasetId}/versions":
+    get:
+      tags:
+        - Dataset
+      summary: List immutable Dataset versions
+      operationId: listDatasetVersions
+      parameters:
+        - in: path
+          name: ontologyId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: datasetId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Dataset Versions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  "$ref": "#/components/schemas/DatasetVersion"
+  "/v1/ontologies/{ontologyId}/datasets/{datasetId}/preview":
+    get:
+      tags:
+        - Dataset
+      summary: Preview a Dataset version
+      operationId: previewDataset
+      parameters:
+        - in: path
+          name: ontologyId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: datasetId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: cursor
+          schema:
+            type: string
+            maxLength: 2048
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - in: query
+          name: versionId
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Dataset Preview
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/DatasetPreview"
+  "/v1/ontologies/{ontologyId}/datasets/{datasetId}/query":
+    post:
+      tags:
+        - Dataset
+      summary: Filter and aggregate a Dataset version
+      operationId: queryDataset
+      parameters:
+        - in: path
+          name: ontologyId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: datasetId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/DatasetQueryReq"
+      responses:
+        "200":
+          description: Dataset Query Result
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/DatasetQueryResult"
+  "/v1/ontologies/{ontologyId}/datasets/{datasetId}/mappings":
+    get:
+      tags:
+        - Dataset
+      summary: List mappings sourced from a Dataset
+      operationId: listOntologyMappings
+      parameters:
+        - in: path
+          name: ontologyId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: datasetId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Ontology Mappings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  "$ref": "#/components/schemas/OntologyMapping"
+    post:
+      tags:
+        - Dataset
+      summary: Preview and create an object or link mapping
+      operationId: createOntologyMapping
+      parameters:
+        - in: path
+          name: ontologyId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: datasetId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/CreateOntologyMappingReq"
+      responses:
+        "201":
+          description: Created Mapping
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/OntologyMapping"
 components:
   schemas:
+    CreateLinkMappingReq:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - datasetVersionId
+        - relationTypeId
+        - sourceIdentityFields
+        - targetIdentityFields
+      properties:
+        kind:
+          type: string
+          const: LINK
+        datasetVersionId:
+          type: string
+          format: uuid
+        relationTypeId:
+          type: string
+          format: uuid
+        sourceIdentityFields:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        targetIdentityFields:
+          type: array
+          minItems: 1
+          items:
+            type: string
+    CreateObjectMappingReq:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - datasetVersionId
+        - objectTypeId
+        - identityFields
+        - propertyMappings
+      properties:
+        kind:
+          type: string
+          const: OBJECT
+        datasetVersionId:
+          type: string
+          format: uuid
+        objectTypeId:
+          type: string
+          format: uuid
+        identityFields:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        propertyMappings:
+          type: array
+          minItems: 1
+          items:
+            "$ref": "#/components/schemas/PropertyMapping"
+    CreateOntologyMappingReq:
+      oneOf:
+        - "$ref": "#/components/schemas/CreateObjectMappingReq"
+        - "$ref": "#/components/schemas/CreateLinkMappingReq"
     CreateOntologyReq:
       type: object
       additionalProperties: false
@@ -102,6 +403,326 @@ components:
         description:
           type: string
           maxLength: 1024
+    Dataset:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - description
+        - status
+        - ownerId
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum:
+            - ARCHIVED
+            - BUILDING
+            - DEGRADED
+            - FAILED
+            - READY
+        currentVersionId:
+          type:
+            - string
+            - "null"
+          format: uuid
+        ownerId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    DatasetPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            "$ref": "#/components/schemas/Dataset"
+        nextCursor:
+          type:
+            - string
+            - "null"
+    DatasetPreview:
+      type: object
+      additionalProperties: false
+      required:
+        - datasetVersionId
+        - schema
+        - rows
+        - truncated
+        - sourceWatermark
+      properties:
+        datasetVersionId:
+          type: string
+          format: uuid
+        schema:
+          type: array
+          items:
+            "$ref": "#/components/schemas/FieldSchema"
+        rows:
+          type: array
+          items:
+            "$ref": "#/components/schemas/PropertyValueMap"
+        nextCursor:
+          type:
+            - string
+            - "null"
+        truncated:
+          type: boolean
+        sourceWatermark:
+          type:
+            - string
+            - "null"
+    DatasetQueryReq:
+      type: object
+      additionalProperties: false
+      required:
+        - datasetVersionId
+      properties:
+        datasetVersionId:
+          type: string
+          format: uuid
+        dimensions:
+          type: array
+          maxItems: 5
+          items:
+            "$ref": "#/components/schemas/DimensionSpec"
+        metrics:
+          type: array
+          maxItems: 12
+          items:
+            "$ref": "#/components/schemas/MetricSpec"
+        filters:
+          type: array
+          maxItems: 40
+          items:
+            "$ref": "#/components/schemas/FieldFilter"
+        orderBy:
+          type: array
+          maxItems: 5
+          items:
+            "$ref": "#/components/schemas/OrderSpec"
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 5000
+          default: 500
+    DatasetQueryResult:
+      type: object
+      additionalProperties: false
+      required:
+        - datasetVersionId
+        - columns
+        - rows
+        - scannedRows
+        - sourceWatermark
+      properties:
+        datasetVersionId:
+          type: string
+          format: uuid
+        columns:
+          type: array
+          items:
+            type: string
+        rows:
+          type: array
+          items:
+            "$ref": "#/components/schemas/PropertyValueMap"
+        scannedRows:
+          type: integer
+          minimum: 0
+        sourceWatermark:
+          type:
+            - string
+            - "null"
+    DatasetVersion:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - datasetId
+        - version
+        - schema
+        - rowCount
+        - manifestUri
+        - pipelineRunId
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        datasetId:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          minimum: 1
+        schema:
+          type: array
+          items:
+            "$ref": "#/components/schemas/FieldSchema"
+        rowCount:
+          type: integer
+          minimum: 0
+        manifestUri:
+          type: string
+          format: uri
+        pipelineRunId:
+          type: string
+          format: uuid
+        sourceWatermark:
+          type:
+            - string
+            - "null"
+        createdAt:
+          type: string
+          format: date-time
+    DimensionSpec:
+      type: object
+      additionalProperties: false
+      required:
+        - field
+        - label
+      properties:
+        field:
+          type: string
+        label:
+          type: string
+        timeGrain:
+          type: string
+          enum:
+            - DAY
+            - MONTH
+            - QUARTER
+            - WEEK
+            - YEAR
+    FieldFilter:
+      type: object
+      additionalProperties: false
+      required:
+        - field
+        - operator
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+            - BETWEEN
+            - CONTAINS
+            - EQ
+            - GT
+            - GTE
+            - IN
+            - IS_NOT_NULL
+            - IS_NULL
+            - LT
+            - LTE
+            - NE
+            - NOT_IN
+        value: {}
+        values:
+          type: array
+          items: {}
+    FieldSchema:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - type
+        - nullable
+        - sensitive
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 240
+        type:
+          type: string
+          enum:
+            - BOOLEAN
+            - DATE
+            - DATETIME
+            - DECIMAL
+            - INTEGER
+            - JSON
+            - LONG
+            - STRING
+        nullable:
+          type: boolean
+        sensitive:
+          type: boolean
+        sampleValues:
+          type: array
+          maxItems: 10
+          items: {}
+    MappingPreview:
+      type: object
+      additionalProperties: false
+      required:
+        - sourceRows
+        - projectedEntities
+        - emptyIdentities
+        - duplicates
+        - conflicts
+      properties:
+        sourceRows:
+          type: integer
+          minimum: 0
+        projectedEntities:
+          type: integer
+          minimum: 0
+        emptyIdentities:
+          type: integer
+          minimum: 0
+        duplicates:
+          type: integer
+          minimum: 0
+        conflicts:
+          type: integer
+          minimum: 0
+        samples:
+          type: array
+          items:
+            "$ref": "#/components/schemas/PropertyValueMap"
+    MetricSpec:
+      type: object
+      additionalProperties: false
+      required:
+        - operation
+        - label
+      properties:
+        operation:
+          type: string
+          enum:
+            - AVG
+            - COUNT
+            - DISTINCT_COUNT
+            - MAX
+            - MIN
+            - SUM
+            - SUM_PER_DISTINCT
+        field:
+          type: string
+        divisorField:
+          type: string
+        label:
+          type: string
     Ontology:
       type: object
       additionalProperties: false
@@ -118,6 +739,74 @@ components:
         updatedAt:
           type: string
           format: date-time
+    OntologyMapping:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - kind
+        - datasetVersionId
+        - targetResourceId
+        - status
+        - preview
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum:
+            - LINK
+            - OBJECT
+        datasetVersionId:
+          type: string
+          format: uuid
+        targetResourceId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - BLOCKED
+            - DRAFT
+            - VALID
+        preview:
+          "$ref": "#/components/schemas/MappingPreview"
+        createdAt:
+          type: string
+          format: date-time
+    OrderSpec:
+      type: object
+      additionalProperties: false
+      required:
+        - field
+        - direction
+      properties:
+        field:
+          type: string
+        direction:
+          type: string
+          enum:
+            - ASC
+            - DESC
+    PropertyMapping:
+      type: object
+      additionalProperties: false
+      required:
+        - sourceField
+        - propertyId
+      properties:
+        sourceField:
+          type: string
+        propertyId:
+          type: string
+          format: uuid
+    PropertyValueMap:
+      type: object
+      description: Values keyed by stable property ID, field name, or query label according to the enclosing schema.
+      additionalProperties: true
     UpdateOntologyReq:
       type: object
       additionalProperties: false
