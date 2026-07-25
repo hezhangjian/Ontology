@@ -3,6 +3,7 @@
 
 # IDE
 .idea/**
+!.idea/vcs.xml
 .vscode/**
 !.vscode/extensions.json
 **.iml
