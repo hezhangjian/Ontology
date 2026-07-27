@@ -1,0 +1,27 @@
+# macOS
+**/.DS_Store
+
+# IDE
+.idea/**
+.vscode/**
+**.iml
+
+# AI Agent
+
+## Claude Code
+.claude
+
+## OpenCode
+.opencode
+
+# Maven
+**/target/
+
+# Node
+node_modules/
+
+# Vite
+dist/
+
+# Docker
+docker/data/
