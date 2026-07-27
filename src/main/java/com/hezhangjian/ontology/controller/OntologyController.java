@@ -45,6 +45,16 @@ public class OntologyController implements OntologyApi {
     }
 
     @Override
+    public ResponseEntity<Void> deleteOntology(String ontologyId) {
+        if (!ontologyRepository.existsById(ontologyId)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        ontologyRepository.deleteById(ontologyId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Override
     public ResponseEntity<List<Ontology>> listOntologies() {
         List<Ontology> ontologies = ontologyRepository.findAll().stream().map(this::toModel).toList();
         return ResponseEntity.ok(ontologies);
