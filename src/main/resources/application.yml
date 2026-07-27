@@ -17,6 +17,11 @@ spring:
 server:
   port: 4242
 
+ontology:
+  hugegraph:
+    host: ${HUGEGRAPH_HOST:localhost}
+    port: ${HUGEGRAPH_PORT:8080}
+
 management:
   endpoints:
     web:
