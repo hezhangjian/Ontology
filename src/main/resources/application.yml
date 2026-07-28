@@ -24,6 +24,11 @@ ontology:
   hugegraph:
     host: ${HUGEGRAPH_HOST:localhost}
     port: ${HUGEGRAPH_PORT:8080}
+  minio:
+    host: ${MINIO_HOST:localhost}
+    port: ${MINIO_PORT:9000}
+    access-key: ${MINIO_ACCESS_KEY}
+    secret-key: ${MINIO_SECRET_KEY}
   opensearch:
     host: ${OPENSEARCH_HOST:localhost}
     port: ${OPENSEARCH_PORT:9200}
