@@ -24,3 +24,5 @@ node_modules/
 
 # Vite
 dist/
+
+.env
