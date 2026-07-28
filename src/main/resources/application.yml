@@ -18,9 +18,15 @@ server:
   port: 4242
 
 ontology:
+  flink:
+    host: ${FLINK_HOST:localhost}
+    port: ${FLINK_PORT:8081}
   hugegraph:
     host: ${HUGEGRAPH_HOST:localhost}
     port: ${HUGEGRAPH_PORT:8080}
+  opensearch:
+    host: ${OPENSEARCH_HOST:localhost}
+    port: ${OPENSEARCH_PORT:9200}
 
 management:
   endpoints:
