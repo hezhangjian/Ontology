@@ -39,6 +39,28 @@ services:
     ports:
       - "8088:8088"
 
+  hugegraph-hubble-bootstrap:
+    image: hugegraph/hubble:1.7.0
+    depends_on:
+      hugegraph-hubble:
+        condition: service_started
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        api=http://hugegraph-hubble:8088/api/v1.2/graph-connections
+        for attempt in $$(seq 1 60); do
+          connections=$$(curl -fsS "$${api}" 2>/dev/null) && break
+          sleep 1
+        done
+        test -n "$${connections:-}"
+        if ! printf '%s' "$${connections}" \
+          | grep -q '"graph":"hugegraph","host":"hugegraph","port":8080'; then
+          curl -fsS -X POST -H 'Content-Type: application/json' \
+            -d '{"name":"ontology-current","graph":"hugegraph","host":"hugegraph","port":8080}' \
+            "$${api}"
+        fi
+    restart: "no"
+
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
