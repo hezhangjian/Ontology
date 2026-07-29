@@ -1,0 +1,17 @@
+export interface PropertyDefinition { id: string; apiName: string; displayName: string; valueType: string; primaryKey: boolean; titleProperty: boolean; searchable: boolean; filterable: boolean; sortable: boolean; sensitive: boolean }
+export interface ObjectTypeDefinition { id: string; apiName: string; displayName: string; maturity: string; properties: PropertyDefinition[] }
+export interface ObjectSummary { objectId: string; title: string; objectTypeApiName: string; objectTypeId: string; properties: Record<string, unknown>; redactedFields: string[]; quality: string; updatedAt: string }
+export interface ObjectSetRequest { objectTypeId: string; where: Record<string, unknown>; sort: Array<{ propertyId: string; direction: string }>; pageSize: number; cursor?: string; columns: string[] }
+export interface ObjectSetPage { objectTypeId: string; objectTypeName: string; visibleCount: number; countLowerBound: boolean; items: ObjectSummary[]; nextCursor?: string; queryFingerprint: string; indexUpdatedAt: string; properties: PropertyDefinition[] }
+export interface ExplorationView { id: string; name: string; description: string; objectTypeId: string; objectTypeName: string; ownerName: string; visibility: string; query: ObjectSetRequest; columns: string[]; perspective: string; viewConfig: Record<string, unknown>; updatedAt: string; warnings: string[] }
+export interface ObjectListView { id: string; name: string; description: string; objectTypeId: string; objectTypeName: string; sourceExplorationId?: string; ownerName: string; visibility: string; etag: number; itemCount: number; updatedAt: string }
+export interface ExplorerHome { objectTypes: ObjectTypeDefinition[]; objectCounts: Record<string, number>; recentObjects: ObjectSummary[]; explorations: ExplorationView[]; lists: ObjectListView[]; searchStatus: string; indexUpdatedAt: string }
+export interface SearchResponse { objects: ObjectSummary[]; objectTypes: ObjectTypeDefinition[]; explorations: ExplorationView[]; lists: ObjectListView[]; visibleObjectCount: number; indexUpdatedAt: string }
+export interface ObjectDetail { objectId: string; title: string; objectType: ObjectTypeDefinition; properties: Record<string, unknown>; redactedFields: string[]; quality: string; updatedAt: string }
+export interface ObjectLink { relationId: string; linkTypeId: string; linkTypeName: string; direction: string; targetObjectId: string; targetObjectTypeId: string; targetTitle: string; edgeProperties: Record<string, unknown> }
+export interface RelationGraphNode { objectId: string; title: string; objectTypeApiName: string; objectTypeId: string; properties: Record<string, unknown> }
+export interface RelationGraphEdge { relationId: string; linkTypeId: string; linkTypeName: string; sourceKey: string; targetKey: string; properties: Record<string, unknown> }
+export interface RelationGraph { nodes: RelationGraphNode[]; edges: RelationGraphEdge[]; truncated: boolean; nodeLimit: number; edgeLimit: number }
+export interface Capability { id: string; kind: string; displayName: string; apiName: string; executable: boolean; previewRequired: boolean }
+export interface CapabilityResponse { actions: Capability[]; functions: Capability[]; openTo: string[] }
+export interface ExportJob { id: string; status: string; format: string; rowCount: number; contentHash?: string; safeError?: string; createdAt: string; completedAt?: string; expiresAt: string; downloadPath?: string }
