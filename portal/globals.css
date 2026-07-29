@@ -57,17 +57,10 @@ button {
 }
 
 .brand-mark {
-  display: grid;
   flex: 0 0 auto;
   width: 34px;
   height: 34px;
-  place-items: center;
   border-radius: 9px;
-  color: #fff;
-  background: #4b66dd;
-  font-size: 19px;
-  font-weight: 800;
-  line-height: 1;
 }
 
 .sidebar-title {

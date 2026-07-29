@@ -9,7 +9,7 @@ function App() {
       <aside className={collapsed ? 'sidebar is-collapsed' : 'sidebar'}>
         {!collapsed && (
           <div className="sidebar-brand">
-            <div className="brand-mark">O</div>
+            <img className="brand-mark" src="/ontology-icon.svg" alt="" aria-hidden="true" />
             <h1 className="sidebar-title">Ontology</h1>
           </div>
         )}
