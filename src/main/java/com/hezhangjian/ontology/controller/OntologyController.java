@@ -4,14 +4,17 @@ import com.hezhangjian.ontology.api.OntologyApi;
 import com.hezhangjian.ontology.entity.OntologyEntity;
 import com.hezhangjian.ontology.model.CreateOntologyReq;
 import com.hezhangjian.ontology.model.Ontology;
+import com.hezhangjian.ontology.model.OntologyPage;
 import com.hezhangjian.ontology.model.UpdateOntologyReq;
+import com.hezhangjian.ontology.module.OffsetPageRequest;
 import com.hezhangjian.ontology.repo.OntologyRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.UUID;
 
 @RequiredArgsConstructor
@@ -55,9 +58,14 @@ public class OntologyController implements OntologyApi {
     }
 
     @Override
-    public ResponseEntity<List<Ontology>> listOntologies() {
-        List<Ontology> ontologies = ontologyRepository.findAll().stream().map(this::toModel).toList();
-        return ResponseEntity.ok(ontologies);
+    public ResponseEntity<OntologyPage> listOntologies(Integer limit, Integer offset) {
+        Page<OntologyEntity> page = ontologyRepository.findAll(OffsetPageRequest.of(limit, offset, Sort.by("id")));
+        OntologyPage response = new OntologyPage()
+                .items(page.getContent().stream().map(this::toModel).toList())
+                .total(page.getTotalElements())
+                .limit(limit)
+                .offset(offset);
+        return ResponseEntity.ok(response);
     }
 
     @Override

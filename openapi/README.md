@@ -7,15 +7,29 @@
 ### Resources
 
 - Use singular resource names for OpenAPI tags, such as `Ontology`, `Term`, and `Category`.
+- Use canonical domain casing outside URLs, such as `DataSet` in tags, operation IDs, schemas, summaries, and descriptions.
 - Use plural nouns for collection paths, such as `/ontologies` and `/terms`.
 - Use `id` for a resource's own identifier field.
 - Use `xxxId` for path parameters and foreign-key/reference fields.
+- Use `maxLength: 32` for `id`, `xxxId`, and `name` string fields in request schemas and path parameters.
+- Use `maxLength: 1024` for `description` string fields in request schemas.
+- Do not include validation limits on output resource schemas.
+- Do not include `required` on output resource schemas.
 
 ### CRUD
 
+- Use imperative verbs in operation summaries, such as `Create a DataSet`.
+- Use third-person singular verbs in operation descriptions, such as `Creates a DataSet`.
 - For simple CRUD APIs, name create request schemas as `CreateXxxReq`.
+- For simple CRUD APIs, name update request schemas as `UpdateXxxReq`.
 - For simple CRUD APIs, name resource schemas as `Xxx`.
 - For simple CRUD APIs, return the resource schema `Xxx` from create and update operations.
+
+### Pagination
+
+- Use `limit` and `offset` query parameters for list APIs.
+- For paginated list APIs, return an `XxxPage` schema with `items`, `total`, `limit`, and `offset`.
+- Do not include `required` on `XxxPage` schemas.
 
 ### Ordering
 

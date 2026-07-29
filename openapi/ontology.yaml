@@ -8,6 +8,7 @@ servers:
     description: Local development server
 tags:
   - name: Ontology
+  - name: DataSet
   - name: ObjectType
 paths:
   "/v1/ontologies":
@@ -16,15 +17,29 @@ paths:
         - Ontology
       summary: List Ontologies
       operationId: listOntologies
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 100
+            default: 20
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            format: int32
+            minimum: 0
+            default: 0
       responses:
         "200":
           description: Visible Ontologies
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  "$ref": "#/components/schemas/Ontology"
+                "$ref": "#/components/schemas/OntologyPage"
     post:
       tags:
         - Ontology
@@ -55,6 +70,7 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 32
       responses:
         "200":
           description: Ontology
@@ -73,6 +89,7 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 32
       requestBody:
         required: true
         content:
@@ -97,9 +114,150 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 32
       responses:
         "204":
           description: Deleted Ontology
+  /v1/ontologies/{ontologyId}/datasets:
+    get:
+      tags:
+        - DataSet
+      summary: List DataSets
+      operationId: listDataSets
+      parameters:
+        - in: path
+          name: ontologyId
+          required: true
+          schema:
+            type: string
+            maxLength: 32
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 100
+            default: 20
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            format: int32
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: DataSets in the Ontology
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataSetPage'
+    post:
+      tags:
+        - DataSet
+      summary: Create a DataSet
+      description: Creates a DataSet.
+      operationId: createDataSet
+      parameters:
+        - in: path
+          name: ontologyId
+          required: true
+          schema:
+            type: string
+            maxLength: 32
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDataSetReq'
+      responses:
+        '201':
+          description: Created DataSet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataSet'
+  /v1/ontologies/{ontologyId}/datasets/{datasetId}:
+    get:
+      tags:
+        - DataSet
+      summary: Get a DataSet
+      operationId: getDataSet
+      parameters:
+        - in: path
+          name: ontologyId
+          required: true
+          schema:
+            type: string
+            maxLength: 32
+        - in: path
+          name: datasetId
+          required: true
+          schema:
+            type: string
+            maxLength: 32
+      responses:
+        '200':
+          description: DataSet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataSet'
+    patch:
+      tags:
+        - DataSet
+      summary: Update a DataSet
+      description: Updates metadata for Pipeline DataSets. Replaces fields and rows for Manual DataSets.
+      operationId: updateDataSet
+      parameters:
+        - in: path
+          name: ontologyId
+          required: true
+          schema:
+            type: string
+            maxLength: 32
+        - in: path
+          name: datasetId
+          required: true
+          schema:
+            type: string
+            maxLength: 32
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDataSetReq'
+      responses:
+        '200':
+          description: Updated DataSet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataSet'
+    delete:
+      tags:
+        - DataSet
+      summary: Delete a DataSet
+      operationId: deleteDataSet
+      parameters:
+        - in: path
+          name: ontologyId
+          required: true
+          schema:
+            type: string
+            maxLength: 32
+        - in: path
+          name: datasetId
+          required: true
+          schema:
+            type: string
+            maxLength: 32
+      responses:
+        '204':
+          description: Deleted DataSet
   "/v1/ontologies/{ontologyId}/object-types":
     get:
       tags:
@@ -112,6 +270,7 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 32
       responses:
         "200":
           description: Object Types in the Ontology
@@ -132,6 +291,7 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 32
       requestBody:
         required: true
         content:
@@ -157,11 +317,13 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 32
         - in: path
           name: objectTypeId
           required: true
           schema:
             type: string
+            maxLength: 32
       responses:
         "200":
           description: Object Type
@@ -180,11 +342,13 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 32
         - in: path
           name: objectTypeId
           required: true
           schema:
             type: string
+            maxLength: 32
       requestBody:
         required: true
         content:
@@ -209,11 +373,13 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 32
         - in: path
           name: objectTypeId
           required: true
           schema:
             type: string
+            maxLength: 32
       responses:
         "204":
           description: Deleted Object Type
@@ -227,6 +393,7 @@ components:
       properties:
         id:
           type: string
+          maxLength: 32
         name:
           type: string
           minLength: 1
@@ -234,6 +401,35 @@ components:
         description:
           type: string
           maxLength: 1024
+    UpdateOntologyReq:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 32
+        description:
+          type: string
+          maxLength: 1024
+    OntologyPage:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            "$ref": "#/components/schemas/Ontology"
+        total:
+          type: integer
+          format: int64
+        limit:
+          type: integer
+          format: int32
+        offset:
+          type: integer
+          format: int32
     Ontology:
       type: object
       additionalProperties: false
@@ -250,11 +446,16 @@ components:
         updatedAt:
           type: string
           format: date-time
-    UpdateOntologyReq:
+    CreateDataSetReq:
       type: object
       additionalProperties: false
-      minProperties: 1
+      required:
+        - id
+        - name
       properties:
+        id:
+          type: string
+          maxLength: 32
         name:
           type: string
           minLength: 1
@@ -262,6 +463,88 @@ components:
         description:
           type: string
           maxLength: 1024
+        fields:
+          type: array
+          maxItems: 32
+          items:
+            $ref: '#/components/schemas/DataSetField'
+    UpdateDataSetReq:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        id:
+          type: string
+          maxLength: 32
+        name:
+          type: string
+          minLength: 1
+          maxLength: 32
+        description:
+          type: string
+          maxLength: 1024
+        fields:
+          type: array
+          maxItems: 32
+          items:
+            $ref: '#/components/schemas/DataSetField'
+    DataSetPage:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DataSet'
+        total:
+          type: integer
+          format: int64
+        limit:
+          type: integer
+          format: int32
+        offset:
+          type: integer
+          format: int32
+    DataSet:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/DataSetField'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    DataSetField:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 32
+        type:
+          type: string
+          enum:
+            - BOOLEAN
+            - DATE
+            - DATETIME
+            - DECIMAL
+            - INTEGER
+            - JSON
+            - TEXT
+        nullable:
+          type: boolean
     CreateObjectTypeReq:
       type: object
       additionalProperties: false
@@ -270,6 +553,19 @@ components:
       properties:
         id:
           type: string
+          maxLength: 32
+        name:
+          type: string
+          minLength: 1
+          maxLength: 32
+        description:
+          type: string
+          maxLength: 1024
+    UpdateObjectTypeReq:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
         name:
           type: string
           minLength: 1
@@ -295,15 +591,3 @@ components:
         updatedAt:
           type: string
           format: date-time
-    UpdateObjectTypeReq:
-      type: object
-      additionalProperties: false
-      minProperties: 1
-      properties:
-        name:
-          type: string
-          minLength: 1
-          maxLength: 32
-        description:
-          type: string
-          maxLength: 1024
