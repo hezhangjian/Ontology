@@ -10,6 +10,7 @@ tags:
   - name: Ontology
   - name: DataSet
   - name: ObjectType
+  - name: ObjectInstance
 paths:
   "/v1/ontologies":
     get:
@@ -383,6 +384,137 @@ paths:
       responses:
         "204":
           description: Deleted Object Type
+  /v1/ontologies/{ontologyId}/object-types/{objectTypeId}/objects:
+    get:
+      tags:
+        - ObjectInstance
+      summary: List Object Instances
+      operationId: listObjectInstances
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 0
+            default: 0
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Object Instance Page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectInstancePage'
+    post:
+      tags:
+        - ObjectInstance
+      summary: Create an Object Instance
+      operationId: createObjectInstance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateObjectInstanceReq'
+      responses:
+        '201':
+          description: Created Object Instance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectInstance'
+    parameters:
+      - name: objectTypeId
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 32
+      - name: ontologyId
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 32
+  /v1/ontologies/{ontologyId}/object-types/{objectTypeId}/objects/{objectId}:
+    get:
+      tags:
+        - ObjectInstance
+      summary: Get an Object Instance
+      operationId: getObjectInstance
+      responses:
+        '200':
+          description: Object Instance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectInstance'
+    patch:
+      tags:
+        - ObjectInstance
+      summary: Update an Object Instance
+      operationId: updateObjectInstance
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateObjectInstanceReq'
+      responses:
+        '200':
+          description: Updated Object Instance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectInstance'
+    delete:
+      tags:
+        - ObjectInstance
+      summary: Delete an Object Instance
+      operationId: deleteObjectInstance
+      responses:
+        '204':
+          description: Deleted Object Instance
+    parameters:
+      - name: objectId
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 32
+      - name: objectTypeId
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 32
+      - name: ontologyId
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 32
 components:
   schemas:
     CreateOntologyReq:
@@ -591,3 +723,69 @@ components:
         updatedAt:
           type: string
           format: date-time
+    CreateObjectInstanceReq:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - title
+        - properties
+      properties:
+        id:
+          type: string
+          maxLength: 32
+        title:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        properties:
+          type: object
+          additionalProperties: true
+    ObjectInstance:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        objectTypeId:
+          type: string
+        properties:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ObjectInstancePage:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObjectInstance'
+        total:
+          type: integer
+          format: int64
+        limit:
+          type: integer
+          format: int32
+        offset:
+          type: integer
+          format: int32
+    UpdateObjectInstanceReq:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        properties:
+          type: object
+          additionalProperties: true
