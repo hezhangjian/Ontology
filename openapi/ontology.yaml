@@ -408,11 +408,6 @@ paths:
             format: int32
             minimum: 0
             default: 0
-        - name: search
-          in: query
-          required: false
-          schema:
-            type: string
       responses:
         '200':
           description: Object Instance Page
