@@ -35,6 +35,7 @@
 
 - Prefer reader-friendly logical ordering over alphabetical ordering.
 - Order paths by resource hierarchy: place parent resources before their child resources.
+- Order path parameters from outermost resource to innermost resource, such as `ontologyId`, then `objectTypeId`, then `objectInstanceId`.
 - Within one resource, order operations by the normal CRUD flow: list, create, get, update, delete.
 - Order schemas near the resources that use them, and keep related request and response schemas together.
 - Within schemas, order fields by their role:
