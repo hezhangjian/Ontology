@@ -434,19 +434,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/ObjectInstance'
     parameters:
-      - name: objectTypeId
-        in: path
-        required: true
-        schema:
-          type: string
-          maxLength: 32
       - name: ontologyId
         in: path
         required: true
         schema:
           type: string
           maxLength: 32
-  /v1/ontologies/{ontologyId}/object-types/{objectTypeId}/object-instances/{objectId}:
+      - name: objectTypeId
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 32
+  /v1/ontologies/{ontologyId}/object-types/{objectTypeId}/object-instances/{objectInstanceId}:
     get:
       tags:
         - ObjectInstance
@@ -464,12 +464,6 @@ paths:
         - ObjectInstance
       summary: Update an Object Instance
       operationId: updateObjectInstance
-      parameters:
-        - name: If-Match
-          in: header
-          required: true
-          schema:
-            type: string
       requestBody:
         required: true
         content:
@@ -492,7 +486,7 @@ paths:
         '204':
           description: Deleted Object Instance
     parameters:
-      - name: objectId
+      - name: ontologyId
         in: path
         required: true
         schema:
@@ -504,7 +498,7 @@ paths:
         schema:
           type: string
           maxLength: 32
-      - name: ontologyId
+      - name: objectInstanceId
         in: path
         required: true
         schema:
