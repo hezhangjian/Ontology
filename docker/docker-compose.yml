@@ -168,6 +168,18 @@ services:
       retries: 12
       start_period: 30s
 
+  pulsar-bootstrap:
+    image: apachepulsar/pulsar:4.2.3
+    depends_on:
+      pulsar:
+        condition: service_healthy
+    command:
+      - /bin/bash
+      - -ec
+      - |
+        bin/pulsar-admin --admin-url http://pulsar:8080 tenants get ontology >/dev/null 2>&1 || bin/pulsar-admin --admin-url http://pulsar:8080 tenants create ontology --allowed-clusters standalone
+    restart: "no"
+
   skywalking-oap:
     image: apache/skywalking-oap-server:10.4.0
     depends_on:
