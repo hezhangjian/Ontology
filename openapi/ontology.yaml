@@ -384,7 +384,7 @@ paths:
       responses:
         "204":
           description: Deleted Object Type
-  /v1/ontologies/{ontologyId}/object-types/{objectTypeId}/objects:
+  /v1/ontologies/{ontologyId}/object-types/{objectTypeId}/object-instances:
     get:
       tags:
         - ObjectInstance
@@ -446,7 +446,7 @@ paths:
         schema:
           type: string
           maxLength: 32
-  /v1/ontologies/{ontologyId}/object-types/{objectTypeId}/objects/{objectId}:
+  /v1/ontologies/{ontologyId}/object-types/{objectTypeId}/object-instances/{objectId}:
     get:
       tags:
         - ObjectInstance
