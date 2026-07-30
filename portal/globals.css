@@ -121,6 +121,7 @@ button {
 .app-content {
   flex: 1;
   min-width: 0;
+  background: #ffffff;
 }
 
 .app-header {
@@ -129,6 +130,6 @@ button {
   justify-content: flex-end;
   min-height: 72px;
   padding: 0 28px;
-  background: #ffffff;
+  background: #f7f7f8;
   border-bottom: 1px solid #e1e7f0;
 }
