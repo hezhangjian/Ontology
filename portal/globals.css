@@ -38,7 +38,7 @@ button {
   position: relative;
   width: 284px;
   min-height: 100vh;
-  padding: 32px 24px;
+  padding: 24px 18px;
   background: #f7f7f8;
   border-right: 1px solid #e1e7f0;
   transition: width 180ms ease;
@@ -46,7 +46,20 @@ button {
 
 .sidebar.is-collapsed {
   width: 72px;
-  padding: 24px 16px;
+  padding: 24px 12px;
+}
+
+.sidebar-top {
+  display: grid;
+  min-height: 116px;
+  align-content: start;
+  gap: 14px;
+  padding-top: 8px;
+}
+
+.sidebar.is-collapsed .sidebar-top {
+  justify-items: center;
+  padding-top: 66px;
 }
 
 .sidebar-brand {
@@ -74,7 +87,6 @@ button {
 
 .sidebar-divider {
   height: 1px;
-  margin-top: 28px;
   background: #e2e5ea;
 }
 
@@ -97,7 +109,7 @@ button {
 }
 
 .sidebar.is-collapsed .sidebar-toggle {
-  top: 20px;
+  top: 27px;
   right: 12px;
 }
 
@@ -109,4 +121,14 @@ button {
 .app-content {
   flex: 1;
   min-width: 0;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 72px;
+  padding: 0 28px;
+  background: #ffffff;
+  border-bottom: 1px solid #e1e7f0;
 }

@@ -1,0 +1,24 @@
+.language-toggle {
+  display: grid;
+  min-width: 40px;
+  height: 32px;
+  padding: 0 10px;
+  place-items: center;
+  border: 1px solid #d8e0eb;
+  border-radius: 999px;
+  color: #172033;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 10%);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 680;
+  line-height: 1;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease;
+}
+
+.language-toggle:hover {
+  border-color: #b8c5d6;
+  background: #f8fafc;
+}

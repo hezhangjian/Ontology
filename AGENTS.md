@@ -38,6 +38,12 @@ When adding or updating REST API contracts, use `openapi/`.
 - When the user explicitly asks not to preserve compatibility aliases during a rename or migration, remove the old names
   across code, docs, command surfaces, and tests instead of keeping transitional aliases.
 
+## Portal
+
+- Put portal React components in `portal/components/`; give each component a lowercase kebab-case directory, keep component filenames in PascalCase, and keep component-only CSS beside it.
+- Put portal i18n setup and translation resources in `portal/i18n/`.
+- Put portal TypeScript types in `portal/types/`.
+
 ## API Contracts
 
 - Keep HTTP API contracts and related OpenAPI authoring documentation under `openapi/`.

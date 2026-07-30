@@ -1,0 +1,265 @@
+.ontology-switcher {
+  position: relative;
+  min-width: 0;
+}
+
+.ontology-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px 0 12px;
+  border: 1px solid #dce3ed;
+  border-radius: 8px;
+  color: #344054;
+  background: #ffffff;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease;
+}
+
+.ontology-trigger:hover {
+  border-color: #b8c5d6;
+  background: #f8fafc;
+}
+
+.sidebar.is-collapsed .ontology-trigger {
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+}
+
+.ontology-trigger-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: #172033;
+  font-size: 13px;
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ontology-trigger-arrow {
+  flex: 0 0 auto;
+  color: #7a8595;
+}
+
+.ontology-collapsed-name {
+  color: #172033;
+  font-size: 15px;
+  font-weight: 760;
+}
+
+.ontology-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  width: 248px;
+  padding: 6px;
+  border: 1px solid #dce3ed;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 16px 36px rgb(15 23 42 / 14%);
+}
+
+.ontology-menu-list {
+  display: grid;
+  gap: 2px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.ontology-option,
+.ontology-create-button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ontology-option {
+  min-height: 38px;
+  padding: 0 9px;
+}
+
+.ontology-option:hover,
+.ontology-create-button:hover {
+  background: #f1f5fb;
+}
+
+.ontology-option.is-active {
+  background: #e8f1ff;
+}
+
+.ontology-option span {
+  color: #172033;
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.ontology-create-button {
+  gap: 8px;
+  min-height: 36px;
+  margin-top: 6px;
+  padding: 0 9px;
+  color: #0b63ce;
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(15 23 42 / 32%);
+}
+
+.ontology-modal {
+  width: min(480px, 100%);
+  padding: 22px;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgb(15 23 42 / 22%);
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.modal-header h2 {
+  margin: 0;
+  color: #172033;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.modal-header p {
+  margin: 5px 0 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.modal-close {
+  display: grid;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  color: #667085;
+  background: transparent;
+  cursor: pointer;
+}
+
+.modal-close:hover {
+  background: #f2f4f7;
+}
+
+.ontology-form {
+  display: grid;
+  gap: 14px;
+}
+
+.ontology-form label {
+  display: grid;
+  gap: 6px;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.required-mark {
+  margin-left: 3px;
+  color: #d92d20;
+}
+
+.ontology-form input,
+.ontology-form textarea {
+  width: 100%;
+  border: 1px solid #d8e0eb;
+  border-radius: 8px;
+  color: #172033;
+  background: #ffffff;
+  font: inherit;
+  font-weight: 500;
+}
+
+.ontology-form input {
+  height: 38px;
+  padding: 0 11px;
+}
+
+.ontology-form textarea {
+  resize: vertical;
+  min-height: 92px;
+  padding: 10px 11px;
+}
+
+.ontology-form input:focus,
+.ontology-form textarea:focus {
+  border-color: #0b63ce;
+  outline: 3px solid rgb(11 99 206 / 14%);
+}
+
+.ontology-form label.has-error input {
+  border-color: #d92d20;
+}
+
+.ontology-form label.has-error input:focus {
+  border-color: #d92d20;
+  outline-color: rgb(217 45 32 / 14%);
+}
+
+.field-error {
+  color: #d92d20;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.primary-action,
+.secondary-action {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.primary-action {
+  border: 1px solid #0b63ce;
+  color: #ffffff;
+  background: #0b63ce;
+}
+
+.secondary-action {
+  border: 1px solid #d8e0eb;
+  color: #344054;
+  background: #ffffff;
+}

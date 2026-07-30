@@ -1,29 +1,40 @@
 import {useState} from 'react';
 import {PanelLeftClose, PanelLeftOpen} from 'lucide-react';
+import {useTranslation} from 'react-i18next';
+import {LanguageToggle} from './components/language-toggle/LanguageToggle';
+import {OntologySwitcher} from './components/ontology-switcher/OntologySwitcher';
 
 function App() {
   const [collapsed, setCollapsed] = useState(false);
+  const {t} = useTranslation();
 
   return (
     <div className="app-shell">
       <aside className={collapsed ? 'sidebar is-collapsed' : 'sidebar'}>
-        {!collapsed && (
-          <div className="sidebar-brand">
-            <img className="brand-mark" src="/ontology-icon.svg" alt="" aria-hidden="true" />
-            <h1 className="sidebar-title">Ontology</h1>
-          </div>
-        )}
         <button
-          aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
+          aria-label={collapsed ? t('navigation.expandSidebar') : t('navigation.collapseSidebar')}
           className="sidebar-toggle"
           onClick={() => setCollapsed((value) => !value)}
           type="button"
         >
           {collapsed ? <PanelLeftOpen size={22} /> : <PanelLeftClose size={22} />}
         </button>
-        {!collapsed && <div className="sidebar-divider" />}
+        <div className="sidebar-top">
+          {!collapsed && (
+            <div className="sidebar-brand">
+              <img className="brand-mark" src="/ontology-icon.svg" alt="" aria-hidden="true" />
+              <h1 className="sidebar-title">Ontology</h1>
+            </div>
+          )}
+          <OntologySwitcher collapsed={collapsed} onExpand={() => setCollapsed(false)} />
+          {!collapsed && <div className="sidebar-divider" />}
+        </div>
       </aside>
-      <main className="app-content" />
+      <main className="app-content">
+        <header className="app-header">
+          <LanguageToggle />
+        </header>
+      </main>
     </div>
   );
 }
