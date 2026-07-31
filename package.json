@@ -11,12 +11,16 @@
   "dependencies": {
     "@heroui/react": "^3.2.2",
     "@heroui/styles": "^3.2.2",
+    "@xyflow/react": "^12.10.0",
     "echarts": "^6.0.0",
     "i18next": "^26.3.6",
     "lucide-react": "^1.25.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-i18next": "^17.0.11",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "zustand": "^5.0.8",
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {

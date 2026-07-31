@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="https://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
@@ -13,24 +13,32 @@
 
     <groupId>com.hezhangjian</groupId>
     <artifactId>ontology</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.1.0-SNAPSHOT</version>
 
     <name>Ontology</name>
     <description>Open data and AI ontology platform</description>
 
     <properties>
+        <flink.version>2.3.0</flink.version>
         <java.version>25</java.version>
-        <!-- This application is not published as a Maven library. -->
-        <maven.deploy.skip>true</maven.deploy.skip>
-        <!-- dependency -->
+        <kafka.version>4.0.0</kafka.version>
         <lombok.version>1.18.46</lombok.version>
-        <!-- plugin -->
-        <maven.compiler.source>${java.version}</maven.compiler.source>
-        <maven.compiler.target>${java.version}</maven.compiler.target>
-        <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
+        <minio.version>8.5.17</minio.version>
+        <maven.compiler.release>25</maven.compiler.release>
+        <maven.compiler.source>${maven.compiler.release}</maven.compiler.source>
+        <maven.compiler.target>${maven.compiler.release}</maven.compiler.target>
+        <maven.deploy.skip>true</maven.deploy.skip>
+        <mysql.version>9.3.0</mysql.version>
+        <ontology.outputDirectory>${project.build.directory}/classes</ontology.outputDirectory>
+        <ontology.sourceDirectory>${project.basedir}/src/main/java</ontology.sourceDirectory>
+        <ontology.testOutputDirectory>${project.build.directory}/test-classes</ontology.testOutputDirectory>
+        <ontology.testSourceDirectory>${project.basedir}/src/test/java</ontology.testSourceDirectory>
         <openapi-generator-maven-plugin.version>7.14.0</openapi-generator-maven-plugin.version>
-        <spotbugs-maven-plugin.version>4.10.2.0</spotbugs-maven-plugin.version>
-        <spotless-maven-plugin.version>3.8.0</spotless-maven-plugin.version>
+        <parquet.version>1.15.2</parquet.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <pulsar.version>4.2.3</pulsar.version>
+        <spotbugs-maven-plugin.version>4.10.3.0</spotbugs-maven-plugin.version>
+        <spotless-maven-plugin.version>3.6.0</spotless-maven-plugin.version>
     </properties>
 
     <dependencies>
@@ -40,62 +48,22 @@
             <version>${lombok.version}</version>
             <scope>provided</scope>
         </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-jpa</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-validation</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.postgresql</groupId>
-            <artifactId>postgresql</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
 
-    <organization>
-        <name>hezhangjian</name>
-        <url>https://github.com/hezhangjian</url>
-    </organization>
-
-    <developers>
-        <developer>
-            <name>hezhangjian</name>
-            <email>hezhangjian97@gmail.com</email>
-        </developer>
-    </developers>
-
-    <scm>
-        <connection>scm:git:git@github.com:hezhangjian/Ontology.git</connection>
-        <developerConnection>scm:git:git@github.com:hezhangjian/Ontology.git</developerConnection>
-        <url>git@github.com:hezhangjian/Ontology.git</url>
-        <tag>HEAD</tag>
-    </scm>
-
     <build>
+        <sourceDirectory>${ontology.sourceDirectory}</sourceDirectory>
+        <testSourceDirectory>${ontology.testSourceDirectory}</testSourceDirectory>
+        <outputDirectory>${ontology.outputDirectory}</outputDirectory>
+        <testOutputDirectory>${ontology.testOutputDirectory}</testOutputDirectory>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>${maven-compiler-plugin.version}</version>
+                <version>3.15.0</version>
                 <configuration>
-                    <source>${maven.compiler.source}</source>
-                    <target>${maven.compiler.target}</target>
+                    <parameters>true</parameters>
                     <proc>full</proc>
+                    <release>${maven.compiler.release}</release>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
@@ -106,55 +74,25 @@
                 </configuration>
             </plugin>
             <plugin>
-                <groupId>org.openapitools</groupId>
-                <artifactId>openapi-generator-maven-plugin</artifactId>
-                <version>${openapi-generator-maven-plugin.version}</version>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.6.2</version>
                 <executions>
                     <execution>
-                        <id>generate-spring-api</id>
+                        <id>enforce-build-environment</id>
                         <goals>
-                            <goal>generate</goal>
+                            <goal>enforce</goal>
                         </goals>
                         <configuration>
-                            <inputSpec>${project.basedir}/openapi/ontology.yaml</inputSpec>
-                            <generatorName>spring</generatorName>
-                            <apiPackage>com.hezhangjian.ontology.api</apiPackage>
-                            <modelPackage>com.hezhangjian.ontology.model</modelPackage>
-                            <generateSupportingFiles>false</generateSupportingFiles>
-                            <configOptions>
-                                <annotationLibrary>none</annotationLibrary>
-                                <documentationProvider>none</documentationProvider>
-                                <interfaceOnly>true</interfaceOnly>
-                                <openApiNullable>false</openApiNullable>
-                                <skipDefaultInterface>true</skipDefaultInterface>
-                                <useSpringBoot3>true</useSpringBoot3>
-                                <useTags>true</useTags>
-                            </configOptions>
+                            <rules>
+                                <requireJavaVersion>
+                                    <version>[25,26)</version>
+                                </requireJavaVersion>
+                                <requireMavenVersion>
+                                    <version>[3.9,4)</version>
+                                </requireMavenVersion>
+                            </rules>
                         </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-                <configuration>
-                    <mainClass>com.hezhangjian.ontology.OntologyApplication</mainClass>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>com.github.spotbugs</groupId>
-                <artifactId>spotbugs-maven-plugin</artifactId>
-                <version>${spotbugs-maven-plugin.version}</version>
-                <configuration>
-                    <xmlOutput>true</xmlOutput>
-                    <failOnError>true</failOnError>
-                    <excludeFilterFile>ci/spotbugs/exclude.xml</excludeFilterFile>
-                </configuration>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
                     </execution>
                 </executions>
             </plugin>
@@ -164,19 +102,275 @@
                 <version>${spotless-maven-plugin.version}</version>
                 <configuration>
                     <java>
-                        <importOrder>
-                            <order>,java,static others</order>
-                        </importOrder>
                         <removeUnusedImports/>
                         <trimTrailingWhitespace/>
                         <endWithNewline/>
-                        <indent>
-                            <spaces>true</spaces>
-                            <spacesPerTab>4</spacesPerTab>
-                        </indent>
                     </java>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>com.github.spotbugs</groupId>
+                <artifactId>spotbugs-maven-plugin</artifactId>
+                <version>${spotbugs-maven-plugin.version}</version>
+                <configuration>
+                    <excludeFilterFile>${project.basedir}/ci/spotbugs/exclude.xml</excludeFilterFile>
                 </configuration>
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>application</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>com.h2database</groupId>
+                    <artifactId>h2</artifactId>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
+                    <groupId>com.mysql</groupId>
+                    <artifactId>mysql-connector-j</artifactId>
+                    <version>${mysql.version}</version>
+                </dependency>
+                <dependency>
+                    <groupId>io.minio</groupId>
+                    <artifactId>minio</artifactId>
+                    <version>${minio.version}</version>
+                </dependency>
+                <dependency>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-client-api</artifactId>
+                    <version>3.4.1</version>
+                </dependency>
+                <dependency>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-client-runtime</artifactId>
+                    <version>3.4.1</version>
+                </dependency>
+                <dependency>
+                    <groupId>org.apache.kafka</groupId>
+                    <artifactId>kafka-clients</artifactId>
+                    <version>${kafka.version}</version>
+                </dependency>
+                <dependency>
+                    <groupId>org.apache.parquet</groupId>
+                    <artifactId>parquet-avro</artifactId>
+                    <version>${parquet.version}</version>
+                </dependency>
+                <dependency>
+                    <groupId>org.apache.pulsar</groupId>
+                    <artifactId>pulsar-client</artifactId>
+                    <version>${pulsar.version}</version>
+                </dependency>
+                <dependency>
+                    <groupId>org.flywaydb</groupId>
+                    <artifactId>flyway-core</artifactId>
+                </dependency>
+                <dependency>
+                    <groupId>org.flywaydb</groupId>
+                    <artifactId>flyway-database-postgresql</artifactId>
+                </dependency>
+                <dependency>
+                    <groupId>org.postgresql</groupId>
+                    <artifactId>postgresql</artifactId>
+                    <scope>runtime</scope>
+                </dependency>
+                <dependency>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-actuator</artifactId>
+                </dependency>
+                <dependency>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-data-jpa</artifactId>
+                </dependency>
+                <dependency>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-jdbc</artifactId>
+                </dependency>
+                <dependency>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+                </dependency>
+                <dependency>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-security</artifactId>
+                </dependency>
+                <dependency>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-validation</artifactId>
+                </dependency>
+                <dependency>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-web</artifactId>
+                </dependency>
+                <dependency>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-webflux</artifactId>
+                </dependency>
+                <dependency>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-test</artifactId>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
+                    <groupId>org.springframework.security</groupId>
+                    <artifactId>spring-security-test</artifactId>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+            <build>
+                <finalName>ontology</finalName>
+                <plugins>
+                    <plugin>
+                        <groupId>org.openapitools</groupId>
+                        <artifactId>openapi-generator-maven-plugin</artifactId>
+                        <version>${openapi-generator-maven-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>generate-spring-api</id>
+                                <goals>
+                                    <goal>generate</goal>
+                                </goals>
+                                <configuration>
+                                    <inputSpec>${project.basedir}/openapi/ontology.yaml</inputSpec>
+                                    <generatorName>spring</generatorName>
+                                    <apiPackage>com.hezhangjian.ontology.api</apiPackage>
+                                    <modelPackage>com.hezhangjian.ontology.model</modelPackage>
+                                    <generateSupportingFiles>false</generateSupportingFiles>
+                                    <configOptions>
+                                        <annotationLibrary>none</annotationLibrary>
+                                        <containerDefaultToNull>true</containerDefaultToNull>
+                                        <documentationProvider>none</documentationProvider>
+                                        <interfaceOnly>true</interfaceOnly>
+                                        <openApiNullable>false</openApiNullable>
+                                        <skipDefaultInterface>true</skipDefaultInterface>
+                                        <useSpringBoot3>true</useSpringBoot3>
+                                        <useTags>true</useTags>
+                                    </configOptions>
+                                    <schemaMappings>
+                                        <schemaMapping>SseEmitter=org.springframework.web.servlet.mvc.method.annotation.SseEmitter</schemaMapping>
+                                    </schemaMappings>
+                                    <importMappings>
+                                        <importMapping>SseEmitter=org.springframework.web.servlet.mvc.method.annotation.SseEmitter</importMapping>
+                                    </importMappings>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-maven-plugin</artifactId>
+                        <configuration>
+                            <mainClass>com.hezhangjian.ontology.OntologyApplication</mainClass>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>repackage</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>flink-job</id>
+            <properties>
+                <maven.compiler.release>17</maven.compiler.release>
+                <ontology.outputDirectory>${project.build.directory}/flink-classes</ontology.outputDirectory>
+                <ontology.sourceDirectory>${project.basedir}/src/flink/java</ontology.sourceDirectory>
+                <ontology.testOutputDirectory>${project.build.directory}/flink-test-classes</ontology.testOutputDirectory>
+                <ontology.testSourceDirectory>${project.basedir}/src/flink-test/java</ontology.testSourceDirectory>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                </dependency>
+                <dependency>
+                    <groupId>io.minio</groupId>
+                    <artifactId>minio</artifactId>
+                    <version>${minio.version}</version>
+                </dependency>
+                <dependency>
+                    <groupId>org.apache.flink</groupId>
+                    <artifactId>flink-clients</artifactId>
+                    <version>${flink.version}</version>
+                    <scope>provided</scope>
+                </dependency>
+                <dependency>
+                    <groupId>org.apache.flink</groupId>
+                    <artifactId>flink-streaming-java</artifactId>
+                    <version>${flink.version}</version>
+                    <scope>provided</scope>
+                </dependency>
+                <dependency>
+                    <groupId>org.apache.kafka</groupId>
+                    <artifactId>kafka-clients</artifactId>
+                    <version>${kafka.version}</version>
+                </dependency>
+                <dependency>
+                    <groupId>com.mysql</groupId>
+                    <artifactId>mysql-connector-j</artifactId>
+                    <version>${mysql.version}</version>
+                </dependency>
+                <dependency>
+                    <groupId>org.postgresql</groupId>
+                    <artifactId>postgresql</artifactId>
+                </dependency>
+                <dependency>
+                    <groupId>org.apache.pulsar</groupId>
+                    <artifactId>pulsar-client</artifactId>
+                    <version>${pulsar.version}</version>
+                </dependency>
+                <dependency>
+                    <groupId>org.junit.jupiter</groupId>
+                    <artifactId>junit-jupiter</artifactId>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+            <build>
+                <finalName>ontology-flink-job</finalName>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-shade-plugin</artifactId>
+                        <version>3.6.1</version>
+                        <executions>
+                            <execution>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>shade</goal>
+                                </goals>
+                                <configuration combine.self="override">
+                                    <createDependencyReducedPom>false</createDependencyReducedPom>
+                                    <filters>
+                                        <filter>
+                                            <artifact>*:*</artifact>
+                                            <excludes>
+                                                <exclude>META-INF/*.DSA</exclude>
+                                                <exclude>META-INF/*.RSA</exclude>
+                                                <exclude>META-INF/*.SF</exclude>
+                                            </excludes>
+                                        </filter>
+                                    </filters>
+                                    <transformers>
+                                        <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                            <mainClass>com.hezhangjian.ontology.flink.PipelineJob</mainClass>
+                                        </transformer>
+                                    </transformers>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

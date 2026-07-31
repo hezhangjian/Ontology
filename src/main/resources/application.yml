@@ -1,55 +1,104 @@
 spring:
   application:
     name: ontology
+  config:
+    import: optional:file:docker/.env[.properties]
   datasource:
-    driver-class-name: org.postgresql.Driver
     password: ${POSTGRES_PASSWORD:ontology}
     url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/ontology}
     username: ${POSTGRES_USER:ontology}
+  flyway:
+    default-schema: control
+    schemas: control,instance
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     open-in-view: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
+        default_schema: control
   servlet:
     multipart:
-      max-file-size: 32MB
-      max-request-size: 64MB
+      max-file-size: 25MB
+      max-request-size: 110MB
 
 server:
-  port: 4242
+  port: ${SERVER_PORT:4242}
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info
 
 ontology:
+  actions:
+    outbox-interval-ms: ${ACTION_OUTBOX_INTERVAL_MS:1000}
+  agent:
+    core-url: ${ONTOLOGY_URL:http://localhost:${SERVER_PORT:4242}}
+    deepseek:
+      api-key: ${DEEP_SEEK_API_KEY:${DEEPSEEK_API_KEY:}}
+      base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+      model: ${DEEPSEEK_MODEL:deepseek-v4-flash}
+    max-tool-rounds: ${AGENT_MAX_TOOL_ROUNDS:12}
+  connections:
+    allowed-private-hosts: ${CONNECTIONS_ALLOWED_PRIVATE_HOSTS:localhost}
+    encryption-key: ${CONNECTION_MASTER_KEY}
+    key-version: 1
+    local-csv-max-file-bytes: ${LOCAL_CSV_MAX_FILE_BYTES:26214400}
+    local-csv-max-files: ${LOCAL_CSV_MAX_FILES:50}
+    local-csv-max-total-bytes: ${LOCAL_CSV_MAX_TOTAL_BYTES:104857600}
+    production-mode: ${CONNECTIONS_PRODUCTION_MODE:false}
+    secret-directory: ${CONNECTIONS_SECRET_DIRECTORY:/run/secrets}
+    test-token-ttl: 15m
+  dashboards:
+    cache-ttl: 60s
+    edit-lock-ttl: 15m
+    suppression-threshold: 5
+    token-secret: ${APPLICATION_TOKEN_SECRET}
+    token-ttl: 15m
+  explorer:
+    token-secret: ${APPLICATION_TOKEN_SECRET}
+    token-ttl: 15m
   flink:
     host: ${FLINK_HOST:localhost}
     port: ${FLINK_PORT:8081}
   hugegraph:
     host: ${HUGEGRAPH_HOST:localhost}
     port: ${HUGEGRAPH_PORT:8080}
-  llm:
-    base-url: ${LLM_BASE_URL}
-    model: ${LLM_MODEL}
-    api-key: ${LLM_API_KEY:}
   minio:
-    host: ${MINIO_HOST:localhost}
-    port: ${MINIO_PORT:9000}
-    access-key: ${MINIO_ACCESS_KEY}
-    secret-key: ${MINIO_SECRET_KEY}
+    access-key: ${MINIO_ROOT_USER}
+    import-bucket: ${LOCAL_CSV_BUCKET:import-staging}
+    runtime-url: ${FLINK_MINIO_URL:http://minio:9000}
+    secret-key: ${MINIO_ROOT_PASSWORD}
+    url: ${MINIO_URL:http://localhost:9000}
+    warehouse-bucket: ${MINIO_WAREHOUSE_BUCKET:warehouse}
+    workload-bucket: ${FLINK_WORKLOAD_BUCKET:flink-workloads}
   opensearch:
     host: ${OPENSEARCH_HOST:localhost}
     port: ${OPENSEARCH_PORT:9200}
+  pipelines:
+    control-topic: persistent://platform/system/pipeline-runtime-events
+    job-jar: ${FLINK_JOB_JAR:target/ontology-flink-job.jar}
+    platform-topic: persistent://platform/ingestion
+    workload-cleanup-interval: ${FLINK_WORKLOAD_CLEANUP_INTERVAL:10m}
+    workload-key: ${FLINK_WORKLOAD_KEY}
+    workload-ttl: ${FLINK_WORKLOAD_TTL:30m}
+  projection:
+    max-retries: ${PROJECTION_MAX_RETRIES:3}
+    retry-delay: ${PROJECTION_RETRY_DELAY:10s}
+  object-instances:
+    import-batch-size: ${OBJECT_INSTANCE_IMPORT_BATCH_SIZE:500}
+    outbox-interval-ms: ${OBJECT_INSTANCE_OUTBOX_INTERVAL_MS:1000}
+    reconciliation-interval-ms: ${OBJECT_INSTANCE_RECONCILIATION_INTERVAL_MS:300000}
   pulsar:
     host: ${PULSAR_HOST:localhost}
+    listener-name: ${PULSAR_LISTENER_NAME:external}
     port: ${PULSAR_PORT:6650}
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info
-  endpoint:
-    health:
-      probes:
-        enabled: true
+    url: ${PULSAR_URL:pulsar://localhost:6650}
+  web:
+    multipart-max-parts: ${SERVER_MULTIPART_MAX_PARTS:100}

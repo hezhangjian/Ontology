@@ -11,6 +11,15 @@ tags:
   - name: DataSet
   - name: ObjectType
   - name: ObjectInstance
+  - name: Conversation
+  - name: Dashboard
+  - name: DataConnection
+  - name: Dataset
+  - name: Explorer
+  - name: Modeling
+  - name: Pipeline
+  - name: ProjectionAdmin
+  - name: RelationInstance
 paths:
   "/v1/ontologies":
     get:
@@ -91,6 +100,7 @@ paths:
           schema:
             type: string
             maxLength: 32
+        - $ref: '#/components/parameters/IfMatch'
       requestBody:
         required: true
         content:
@@ -119,10 +129,13 @@ paths:
       responses:
         "204":
           description: Deleted Ontology
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
   /v1/ontologies/{ontologyId}/datasets:
     get:
       tags:
         - DataSet
+        - Dataset
       summary: List DataSets
       operationId: listDataSets
       parameters:
@@ -147,6 +160,10 @@ paths:
             format: int32
             minimum: 0
             default: 0
+        - name: search
+          in: query
+          schema:
+            type: string
       responses:
         '200':
           description: DataSets in the Ontology
@@ -157,6 +174,7 @@ paths:
     post:
       tags:
         - DataSet
+        - Dataset
       summary: Create a DataSet
       description: Creates a DataSet.
       operationId: createDataSet
@@ -180,10 +198,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DataSet'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
   /v1/ontologies/{ontologyId}/datasets/{datasetId}:
     get:
       tags:
         - DataSet
+        - Dataset
       summary: Get a DataSet
       operationId: getDataSet
       parameters:
@@ -209,6 +230,7 @@ paths:
     patch:
       tags:
         - DataSet
+        - Dataset
       summary: Update a DataSet
       description: Updates metadata for Pipeline DataSets. Replaces fields and rows for Manual DataSets.
       operationId: updateDataSet
@@ -225,6 +247,7 @@ paths:
           schema:
             type: string
             maxLength: 32
+        - $ref: '#/components/parameters/IfMatch'
       requestBody:
         required: true
         content:
@@ -241,6 +264,7 @@ paths:
     delete:
       tags:
         - DataSet
+        - Dataset
       summary: Delete a DataSet
       operationId: deleteDataSet
       parameters:
@@ -259,6 +283,9 @@ paths:
       responses:
         '204':
           description: Deleted DataSet
+    parameters:
+      - $ref: '#/components/parameters/DatasetId'
+      - $ref: '#/components/parameters/OntologyId'
   "/v1/ontologies/{ontologyId}/object-types":
     get:
       tags:
@@ -272,6 +299,11 @@ paths:
           schema:
             type: string
             maxLength: 32
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
       responses:
         "200":
           description: Object Types in the Ontology
@@ -306,6 +338,8 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/ObjectType"
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
   "/v1/ontologies/{ontologyId}/object-types/{objectTypeId}":
     get:
       tags:
@@ -384,6 +418,9 @@ paths:
       responses:
         "204":
           description: Deleted Object Type
+    parameters:
+      - $ref: '#/components/parameters/ObjectTypeId'
+      - $ref: '#/components/parameters/OntologyId'
   /v1/ontologies/{ontologyId}/object-types/{objectTypeId}/object-instances:
     get:
       tags:
@@ -408,6 +445,8 @@ paths:
             format: int32
             minimum: 0
             default: 0
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Cursor'
       responses:
         '200':
           description: Object Instance Page
@@ -433,6 +472,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ObjectInstance'
+          headers:
+            ETag:
+              schema:
+                type: string
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
     parameters:
       - name: ontologyId
         in: path
@@ -455,6 +500,10 @@ paths:
       responses:
         '200':
           description: Object Instance
+          headers:
+            ETag:
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -463,7 +512,10 @@ paths:
       tags:
         - ObjectInstance
       summary: Update an Object Instance
+      description: Merge patch; null removes an override and the primary key is immutable.
       operationId: updateObjectInstance
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
       requestBody:
         required: true
         content:
@@ -473,6 +525,10 @@ paths:
       responses:
         '200':
           description: Updated Object Instance
+          headers:
+            ETag:
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -482,6 +538,8 @@ paths:
         - ObjectInstance
       summary: Delete an Object Instance
       operationId: deleteObjectInstance
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
       responses:
         '204':
           description: Deleted Object Instance
@@ -504,6 +562,3315 @@ paths:
         schema:
           type: string
           maxLength: 32
+  /v1/ontologies/{ontologyId}/action-executions:
+    get:
+      tags:
+        - Modeling
+      summary: List Action Executions
+      operationId: actionExecutions
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List Action Executions response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ActionExecution'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/action-executions/{id}:
+    get:
+      tags:
+        - Modeling
+      summary: Get an Action Execution
+      operationId: actionExecution
+      responses:
+        '200':
+          description: Get an Action Execution response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionExecution'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/action-types:
+    get:
+      tags:
+        - Modeling
+      summary: List Action Types
+      operationId: listActionTypes
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List Action Types response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ResourceView'
+    post:
+      tags:
+        - Modeling
+      summary: Create Action
+      operationId: createAction
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceDraftRequest'
+        required: true
+      responses:
+        '201':
+          description: Create Action response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceView'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/action-types/{id}:
+    get:
+      tags:
+        - Modeling
+      summary: Get an Action Type
+      operationId: action
+      responses:
+        '200':
+          description: Get an Action Type response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceView'
+    patch:
+      tags:
+        - Modeling
+      summary: Update Action
+      operationId: updateAction
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceIdentityRequest'
+        required: true
+      responses:
+        '200':
+          description: Update Action response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceView'
+    delete:
+      tags:
+        - Modeling
+      summary: Delete Action
+      operationId: deleteAction
+      responses:
+        '204':
+          description: Delete Action response
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/action-types/{id}/executions:
+    post:
+      tags:
+        - Modeling
+      summary: Execute Action
+      operationId: executeAction
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActionExecuteRequest'
+        required: true
+      responses:
+        '202':
+          description: Execute Action response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionExecution'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/action-types/{id}/previews:
+    post:
+      tags:
+        - Modeling
+      summary: Preview Action
+      operationId: previewAction
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActionPreviewRequest'
+      responses:
+        '200':
+          description: Preview Action response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionPreview'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/agents/{agentId}/conversations:
+    get:
+      tags:
+        - Conversation
+      summary: List Conversations
+      operationId: listConversations
+      responses:
+        '200':
+          description: List Conversations response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Conversation'
+    post:
+      tags:
+        - Conversation
+      summary: Create Conversation
+      operationId: createConversation
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConversationRequest'
+      responses:
+        '201':
+          description: Created Conversation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+    parameters:
+      - name: agentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/agents/{agentId}/conversations/{id}:
+    get:
+      tags:
+        - Conversation
+      summary: Get Conversation
+      operationId: getConversation
+      responses:
+        '200':
+          description: Get Conversation response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+    parameters:
+      - name: agentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/agents/{agentId}/conversations/{id}/action-confirmations:
+    post:
+      tags:
+        - Conversation
+      summary: Confirm Action
+      operationId: confirmAction
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmActionRequest'
+        required: true
+      responses:
+        '200':
+          description: Confirm Action response
+          content:
+            application/json:
+              schema:
+                type: object
+    parameters:
+      - name: agentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/agents/{agentId}/conversations/{id}/confirm-rule-transform:
+    post:
+      tags:
+        - Conversation
+      summary: Confirm Rule Transform
+      operationId: confirmRuleTransform
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+        required: true
+      responses:
+        '200':
+          description: Confirm Rule Transform response
+          content:
+            application/json:
+              schema:
+                type: object
+    parameters:
+      - name: agentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/agents/{agentId}/conversations/{id}/messages:
+    post:
+      tags:
+        - Conversation
+      summary: Send a Message
+      operationId: send
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+        required: true
+      responses:
+        '200':
+          description: Server-sent event stream
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/SseEmitter'
+    parameters:
+      - name: agentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/connection-tests:
+    post:
+      tags:
+        - DataConnection
+      summary: Test a Connection
+      operationId: test
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestRequest'
+        required: true
+      responses:
+        '200':
+          description: Test a Connection response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestResult'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/connections:
+    get:
+      tags:
+        - DataConnection
+      summary: List Connections
+      operationId: listConnections
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 20
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: owner
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List Connections response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataSourcePage'
+    post:
+      tags:
+        - DataConnection
+      summary: Create Connection
+      operationId: createConnection
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRequest'
+        required: true
+      responses:
+        '200':
+          description: Create Connection response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataSource'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/connections/{id}:
+    get:
+      tags:
+        - DataConnection
+      summary: Get Connection
+      operationId: getConnection
+      responses:
+        '200':
+          description: Get Connection response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataSource'
+    patch:
+      tags:
+        - DataConnection
+      summary: Update Connection
+      operationId: updateConnection
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRequest'
+        required: true
+      responses:
+        '200':
+          description: Update Connection response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataSource'
+    delete:
+      tags:
+        - DataConnection
+      summary: Delete Connection
+      operationId: deleteConnection
+      responses:
+        '200':
+          description: Delete Connection response
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/connections/{id}/assets:
+    get:
+      tags:
+        - DataConnection
+      summary: List Connection Assets
+      operationId: listConnectionAssets
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 50
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List Connection Assets response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetPage'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/connections/{id}/assets/{assetId}:
+    get:
+      tags:
+        - DataConnection
+      summary: Get a Connection Asset
+      operationId: asset
+      responses:
+        '200':
+          description: Get a Connection Asset response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataSourceAsset'
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/connections/{id}/assets/{assetId}/infer-schema:
+    post:
+      tags:
+        - DataConnection
+      summary: Infer Schema
+      operationId: inferSchema
+      responses:
+        '200':
+          description: Infer Schema response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryRun'
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/connections/{id}/assets/{assetId}/preview:
+    post:
+      tags:
+        - DataConnection
+      summary: Preview Connection Asset
+      operationId: previewConnectionAsset
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreviewRequest'
+      responses:
+        '200':
+          description: Preview Connection Asset response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetPreview'
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/connections/{id}/assets/{assetId}/usage:
+    get:
+      tags:
+        - DataConnection
+      summary: Get Connection Asset Usage
+      operationId: getConnectionAssetUsage
+      responses:
+        '200':
+          description: Get Connection Asset Usage response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetUsage'
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/connections/{id}/disable:
+    post:
+      tags:
+        - DataConnection
+      summary: Disable
+      operationId: disable
+      responses:
+        '200':
+          description: Disable response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataSource'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/connections/{id}/discover:
+    post:
+      tags:
+        - DataConnection
+      summary: Discover
+      operationId: discover
+      responses:
+        '200':
+          description: Discover response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryRun'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/connections/{id}/enable:
+    post:
+      tags:
+        - DataConnection
+      summary: Enable
+      operationId: enable
+      responses:
+        '200':
+          description: Enable response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataSource'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/connections/{id}/overview:
+    get:
+      tags:
+        - DataConnection
+      summary: Get Connection Overview
+      operationId: getConnectionOverview
+      responses:
+        '200':
+          description: Get Connection Overview response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Overview'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/connections/{id}/pipelines:
+    get:
+      tags:
+        - DataConnection
+      summary: List Connection Pipelines
+      operationId: listConnectionPipelines
+      responses:
+        '200':
+          description: List Connection Pipelines response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PipelineSummary'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/connections/{id}/rotate-credential:
+    post:
+      tags:
+        - DataConnection
+      summary: Rotate a Connection Credential
+      operationId: rotate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RotateCredentialRequest'
+        required: true
+      responses:
+        '200':
+          description: Rotate a Connection Credential response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialSummary'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/connections/{id}/runs:
+    get:
+      tags:
+        - DataConnection
+      summary: List Connection Runs
+      operationId: listConnectionRuns
+      responses:
+        '200':
+          description: List Connection Runs response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PipelineRunSummary'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/connections/{id}/test:
+    post:
+      tags:
+        - DataConnection
+      summary: Retest
+      operationId: retest
+      responses:
+        '200':
+          description: Retest response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestResult'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/connections/local-csv:
+    post:
+      tags:
+        - DataConnection
+      summary: Import Local Csv
+      operationId: importLocalCsv
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: description
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: tags
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+              required:
+                - files
+      responses:
+        '200':
+          description: Import Local Csv response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataSource'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/credentials:
+    get:
+      tags:
+        - DataConnection
+      summary: List Credentials
+      operationId: listCredentials
+      parameters:
+        - name: usable
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: List Credentials response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CredentialSummary'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/dashboard-query-plans/{planId}/drilldown-token:
+    post:
+      tags:
+        - Dashboard
+      summary: Create a Dashboard Drilldown Token
+      operationId: drilldown
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DrilldownRequest'
+        required: true
+      responses:
+        '200':
+          description: Create a Dashboard Drilldown Token response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DrilldownToken'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+      - name: planId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /v1/ontologies/{ontologyId}/dashboard-query-plans/{planId}/execute:
+    post:
+      tags:
+        - Dashboard
+      summary: Execute a Dashboard Query Plan
+      operationId: execute
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DashboardExecuteRequest'
+        required: true
+      responses:
+        '200':
+          description: Execute a Dashboard Query Plan response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardBatchResult'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+      - name: planId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /v1/ontologies/{ontologyId}/dashboard-query-plans/{planId}/filter-options:
+    post:
+      tags:
+        - Dashboard
+      summary: List Dashboard Filter Options
+      operationId: filterOptions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FilterOptionsRequest'
+        required: true
+      responses:
+        '200':
+          description: List Dashboard Filter Options response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: {}
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+      - name: planId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /v1/ontologies/{ontologyId}/dashboard-query-plans/{planId}/widgets:batch:
+    post:
+      tags:
+        - Dashboard
+      summary: Execute a Dashboard Widget Batch
+      operationId: executeBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DashboardExecuteRequest'
+        required: true
+      responses:
+        '200':
+          description: Execute a Dashboard Widget Batch response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardBatchResult'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+      - name: planId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /v1/ontologies/{ontologyId}/dashboards:
+    get:
+      tags:
+        - Dashboard
+      summary: List Dashboards
+      operationId: listDashboards
+      parameters:
+        - name: keyword
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: lifecycle
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: favorites
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: List Dashboards response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DashboardSummary'
+    post:
+      tags:
+        - Dashboard
+      summary: Create Dashboard
+      operationId: createDashboard
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DashboardCreateRequest'
+        required: true
+      responses:
+        '200':
+          description: Create Dashboard response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardDetail'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/dashboards/{id}:
+    get:
+      tags:
+        - Dashboard
+      summary: Get Dashboard
+      operationId: getDashboard
+      responses:
+        '200':
+          description: Get Dashboard response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardDetail'
+    patch:
+      tags:
+        - Dashboard
+      summary: Update a Dashboard
+      operationId: patch
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DashboardPatchRequest'
+        required: true
+      responses:
+        '200':
+          description: Update a Dashboard response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardDetail'
+    delete:
+      tags:
+        - Dashboard
+      summary: Delete Dashboard
+      operationId: deleteDashboard
+      responses:
+        '200':
+          description: Delete Dashboard response
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/dashboards/{id}/archive:
+    post:
+      tags:
+        - Dashboard
+      summary: Archive Dashboard
+      operationId: archiveDashboard
+      responses:
+        '200':
+          description: Archive Dashboard response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardDetail'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/dashboards/{id}/copy:
+    post:
+      tags:
+        - Dashboard
+      summary: Copy a Dashboard
+      operationId: copy
+      responses:
+        '200':
+          description: Copy a Dashboard response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardDetail'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/dashboards/{id}/draft:
+    get:
+      tags:
+        - Dashboard
+      summary: Get Dashboard Draft
+      operationId: getDashboardDraft
+      responses:
+        '200':
+          description: Get Dashboard Draft response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardDraftView'
+    put:
+      tags:
+        - Dashboard
+      summary: Update a Dashboard Draft
+      operationId: putDraft
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DashboardDefinition'
+        required: true
+      responses:
+        '200':
+          description: Update a Dashboard Draft response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardDraftView'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/dashboards/{id}/edit-lock:
+    post:
+      tags:
+        - Dashboard
+      summary: Acquire a Dashboard Edit Lock
+      operationId: lock
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditLockRequest'
+      responses:
+        '200':
+          description: Acquire a Dashboard Edit Lock response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardEditLock'
+    delete:
+      tags:
+        - Dashboard
+      summary: Release a Dashboard Edit Lock
+      operationId: release
+      responses:
+        '200':
+          description: Release a Dashboard Edit Lock response
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/dashboards/{id}/edit-lock/renew:
+    post:
+      tags:
+        - Dashboard
+      summary: Renew a Dashboard Edit Lock
+      operationId: renew
+      responses:
+        '200':
+          description: Renew a Dashboard Edit Lock response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardEditLock'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/dashboards/{id}/favorite:
+    put:
+      tags:
+        - Dashboard
+      summary: Favorite a Dashboard
+      operationId: favorite
+      responses:
+        '200':
+          description: Favorite a Dashboard response
+    delete:
+      tags:
+        - Dashboard
+      summary: Unfavorite a Dashboard
+      operationId: unfavorite
+      responses:
+        '200':
+          description: Unfavorite a Dashboard response
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/dashboards/{id}/health:
+    get:
+      tags:
+        - Dashboard
+      summary: Get Dashboard Health
+      operationId: getDashboardHealth
+      responses:
+        '200':
+          description: Get Dashboard Health response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardHealth'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/dashboards/{id}/permissions:
+    get:
+      tags:
+        - Dashboard
+      summary: List Dashboard Permissions
+      operationId: listDashboardPermissions
+      responses:
+        '200':
+          description: List Dashboard Permissions response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DashboardPermission'
+    put:
+      tags:
+        - Dashboard
+      summary: Replace Dashboard Permissions
+      operationId: replaceDashboardPermissions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DashboardPermissionsRequest'
+        required: true
+      responses:
+        '200':
+          description: Replace Dashboard Permissions response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DashboardPermission'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/dashboards/{id}/publish:
+    post:
+      tags:
+        - Dashboard
+      summary: Publish Dashboard
+      operationId: publishDashboard
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishRequest'
+      responses:
+        '200':
+          description: Publish Dashboard response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardDetail'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/dashboards/{id}/query-plan:
+    get:
+      tags:
+        - Dashboard
+      summary: Get a Dashboard Query Plan
+      operationId: plan
+      responses:
+        '200':
+          description: Get a Dashboard Query Plan response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardQueryPlanView'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/dashboards/{id}/restore:
+    post:
+      tags:
+        - Dashboard
+      summary: Restore a Dashboard
+      operationId: restore
+      responses:
+        '200':
+          description: Restore a Dashboard response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardDetail'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/dashboards/{id}/usage:
+    get:
+      tags:
+        - Dashboard
+      summary: Get Dashboard Usage
+      operationId: getDashboardUsage
+      responses:
+        '200':
+          description: Get Dashboard Usage response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardUsage'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/dashboards/{id}/validation:
+    post:
+      tags:
+        - Dashboard
+      summary: Validate Dashboard
+      operationId: validateDashboard
+      responses:
+        '200':
+          description: Validate Dashboard response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardValidationResult'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/datasets/{datasetId}/mapping-preview:
+    get:
+      tags:
+        - Dataset
+      summary: Preview a Dataset Mapping
+      operationId: previewDatasetMapping
+      parameters:
+        - name: identityField
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: titleField
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Preview a Dataset Mapping response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetMappingPreview'
+    parameters:
+      - $ref: '#/components/parameters/DatasetId'
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/datasets/{datasetId}/preview:
+    get:
+      tags:
+        - Dataset
+      summary: Preview Dataset
+      operationId: previewDataset
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 0
+      responses:
+        '200':
+          description: Preview Dataset response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetPreview'
+    parameters:
+      - $ref: '#/components/parameters/DatasetId'
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/datasets/{datasetId}/query:
+    post:
+      tags:
+        - Dataset
+      summary: Query Dataset
+      operationId: queryDataset
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatasetQueryReq'
+        required: true
+      responses:
+        '200':
+          description: Query Dataset response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetQueryResult'
+    parameters:
+      - $ref: '#/components/parameters/DatasetId'
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/explorer/home:
+    get:
+      tags:
+        - Explorer
+      summary: Get Explorer Home
+      operationId: getExplorerHome
+      responses:
+        '200':
+          description: Get Explorer Home response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExplorerHome'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/functions:
+    get:
+      tags:
+        - Modeling
+      summary: List Functions
+      operationId: listFunctions
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List Functions response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ResourceView'
+    post:
+      tags:
+        - Modeling
+      summary: Create Function
+      operationId: createFunction
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceDraftRequest'
+        required: true
+      responses:
+        '201':
+          description: Create Function response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceView'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/functions/{id}:
+    get:
+      tags:
+        - Modeling
+      summary: Get a Function
+      operationId: function
+      responses:
+        '200':
+          description: Get a Function response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceView'
+    patch:
+      tags:
+        - Modeling
+      summary: Update Function
+      operationId: updateFunction
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceIdentityRequest'
+        required: true
+      responses:
+        '200':
+          description: Update Function response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceView'
+    delete:
+      tags:
+        - Modeling
+      summary: Delete Function
+      operationId: deleteFunction
+      responses:
+        '204':
+          description: Delete Function response
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/functions/{id}/draft:
+    post:
+      tags:
+        - Modeling
+      summary: Create Function Draft
+      operationId: createFunctionDraft
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceDraftRequest'
+        required: true
+      responses:
+        '200':
+          description: Create Function Draft response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceView'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/functions/{id}/executions:
+    post:
+      tags:
+        - Modeling
+      summary: Test Function
+      operationId: testFunction
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FunctionTestRequest'
+      responses:
+        '200':
+          description: Test Function response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FunctionExecution'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/graph-schema-rebuilds:
+    post:
+      tags:
+        - ProjectionAdmin
+      summary: Rebuild Graph Schema
+      operationId: rebuildGraphSchema
+      responses:
+        '200':
+          description: Rebuild Graph Schema response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphSchemaRebuildResult'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/health:
+    get:
+      tags:
+        - Modeling
+      summary: Get Modeling Health
+      operationId: getModelingHealth
+      responses:
+        '200':
+          description: Get Modeling Health response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HealthIssue'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/index-rebuilds:
+    post:
+      tags:
+        - ProjectionAdmin
+      summary: Rebuild Projection Indexes
+      operationId: rebuild
+      responses:
+        '200':
+          description: Rebuild Projection Indexes response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RebuildResult'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/interfaces:
+    get:
+      tags:
+        - Modeling
+      summary: List Interfaces
+      operationId: interfaces
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List Interfaces response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ResourceView'
+    post:
+      tags:
+        - Modeling
+      summary: Create Interface
+      operationId: createInterface
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceDraftRequest'
+        required: true
+      responses:
+        '201':
+          description: Create Interface response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceView'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/interfaces/{id}:
+    get:
+      tags:
+        - Modeling
+      summary: Get an Interface
+      operationId: interfaceType
+      responses:
+        '200':
+          description: Get an Interface response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceView'
+    patch:
+      tags:
+        - Modeling
+      summary: Update Interface
+      operationId: updateInterface
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceIdentityRequest'
+        required: true
+      responses:
+        '200':
+          description: Update Interface response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceView'
+    delete:
+      tags:
+        - Modeling
+      summary: Delete Interface
+      operationId: deleteInterface
+      responses:
+        '204':
+          description: Delete Interface response
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/interfaces/{interfaceId}/object-sets/query:
+    post:
+      tags:
+        - Explorer
+      summary: Interface Query
+      operationId: interfaceQuery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InterfaceQueryRequest'
+      responses:
+        '200':
+          description: Interface Query response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InterfaceQueryPage'
+    parameters:
+      - name: interfaceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/link-types:
+    get:
+      tags:
+        - Modeling
+      summary: List Link Types
+      operationId: linkTypes
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List Link Types response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ResourceView'
+    post:
+      tags:
+        - Modeling
+      summary: Create Link Type
+      operationId: createLinkType
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceDraftRequest'
+        required: true
+      responses:
+        '201':
+          description: Create Link Type response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceView'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/link-types/{id}:
+    get:
+      tags:
+        - Modeling
+      summary: Get a Link Type
+      operationId: linkType
+      responses:
+        '200':
+          description: Get a Link Type response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceView'
+    patch:
+      tags:
+        - Modeling
+      summary: Update Link Type
+      operationId: updateLinkType
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceIdentityRequest'
+        required: true
+      responses:
+        '200':
+          description: Update Link Type response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceView'
+    delete:
+      tags:
+        - Modeling
+      summary: Delete Link Type
+      operationId: deleteLinkType
+      responses:
+        '204':
+          description: Delete Link Type response
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/object-sets/aggregate:
+    post:
+      tags:
+        - Explorer
+      summary: Aggregate
+      operationId: aggregate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AggregateRequest'
+        required: true
+      responses:
+        '200':
+          description: Aggregate response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AggregateResponse'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/object-sets/facets:
+    post:
+      tags:
+        - Explorer
+      summary: Facets
+      operationId: facets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FacetRequest'
+        required: true
+      responses:
+        '200':
+          description: Facets response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FacetResult'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/object-sets/query:
+    post:
+      tags:
+        - Explorer
+      summary: Query Object Set
+      operationId: queryObjectSet
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ObjectSetRequest'
+        required: true
+      responses:
+        '200':
+          description: Query Object Set response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectSetPage'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/object-sets/search-around:
+    post:
+      tags:
+        - Explorer
+      summary: Search Around
+      operationId: searchAround
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchAroundRequest'
+        required: true
+      responses:
+        '200':
+          description: Search Around response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkPage'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/object-types/{id}/backing:
+    get:
+      tags:
+        - Modeling
+      summary: Object Type Backing
+      operationId: objectTypeBacking
+      responses:
+        '200':
+          description: Object Type Backing response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectTypeBackingView'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/object-types/{id}/drafts:
+    post:
+      tags:
+        - Modeling
+      summary: Create Object Draft
+      operationId: createObjectDraft
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceDraftRequest'
+        required: true
+      responses:
+        '200':
+          description: Create Object Draft response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceView'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/object-types/{objectTypeId}/object-instances/query:
+    post:
+      tags:
+        - ObjectInstance
+      summary: Query Object Instances
+      operationId: queryObjectInstances
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ObjectInstanceQueryReq'
+      responses:
+        '200':
+          description: Cursor page of Object Instances
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectInstancePage'
+    parameters:
+      - $ref: '#/components/parameters/ObjectTypeId'
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/object-types/{objectTypeId}/object-instances/aggregate:
+    post:
+      tags:
+        - ObjectInstance
+      summary: Aggregate Object Instances
+      operationId: aggregateObjectInstances
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ObjectInstanceAggregateReq'
+      responses:
+        '200':
+          description: Aggregate rows
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectInstanceAggregateResult'
+    parameters:
+      - $ref: '#/components/parameters/ObjectTypeId'
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/object-types/{objectTypeId}/object-instances/bulk:
+    post:
+      tags:
+        - ObjectInstance
+      summary: Mutate Object Instances in Bulk
+      operationId: bulkMutateObjectInstances
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkObjectInstanceReq'
+      responses:
+        '200':
+          description: Per-item mutation results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkObjectInstanceResult'
+    parameters:
+      - $ref: '#/components/parameters/ObjectTypeId'
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/object-types/{objectTypeId}/object-instances/imports:
+    post:
+      tags:
+        - ObjectInstance
+      summary: Import a Dataset into an Object Type
+      operationId: createObjectInstanceImport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateObjectInstanceImportReq'
+      responses:
+        '202':
+          description: Import accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectInstanceImportJob'
+    parameters:
+      - $ref: '#/components/parameters/ObjectTypeId'
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/object-types/{objectTypeId}/object-instances/imports/{jobId}:
+    get:
+      tags:
+        - ObjectInstance
+      summary: Get Object Instance Import
+      operationId: getObjectInstanceImport
+      responses:
+        '200':
+          description: Import status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectInstanceImportJob'
+    delete:
+      tags:
+        - ObjectInstance
+      summary: Cancel Object Instance Import
+      operationId: cancelObjectInstanceImport
+      responses:
+        '202':
+          description: Cancellation requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectInstanceImportJob'
+    parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/ObjectTypeId'
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/object-types/{objectTypeId}/object-instances/imports/{jobId}/errors:
+    get:
+      tags:
+        - ObjectInstance
+      summary: List Object Instance Import Errors
+      operationId: listObjectInstanceImportErrors
+      responses:
+        '200':
+          description: Safe row-level import errors
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ObjectInstanceImportError'
+    parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/ObjectTypeId'
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/object-types/{objectTypeId}/object-instances/{objectId}/projection-status:
+    get:
+      tags:
+        - ObjectInstance
+      summary: Get Object Instance Projection Status
+      operationId: getObjectInstanceProjectionStatus
+      responses:
+        '200':
+          description: Per-target projection versions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectInstanceProjectionStatus'
+    parameters:
+      - name: objectId
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 512
+      - $ref: '#/components/parameters/ObjectTypeId'
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/object-types/{objectTypeId}/object-instances/reconciliations:
+    post:
+      tags:
+        - ObjectInstance
+      summary: Reconcile Object Instance Projections
+      operationId: reconcileObjectInstances
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReconcileObjectInstancesReq'
+      responses:
+        '202':
+          description: Reconciliation accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectInstanceReconciliationJob'
+    parameters:
+      - $ref: '#/components/parameters/ObjectTypeId'
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/object-types/{objectTypeId}/object-instances/reconciliations/{jobId}:
+    get:
+      tags:
+        - ObjectInstance
+      summary: Get Object Instance Reconciliation
+      operationId: getObjectInstanceReconciliation
+      responses:
+        '200':
+          description: Reconciliation status and differences
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectInstanceReconciliationResult'
+    parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/ObjectTypeId'
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/explorer/object-types/{objectTypeId}/objects/{objectId}:
+    get:
+      tags:
+        - Explorer
+      summary: Get Object Detail
+      operationId: getObjectDetail
+      responses:
+        '200':
+          description: Get Object Detail response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectDetail'
+    parameters:
+      - name: objectId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: objectTypeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/explorer/object-types/{objectTypeId}/objects/{objectId}/activity:
+    get:
+      tags:
+        - Explorer
+      summary: List Object Activity
+      operationId: listObjectActivity
+      responses:
+        '200':
+          description: List Object Activity response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ActivityItem'
+    parameters:
+      - name: objectId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: objectTypeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/explorer/object-types/{objectTypeId}/objects/{objectId}/capabilities:
+    get:
+      tags:
+        - Explorer
+      summary: Get Object Capabilities
+      operationId: getObjectCapabilities
+      responses:
+        '200':
+          description: Get Object Capabilities response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapabilityResponse'
+    parameters:
+      - name: objectId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: objectTypeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/explorer/object-types/{objectTypeId}/objects/{objectId}/links:
+    post:
+      tags:
+        - Explorer
+      summary: Links
+      operationId: links
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkRequest'
+      responses:
+        '200':
+          description: Links response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkPage'
+    parameters:
+      - name: objectId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: objectTypeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/explorer/object-types/{objectTypeId}/objects/{objectId}/provenance:
+    get:
+      tags:
+        - Explorer
+      summary: Get Object Provenance
+      operationId: getObjectProvenance
+      responses:
+        '200':
+          description: Get Object Provenance response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProvenanceView'
+    parameters:
+      - name: objectId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: objectTypeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/explorer/object-types/{objectTypeId}/objects/{objectId}/relations:
+    get:
+      tags:
+        - RelationInstance
+      summary: Query Relation Instances for an Object
+      operationId: listRelationInstances
+      parameters:
+        - name: linkTypeId
+          in: query
+          description: Optional caller-defined Relation Type ID
+          schema:
+            $ref: '#/components/schemas/ResourceId'
+        - name: direction
+          in: query
+          schema:
+            type: string
+            enum:
+              - BOTH
+              - IN
+              - OUT
+            default: BOTH
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Relations with explicit source and target references
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelationInstancePage'
+    parameters:
+      - name: objectId
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/ObjectTypeId'
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/pipeline-node-types:
+    get:
+      tags:
+        - Pipeline
+      summary: List Pipeline Node Types
+      operationId: nodeTypes
+      responses:
+        '200':
+          description: List Pipeline Node Types response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NodeType'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/pipeline-previews/{previewId}:
+    get:
+      tags:
+        - Pipeline
+      summary: Get Pipeline Preview
+      operationId: getPipelinePreview
+      responses:
+        '200':
+          description: Get Pipeline Preview response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewRun'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+      - name: previewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /v1/ontologies/{ontologyId}/pipeline-previews/{previewId}/cancel:
+    post:
+      tags:
+        - Pipeline
+      summary: Cancel Preview
+      operationId: cancelPreview
+      responses:
+        '200':
+          description: Cancel Preview response
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+      - name: previewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /v1/ontologies/{ontologyId}/pipeline-runs/{runId}:
+    get:
+      tags:
+        - Pipeline
+      summary: Get Pipeline Run
+      operationId: getPipelineRun
+      responses:
+        '200':
+          description: Get Pipeline Run response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunDetail'
+    delete:
+      tags:
+        - Pipeline
+      summary: Cancel a Pipeline Run
+      operationId: cancel
+      responses:
+        '200':
+          description: Cancel a Pipeline Run response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineRun'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /v1/ontologies/{ontologyId}/pipeline-runs/{runId}/events:
+    get:
+      tags:
+        - Pipeline
+      summary: List Pipeline Run Events
+      operationId: listPipelineRunEvents
+      responses:
+        '200':
+          description: List Pipeline Run Events response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RunEvent'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /v1/ontologies/{ontologyId}/pipeline-runs/{runId}/events/stream:
+    get:
+      tags:
+        - Pipeline
+      summary: Event Stream
+      operationId: eventStream
+      parameters:
+        - name: afterSequence
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+            default: 0
+      responses:
+        '200':
+          description: Event Stream response
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/SseEmitter'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /v1/ontologies/{ontologyId}/pipeline-runs/{runId}/logs:
+    get:
+      tags:
+        - Pipeline
+      summary: Get Pipeline Run Logs
+      operationId: getPipelineRunLogs
+      responses:
+        '200':
+          description: Get Pipeline Run Logs response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: {}
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /v1/ontologies/{ontologyId}/pipeline-runs/{runId}/metrics:
+    get:
+      tags:
+        - Pipeline
+      summary: Get Pipeline Run Metrics
+      operationId: getPipelineRunMetrics
+      responses:
+        '200':
+          description: Get Pipeline Run Metrics response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /v1/ontologies/{ontologyId}/pipeline-runs/{runId}/replay-dlq:
+    post:
+      tags:
+        - Pipeline
+      summary: Replay DLQ
+      operationId: replayDlq
+      responses:
+        '200':
+          description: Replay DLQ response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineRun'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /v1/ontologies/{ontologyId}/pipeline-runs/{runId}/retry:
+    post:
+      tags:
+        - Pipeline
+      summary: Retry Pipeline Run
+      operationId: retryPipelineRun
+      responses:
+        '200':
+          description: Retry Pipeline Run response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineRun'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /v1/ontologies/{ontologyId}/pipeline-runs/{id}/savepoints:
+    post:
+      tags:
+        - Pipeline
+      summary: Create a Pipeline Savepoint
+      operationId: savepoint
+      responses:
+        '200':
+          description: Create a Pipeline Savepoint response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineRun'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/pipeline-runs/{id}/stop:
+    post:
+      tags:
+        - Pipeline
+      summary: Stop a Pipeline Run
+      operationId: stop
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SavepointRequest'
+      responses:
+        '200':
+          description: Stop a Pipeline Run response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineRun'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/pipelines:
+    get:
+      tags:
+        - Pipeline
+      summary: List Pipelines
+      operationId: listPipelines
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 20
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: mode
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: lifecycle
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: runStatus
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: owner
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List Pipelines response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelinePage'
+    post:
+      tags:
+        - Pipeline
+      summary: Create Pipeline
+      operationId: createPipeline
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePipelineRequest'
+        required: true
+      responses:
+        '200':
+          description: Create Pipeline response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pipeline'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/pipelines/{id}:
+    get:
+      tags:
+        - Pipeline
+      summary: Get Pipeline
+      operationId: getPipeline
+      responses:
+        '200':
+          description: Get Pipeline response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pipeline'
+    delete:
+      tags:
+        - Pipeline
+      summary: Delete Pipeline
+      operationId: deletePipeline
+      responses:
+        '200':
+          description: Delete Pipeline response
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/pipelines/{id}/archive:
+    post:
+      tags:
+        - Pipeline
+      summary: Archive Pipeline
+      operationId: archivePipeline
+      responses:
+        '200':
+          description: Archive Pipeline response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pipeline'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/pipelines/{id}/draft:
+    get:
+      tags:
+        - Pipeline
+      summary: Get Pipeline Draft
+      operationId: getPipelineDraft
+      responses:
+        '200':
+          description: Get Pipeline Draft response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineDraft'
+    put:
+      tags:
+        - Pipeline
+      summary: Update Draft
+      operationId: updateDraft
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDraftRequest'
+        required: true
+      responses:
+        '200':
+          description: Update Draft response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pipeline'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/pipelines/{id}/duplicate:
+    post:
+      tags:
+        - Pipeline
+      summary: Duplicate
+      operationId: duplicate
+      responses:
+        '200':
+          description: Duplicate response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pipeline'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/pipelines/{pipelineId}/materialize-dataset:
+    post:
+      tags:
+        - Dataset
+      summary: Materialize
+      operationId: materialize
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaterializeRequest'
+      responses:
+        '200':
+          description: Materialize response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dataset'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+      - name: pipelineId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /v1/ontologies/{ontologyId}/pipelines/{id}/pause:
+    post:
+      tags:
+        - Pipeline
+      summary: Pause
+      operationId: pause
+      responses:
+        '200':
+          description: Pause response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pipeline'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/pipelines/{id}/previews:
+    post:
+      tags:
+        - Pipeline
+      summary: Start Pipeline Preview
+      operationId: startPipelinePreview
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreviewRequest'
+        required: true
+      responses:
+        '200':
+          description: Start Pipeline Preview response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewRun'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/pipelines/{id}/publication:
+    post:
+      tags:
+        - Pipeline
+      summary: Publish Pipeline
+      operationId: publishPipeline
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishRequest'
+        required: true
+      responses:
+        '200':
+          description: Publish Pipeline response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pipeline'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/pipelines/{id}/reset-offsets:
+    post:
+      tags:
+        - Pipeline
+      summary: Reset Offsets
+      operationId: resetOffsets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OffsetResetRequest'
+        required: true
+      responses:
+        '200':
+          description: Reset Offsets response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pipeline'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/pipelines/{id}/resume:
+    post:
+      tags:
+        - Pipeline
+      summary: Resume
+      operationId: resume
+      responses:
+        '200':
+          description: Resume response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pipeline'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/pipelines/{id}/runs:
+    get:
+      tags:
+        - Pipeline
+      summary: List Pipeline Runs
+      operationId: runs
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 20
+      responses:
+        '200':
+          description: List Pipeline Runs response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineRunPage'
+    post:
+      tags:
+        - Pipeline
+      summary: Start Batch Pipeline Run
+      operationId: startBatchPipelineRun
+      responses:
+        '200':
+          description: Start Batch Pipeline Run response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineRun'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/pipelines/{id}/start:
+    post:
+      tags:
+        - Pipeline
+      summary: Start
+      operationId: start
+      responses:
+        '200':
+          description: Start response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineRun'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/pipelines/{id}/validate:
+    post:
+      tags:
+        - Pipeline
+      summary: Validate Pipeline
+      operationId: validatePipeline
+      responses:
+        '200':
+          description: Validate Pipeline response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResult'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/properties:
+    get:
+      tags:
+        - Modeling
+      summary: List Properties
+      operationId: listProperties
+      parameters:
+        - name: objectTypeId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List Properties response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PropertyView'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/properties/{id}:
+    get:
+      tags:
+        - Modeling
+      summary: Get a Property
+      operationId: property
+      responses:
+        '200':
+          description: Get a Property response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyView'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/relation-instances/query:
+    post:
+      tags:
+        - RelationInstance
+      summary: Query Relation Instances
+      description: Queries visible relations around one source Object Instance.
+      operationId: queryRelationInstances
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RelationInstanceQueryReq'
+      responses:
+        '200':
+          description: Relation Instances with explicit source and target
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelationInstancePage'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/search:
+    get:
+      tags:
+        - Modeling
+      summary: Search Modeling Resources
+      operationId: searchModelingResources
+      parameters:
+        - name: query
+          in: query
+          required: false
+          schema:
+            type: string
+            default: ''
+      responses:
+        '200':
+          description: Search Modeling Resources response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SearchResult'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/search/objects:
+    post:
+      tags:
+        - Explorer
+      summary: Search Objects
+      operationId: searchObjects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+        required: true
+      responses:
+        '200':
+          description: Search Objects response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
+  /v1/ontologies/{ontologyId}/summary:
+    get:
+      tags:
+        - Modeling
+      summary: Get Modeling Summary
+      operationId: getModelingSummary
+      responses:
+        '200':
+          description: Get Modeling Summary response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelingSummary'
+    parameters:
+      - $ref: '#/components/parameters/OntologyId'
 components:
   schemas:
     CreateOntologyReq:
@@ -511,6 +3878,7 @@ components:
       additionalProperties: false
       required:
         - name
+        - id
       properties:
         id:
           type: string
@@ -534,6 +3902,8 @@ components:
         description:
           type: string
           maxLength: 1024
+        id:
+          $ref: '#/components/schemas/ResourceId'
     OntologyPage:
       type: object
       additionalProperties: false
@@ -567,6 +3937,12 @@ components:
         updatedAt:
           type: string
           format: date-time
+      required:
+        - id
+        - name
+        - description
+        - createdAt
+        - updatedAt
     CreateDataSetReq:
       type: object
       additionalProperties: false
@@ -790,12 +4166,31 @@ components:
         properties:
           type: object
           additionalProperties: true
+          description: Properties keyed by their published business-facing display names.
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
+        type:
+          $ref: '#/components/schemas/ResourceId'
+        version:
+          type: integer
+          format: int64
+        correlationId:
+          type: string
+          format: uuid
+        projectionStatus:
+          $ref: '#/components/schemas/ObjectInstanceProjectionStatus'
+      required:
+        - id
+        - title
+        - type
+        - properties
+        - version
+        - createdAt
+        - updatedAt
     ObjectInstancePage:
       type: object
       additionalProperties: false
@@ -813,6 +4208,19 @@ components:
         offset:
           type: integer
           format: int32
+        type:
+          $ref: '#/components/schemas/ResourceId'
+        totalIsLowerBound:
+          type: boolean
+        nextCursor:
+          type:
+            - string
+            - 'null'
+      required:
+        - type
+        - items
+        - total
+        - totalIsLowerBound
     UpdateObjectInstanceReq:
       type: object
       additionalProperties: false
@@ -823,3 +4231,3337 @@ components:
           type: object
           description: Values keyed by Object Type property names; idField cannot be changed.
           additionalProperties: true
+    ActionExecution:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        actionTypeId:
+          type: string
+          format: uuid
+        previewId:
+          type: string
+          format: uuid
+        correlationId:
+          type: string
+        traceId:
+          type: string
+        status:
+          type: string
+        safeError:
+          type: string
+        submittedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+    ResourceView:
+      type: object
+      properties:
+        id:
+          type: string
+        resourceId:
+          type: string
+          format: uuid
+        physicalKey:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+        kind:
+          type: string
+          enum:
+            - OBJECT_TYPE
+            - LINK_TYPE
+            - INTERFACE
+            - ACTION
+            - FUNCTION
+        lifecycle:
+          type: string
+        properties:
+          type: array
+          items:
+            $ref: '#/components/schemas/PropertyView'
+        primaryKeyPropertyId:
+          type: string
+          format: uuid
+        titlePropertyId:
+          type: string
+          format: uuid
+        datasetId:
+          $ref: '#/components/schemas/ResourceId'
+        datasetMapping:
+          type: object
+          additionalProperties:
+            type: string
+        sourceMode:
+          type: string
+        maturity:
+          type: string
+        promoted:
+          type: boolean
+        tags:
+          type: array
+          items:
+            type: string
+        definition:
+          type: object
+          additionalProperties: {}
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ResourceDraftRequest:
+      type: object
+      properties:
+        id:
+          type: string
+        primaryPipelineId:
+          type: string
+          format: uuid
+        leftObjectTypeId:
+          type: string
+          format: uuid
+        rightObjectTypeId:
+          type: string
+          format: uuid
+        targetObjectTypeId:
+          type: string
+          format: uuid
+        sourcePropertyId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        description:
+          type: string
+        properties:
+          type: array
+          items:
+            $ref: '#/components/schemas/PropertyDraft'
+        datasetId:
+          $ref: '#/components/schemas/ResourceId'
+        datasetMapping:
+          type: object
+          additionalProperties:
+            type: string
+        maturity:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        promoted:
+          type: boolean
+        sourceMode:
+          type: string
+        cardinality:
+          type: string
+        leftDisplayName:
+          type: string
+        rightDisplayName:
+          type: string
+        operation:
+          type: string
+        parameters:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParameterDraft'
+        rules:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        slots:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        implementations:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        outputType:
+          type: string
+        queryDsl:
+          type: object
+          additionalProperties: {}
+        dependencyIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        timeoutMs:
+          type: integer
+          format: int32
+        maxResults:
+          type: integer
+          format: int32
+        cacheSeconds:
+          type: integer
+          format: int32
+    ResourceIdentityRequest:
+      type: object
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+    ActionExecuteRequest:
+      type: object
+      properties:
+        previewToken:
+          type: string
+        idempotencyKey:
+          type: string
+    ActionPreviewRequest:
+      type: object
+      properties:
+        objectId:
+          type: string
+        parameters:
+          type: object
+          additionalProperties: {}
+    ActionPreview:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        actionTypeId:
+          type: string
+          format: uuid
+        token:
+          type: string
+        visibleDiff:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        expiresAt:
+          type: string
+          format: date-time
+    Conversation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ontologyId:
+          type: string
+        title:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreateConversationRequest:
+      type: object
+      properties:
+        title:
+          type: string
+    ConfirmActionRequest:
+      type: object
+      properties:
+        actionTypeId:
+          type: string
+          format: uuid
+        previewToken:
+          type: string
+    SendMessageRequest:
+      type: object
+      properties:
+        content:
+          type: string
+    SseEmitter:
+      type: object
+      properties:
+        timeout:
+          type:
+            - integer
+            - 'null'
+          format: int64
+    TestRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - S3_CSV
+            - MYSQL
+            - POSTGRESQL
+            - KAFKA
+            - EXTERNAL_PULSAR
+        config:
+          type: object
+          additionalProperties: {}
+        credential:
+          $ref: '#/components/schemas/CredentialInput'
+    TestResult:
+      type: object
+      properties:
+        requestId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - UNTESTED
+            - TESTING
+            - HEALTHY
+            - HEALTHY_RESTRICTED
+            - ERROR
+            - DISABLED
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/TestStage'
+        assetCount:
+          type: integer
+          format: int32
+        configFingerprint:
+          type: string
+        testToken:
+          type: string
+        discoveredAssets:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscoveredAsset'
+        expiresAt:
+          type: string
+          format: date-time
+    DataSourcePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DataSource'
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        counts:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        filters:
+          type: object
+          additionalProperties: {}
+    CreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum:
+            - S3_CSV
+            - MYSQL
+            - POSTGRESQL
+            - KAFKA
+            - EXTERNAL_PULSAR
+        tags:
+          type: array
+          items:
+            type: string
+        config:
+          type: object
+          additionalProperties: {}
+        credential:
+          $ref: '#/components/schemas/CredentialInput'
+        testToken:
+          type: string
+        ownerId:
+          type: string
+        ownerName:
+          type: string
+    DataSource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum:
+            - S3_CSV
+            - MYSQL
+            - POSTGRESQL
+            - KAFKA
+            - EXTERNAL_PULSAR
+        status:
+          type: string
+          enum:
+            - UNTESTED
+            - TESTING
+            - HEALTHY
+            - HEALTHY_RESTRICTED
+            - ERROR
+            - DISABLED
+        tags:
+          type: array
+          items:
+            type: string
+        config:
+          type: object
+          additionalProperties: {}
+        credential:
+          $ref: '#/components/schemas/CredentialSummary'
+        syncStatus:
+          type: string
+          enum:
+            - NO_TASKS
+            - IDLE
+            - RUNNING
+            - STREAMING
+            - PARTIAL_FAILURE
+            - ALL_FAILURE
+        assetCount:
+          type: integer
+          format: int32
+        lastError:
+          $ref: '#/components/schemas/Diagnostic'
+        pipelineReferenceCount:
+          type: integer
+          format: int32
+        activeRunCount:
+          type: integer
+          format: int32
+        ownerId:
+          type: string
+        ownerName:
+          type: string
+        lastCheckedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    UpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        config:
+          type: object
+          additionalProperties: {}
+        ownerId:
+          type: string
+        ownerName:
+          type: string
+    AssetPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DataSourceAsset'
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+    DataSourceAsset:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+        fullPath:
+          type: string
+        parentPath:
+          type: string
+        assetType:
+          type: string
+        schemaStatus:
+          type: string
+        schemaHash:
+          type: string
+        schemaVersion:
+          type: integer
+          format: int32
+        fieldCount:
+          type: integer
+          format: int32
+        sizeBytes:
+          type: integer
+          format: int64
+        estimatedRows:
+          type: integer
+          format: int64
+        partitionCount:
+          type: integer
+          format: int32
+        permissionStatus:
+          type: string
+        usedByPipeline:
+          type: boolean
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssetField'
+        discoveredAt:
+          type: string
+          format: date-time
+    DiscoveryRun:
+      type: object
+      properties:
+        taskId:
+          type: string
+          format: uuid
+        status:
+          type: string
+        discoveredCount:
+          type: integer
+          format: int32
+        diagnostic:
+          $ref: '#/components/schemas/Diagnostic'
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+    PreviewRequest:
+      type: object
+      properties:
+        nodeId:
+          type: string
+        limit:
+          type: integer
+          format: int32
+    AssetPreview:
+      type: object
+      properties:
+        columns:
+          type: array
+          items:
+            type: string
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        truncated:
+          type: boolean
+        maxBytes:
+          type: integer
+          format: int32
+    AssetUsage:
+      type: object
+      properties:
+        pipelines:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineSummary'
+        restrictedReferences:
+          type: integer
+          format: int32
+    Overview:
+      type: object
+      properties:
+        connection:
+          $ref: '#/components/schemas/DataSource'
+        health:
+          type: array
+          items:
+            $ref: '#/components/schemas/TestStage'
+        assetSummary:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        pipelineSummary:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        recentRuns:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineRunSummary'
+        sectionErrors:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/Diagnostic'
+    PipelineSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+        sourceAsset:
+          type: string
+        mode:
+          type: string
+        ownerName:
+          type: string
+        recentRunAt:
+          type: string
+          format: date-time
+    RotateCredentialRequest:
+      type: object
+      properties:
+        credential:
+          $ref: '#/components/schemas/CredentialInput'
+    CredentialSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+        provider:
+          type: string
+        credentialType:
+          type: string
+        referenceCount:
+          type: integer
+          format: int32
+        createdAt:
+          type: string
+          format: date-time
+        rotatedAt:
+          type: string
+          format: date-time
+    PipelineRunSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        flinkJobId:
+          type: string
+        status:
+          type: string
+        pipelineName:
+          type: string
+        sourceAsset:
+          type: string
+        triggerType:
+          type: string
+        readCount:
+          type: integer
+          format: int64
+        writtenCount:
+          type: integer
+          format: int64
+        rejectedCount:
+          type: integer
+          format: int64
+        startedAt:
+          type: string
+          format: date-time
+        durationMs:
+          type: integer
+          format: int64
+    DrilldownRequest:
+      type: object
+      properties:
+        widgetId:
+          type: string
+          format: uuid
+        value: {}
+        filters:
+          type: object
+          additionalProperties: {}
+    DrilldownToken:
+      type: object
+      properties:
+        token:
+          type: string
+        targetKind:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+    DashboardExecuteRequest:
+      type: object
+      properties:
+        pageId:
+          type: string
+          format: uuid
+        refreshId:
+          type: string
+          format: uuid
+        widgetIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        filters:
+          type: object
+          additionalProperties: {}
+    DashboardBatchResult:
+      type: object
+      properties:
+        queryRunId:
+          type: string
+          format: uuid
+        correlationId:
+          type: string
+        status:
+          type: string
+        widgets:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardWidgetResult'
+        cacheHits:
+          type: integer
+          format: int32
+        watermark:
+          type: string
+          format: date-time
+    FilterOptionsRequest:
+      type: object
+      properties:
+        dataSourceId:
+          type: string
+          format: uuid
+        propertyId:
+          type: string
+          format: uuid
+        search:
+          type: string
+        filters:
+          type: object
+          additionalProperties: {}
+    DashboardSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        lifecycle:
+          type: string
+        pageCount:
+          type: integer
+          format: int32
+        widgetCount:
+          type: integer
+          format: int32
+        visibility:
+          type: string
+        refreshPolicy:
+          type: string
+        healthStatus:
+          type: string
+        favorite:
+          type: boolean
+        etag:
+          type: integer
+          format: int64
+        ownerName:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        lastPublishedAt:
+          type: string
+          format: date-time
+    DashboardCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        visibility:
+          type: string
+        refreshPolicy:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+    DashboardDetail:
+      type: object
+      properties:
+        summary:
+          $ref: '#/components/schemas/DashboardSummary'
+        currentDefinition:
+          $ref: '#/components/schemas/DashboardDefinition'
+        activeDraft:
+          $ref: '#/components/schemas/DashboardDraftView'
+        accessRole:
+          type: string
+    DashboardPatchRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        visibility:
+          type: string
+        refreshPolicy:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+    DashboardDraftView:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        dashboardId:
+          type: string
+          format: uuid
+        status:
+          type: string
+        definition:
+          $ref: '#/components/schemas/DashboardDefinition'
+        etag:
+          type: integer
+          format: int64
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    DashboardDefinition:
+      type: object
+      properties:
+        schemaVersion:
+          type: integer
+          format: int32
+        pages:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardPage'
+        dataSources:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardDataSource'
+        widgets:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardWidget'
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardFilterVariable'
+        filterBindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardFilterBinding'
+        settings:
+          type: object
+          additionalProperties: {}
+    EditLockRequest:
+      type: object
+      properties:
+        force:
+          type: boolean
+    DashboardEditLock:
+      type: object
+      properties:
+        dashboardId:
+          type: string
+          format: uuid
+        holderId:
+          type: string
+        holderName:
+          type: string
+        leaseToken:
+          type: string
+          format: uuid
+        editable:
+          type: boolean
+        acquiredAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+    DashboardHealth:
+      type: object
+      properties:
+        status:
+          type: string
+        issues:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+    DashboardPermission:
+      type: object
+      properties:
+        subjectId:
+          type: string
+        subjectType:
+          type: string
+        role:
+          type: string
+    DashboardPermissionsRequest:
+      type: object
+      properties:
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardPermission'
+    PublishRequest:
+      type: object
+      properties:
+        acknowledgeWarnings:
+          type: boolean
+        startAfterPublish:
+          type: boolean
+    DashboardQueryPlanView:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        dashboardId:
+          type: string
+          format: uuid
+        versionId:
+          type: string
+          format: uuid
+        planHash:
+          type: string
+        estimatedCost:
+          type: integer
+          format: int32
+        createdAt:
+          type: string
+          format: date-time
+    DashboardUsage:
+      type: object
+      properties:
+        opens:
+          type: integer
+          format: int64
+        queryRuns:
+          type: integer
+          format: int64
+        cacheHits:
+          type: integer
+          format: int64
+        failedWidgets:
+          type: integer
+          format: int64
+        p95DurationMs:
+          type: number
+          format: double
+    DashboardValidationResult:
+      type: object
+      properties:
+        status:
+          type: string
+        valid:
+          type: boolean
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardValidationIssue'
+        estimatedCost:
+          type: integer
+          format: int32
+        definitionHash:
+          type: string
+    DatasetPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Dataset'
+        total:
+          type: integer
+          format: int64
+    CreateDatasetReq:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+      properties:
+        id:
+          $ref: '#/components/schemas/ResourceId'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 240
+        description:
+          type: string
+          maxLength: 2000
+        fields:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/DatasetField'
+        rows:
+          type: array
+          maxItems: 10000
+          items:
+            type: object
+            additionalProperties: true
+    Dataset:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - description
+        - status
+        - source
+        - fields
+        - rowCount
+        - editable
+        - ownerName
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          $ref: '#/components/schemas/ResourceId'
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum:
+            - BUILDING
+            - READY
+            - FAILED
+        source:
+          $ref: '#/components/schemas/DatasetSource'
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/DatasetField'
+        rowCount:
+          type: integer
+          format: int64
+        editable:
+          type: boolean
+        ownerName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    UpdateDatasetReq:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        id:
+          $ref: '#/components/schemas/ResourceId'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 240
+        description:
+          type: string
+          maxLength: 2000
+        fields:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/DatasetField'
+        rows:
+          type: array
+          maxItems: 10000
+          items:
+            type: object
+            additionalProperties: true
+    DatasetMappingPreview:
+      type: object
+      properties:
+        identityField:
+          type: string
+        titleField:
+          type: string
+        sourceRows:
+          type: integer
+          format: int64
+        objectCount:
+          type: integer
+          format: int64
+        emptyIdentityCount:
+          type: integer
+          format: int64
+        duplicateCount:
+          type: integer
+          format: int64
+        conflictCount:
+          type: integer
+          format: int64
+        samples:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+    DatasetPreview:
+      type: object
+      properties:
+        columns:
+          type: array
+          items:
+            type: string
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        total:
+          type: integer
+          format: int64
+    DatasetQueryReq:
+      type: object
+      properties:
+        dimensions:
+          type: array
+          items:
+            type: string
+        dimensionSpecs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Dimension'
+        metrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/Metric'
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/Filter'
+        orderBy:
+          type: string
+        orderDirection:
+          type: string
+        limit:
+          type: integer
+          format: int32
+    DatasetQueryResult:
+      type: object
+      properties:
+        dimensions:
+          type: array
+          items:
+            type: string
+        metrics:
+          type: array
+          items:
+            type: string
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        scannedRows:
+          type: integer
+          format: int64
+    ExplorerHome:
+      type: object
+      properties:
+        objectTypes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObjectTypeDefinition'
+        objectCounts:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+        searchStatus:
+          type: string
+        indexUpdatedAt:
+          type: string
+          format: date-time
+    FunctionTestRequest:
+      type: object
+      properties:
+        inputs:
+          type: object
+          additionalProperties: {}
+    FunctionExecution:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        functionId:
+          type: string
+          format: uuid
+        traceId:
+          type: string
+        result: {}
+        cacheHit:
+          type: boolean
+        stepDiagnostics:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        durationMs:
+          type: integer
+          format: int64
+    GraphSchemaRebuildResult:
+      type: object
+      properties:
+        objectCount:
+          type: integer
+          format: int64
+        relationCount:
+          type: integer
+          format: int64
+        technicalFields:
+          type: array
+          items:
+            type: string
+    HealthIssue:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        resourceId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        status:
+          type: string
+        severity:
+          type: string
+        category:
+          type: string
+        resourceName:
+          type: string
+        evidence:
+          type: string
+        recommendation:
+          type: string
+        ownerName:
+          type: string
+        firstSeenAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+    RebuildResult:
+      type: object
+      properties:
+        index:
+          type: string
+        objectCount:
+          type: integer
+          format: int64
+    InterfaceQueryRequest:
+      type: object
+      properties:
+        pageSize:
+          type: integer
+          format: int32
+    InterfaceQueryPage:
+      type: object
+      properties:
+        interfaceId:
+          type: string
+          format: uuid
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InterfaceObject'
+        truncated:
+          type: boolean
+    ObjectInstanceQueryReq:
+      type: object
+      additionalProperties: false
+      properties:
+        properties:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/ObjectInstancePropertyName'
+        filters:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/InstanceFilter'
+        filterOperator:
+          type: string
+          description: Boolean operator used to combine all filters.
+          enum:
+            - AND
+            - OR
+          default: AND
+        sort:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/InstanceSort'
+        pageSize:
+          type: integer
+          enum:
+            - 25
+            - 50
+            - 100
+          default: 50
+        cursor:
+          type: string
+    ObjectInstanceAggregateReq:
+      type: object
+      additionalProperties: false
+      required:
+        - metrics
+      properties:
+        filters:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/InstanceFilter'
+        filterOperator:
+          type: string
+          description: Boolean operator used to combine all filters.
+          enum:
+            - AND
+            - OR
+          default: AND
+        groupBy:
+          type: array
+          maxItems: 5
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/ObjectInstancePropertyName'
+        metrics:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/ObjectInstanceAggregateMetric'
+    ObjectInstanceAggregateMetric:
+      type: object
+      additionalProperties: false
+      required:
+        - operation
+      properties:
+        operation:
+          type: string
+          enum:
+            - AVG
+            - COUNT
+            - DISTINCT_COUNT
+            - MAX
+            - MIN
+            - SUM
+        property:
+          $ref: '#/components/schemas/ObjectInstancePropertyName'
+        alias:
+          type: string
+          maxLength: 160
+    ObjectInstanceAggregateResult:
+      type: object
+      additionalProperties: false
+      required:
+        - rows
+      properties:
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    BulkObjectInstanceReq:
+      type: object
+      additionalProperties: false
+      required:
+        - operation
+        - items
+      properties:
+        operation:
+          type: string
+          enum:
+            - CREATE
+            - DELETE
+            - UPDATE
+            - UPSERT
+        atomic:
+          type: boolean
+          default: false
+        items:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/BulkObjectInstanceItem'
+    BulkObjectInstanceItem:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          maxLength: 512
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        properties:
+          type: object
+          additionalProperties: true
+    BulkObjectInstanceResult:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkObjectInstanceItemResult'
+    BulkObjectInstanceItemResult:
+      type: object
+      additionalProperties: false
+      required:
+        - index
+        - status
+      properties:
+        index:
+          type: integer
+          format: int32
+        id:
+          type: string
+        status:
+          type: string
+          enum:
+            - CREATED
+            - DELETED
+            - FAILED
+            - UNCHANGED
+            - UPDATED
+        version:
+          type: integer
+          format: int64
+        errorCode:
+          type: string
+        safeError:
+          type: string
+    CreateObjectInstanceImportReq:
+      type: object
+      additionalProperties: false
+      required:
+        - datasetId
+        - identityField
+        - titleField
+        - fieldMappings
+      properties:
+        datasetId:
+          $ref: '#/components/schemas/ResourceId'
+        identityField:
+          type: string
+        titleField:
+          type: string
+        fieldMappings:
+          type: object
+          description: Map from Dataset field names to published Object Type property display names.
+          additionalProperties:
+            type: string
+        mode:
+          type: string
+          enum:
+            - REPLACE
+            - UPSERT
+          default: UPSERT
+    ObjectInstanceImportJob:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - CANCELLED
+            - COMPLETED
+            - FAILED
+            - MERGING
+            - PARTIAL
+            - QUEUED
+            - VALIDATING
+        inserted:
+          type: integer
+          format: int64
+        updated:
+          type: integer
+          format: int64
+        deleted:
+          type: integer
+          format: int64
+        unchanged:
+          type: integer
+          format: int64
+        failed:
+          type: integer
+          format: int64
+        safeError:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+    ObjectInstanceImportError:
+      type: object
+      additionalProperties: false
+      required:
+        - rowNumber
+        - errorCode
+        - safeMessage
+      properties:
+        rowNumber:
+          type: integer
+          format: int64
+        objectId:
+          type: string
+        fieldId:
+          type: string
+        errorCode:
+          type: string
+        safeMessage:
+          type: string
+    ObjectInstanceProjectionTargetStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - target
+        - version
+        - status
+      properties:
+        target:
+          type: string
+          enum:
+            - HUGEGRAPH
+            - OPENSEARCH
+        version:
+          type: integer
+          format: int64
+        status:
+          type: string
+        lastError:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    ObjectInstanceProjectionStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - objectId
+        - authoritativeVersion
+        - targets
+      properties:
+        objectId:
+          type: string
+        authoritativeVersion:
+          type: integer
+          format: int64
+        correlationId:
+          type: string
+          format: uuid
+        targets:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObjectInstanceProjectionTargetStatus'
+    ReconcileObjectInstancesReq:
+      type: object
+      additionalProperties: false
+      properties:
+        repair:
+          type: boolean
+          default: true
+    ObjectInstanceReconciliationJob:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        missing:
+          type: integer
+          format: int64
+        stale:
+          type: integer
+          format: int64
+        extra:
+          type: integer
+          format: int64
+        repaired:
+          type: integer
+          format: int64
+    ObjectInstanceReconciliationDifference:
+      type: object
+      additionalProperties: false
+      required:
+        - target
+        - objectId
+        - kind
+        - repairStatus
+      properties:
+        target:
+          type: string
+          enum:
+            - HUGEGRAPH
+            - OPENSEARCH
+        objectId:
+          type: string
+        kind:
+          type: string
+          enum:
+            - EXTRA
+            - MISSING
+            - STALE
+        authoritativeVersion:
+          type: integer
+          format: int64
+        projectedVersion:
+          type: integer
+          format: int64
+        repairStatus:
+          type: string
+        safeError:
+          type: string
+    ObjectInstanceReconciliationResult:
+      type: object
+      additionalProperties: false
+      required:
+        - job
+        - differences
+      properties:
+        job:
+          $ref: '#/components/schemas/ObjectInstanceReconciliationJob'
+        differences:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObjectInstanceReconciliationDifference'
+    ObjectInstancePropertyName:
+      type: string
+      description: Published business-facing display name of an Object Type property.
+      minLength: 1
+      maxLength: 240
+    AggregateRequest:
+      type: object
+      properties:
+        measurePropertyId:
+          type: string
+          format: uuid
+        divisorPropertyId:
+          type: string
+          format: uuid
+        query:
+          $ref: '#/components/schemas/ObjectSetRequest'
+        dimensionPropertyIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        aggregation:
+          type: string
+    AggregateResponse:
+      type: object
+      properties:
+        objectTypeId:
+          type: string
+          format: uuid
+        queryFingerprint:
+          type: string
+        buckets:
+          type: array
+          items:
+            $ref: '#/components/schemas/AggregationBucket'
+        calculatedAt:
+          type: string
+          format: date-time
+    FacetRequest:
+      type: object
+      properties:
+        query:
+          $ref: '#/components/schemas/ObjectSetRequest'
+        propertyIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+    FacetResult:
+      type: object
+      properties:
+        propertyId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        buckets:
+          type: array
+          items:
+            $ref: '#/components/schemas/FacetBucket'
+    ObjectSetRequest:
+      type: object
+      properties:
+        objectTypeId:
+          type: string
+          format: uuid
+        where:
+          type: object
+          additionalProperties: {}
+        sort:
+          type: array
+          items:
+            $ref: '#/components/schemas/SortClause'
+        pageSize:
+          type: integer
+          format: int32
+        cursor:
+          type: string
+        columns:
+          type: array
+          items:
+            type: string
+            format: uuid
+    ObjectSetPage:
+      type: object
+      properties:
+        objectTypeId:
+          type: string
+          format: uuid
+        properties:
+          type: array
+          items:
+            $ref: '#/components/schemas/PropertyDefinition'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObjectSummary'
+        objectTypeName:
+          type: string
+        visibleCount:
+          type: integer
+          format: int64
+        countLowerBound:
+          type: boolean
+        nextCursor:
+          type: string
+        queryFingerprint:
+          type: string
+        indexUpdatedAt:
+          type: string
+          format: date-time
+    SearchAroundRequest:
+      type: object
+      properties:
+        objectTypeId:
+          type: string
+          format: uuid
+        objectId:
+          type: string
+        linkTypeIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        pageSize:
+          type: integer
+          format: int32
+    LinkPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObjectLink'
+        nextCursor:
+          type: string
+        visibleCount:
+          type: integer
+          format: int64
+    ObjectTypeBackingView:
+      type: object
+      properties:
+        pipelineId:
+          type: string
+          format: uuid
+        status:
+          type: string
+        sourceMode:
+          type: string
+        pipelineName:
+          type: string
+        pipelineVersion:
+          type: integer
+          format: int32
+        pipelineLifecycle:
+          type: string
+        mappings:
+          type: array
+          items:
+            $ref: '#/components/schemas/MappingView'
+        lastRunStatus:
+          type: string
+        projectionStatus:
+          type: string
+        mappedPropertyCount:
+          type: integer
+          format: int64
+        propertyCount:
+          type: integer
+          format: int64
+        lastRunAt:
+          type: string
+          format: date-time
+    ObjectDetail:
+      type: object
+      properties:
+        objectId:
+          type: string
+        title:
+          type: string
+        properties:
+          type: object
+          additionalProperties: {}
+        objectType:
+          $ref: '#/components/schemas/ObjectTypeDefinition'
+        redactedFields:
+          type: array
+          items:
+            type: string
+            format: uuid
+        quality:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    ActivityItem:
+      type: object
+      properties:
+        correlationId:
+          type: string
+        kind:
+          type: string
+        status:
+          type: string
+        summary:
+          type: string
+        actor:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+    CapabilityResponse:
+      type: object
+      properties:
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Capability'
+        functions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Capability'
+        openTo:
+          type: array
+          items:
+            type: string
+    LinkRequest:
+      type: object
+      properties:
+        direction:
+          type: string
+        linkTypeIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        pageSize:
+          type: integer
+          format: int32
+        cursor:
+          type: string
+    ProvenanceView:
+      type: object
+      properties:
+        objectId:
+          type: string
+        primaryPipeline:
+          type: string
+        projectionStatus:
+          type: string
+        sourceAsset:
+          type: string
+        indexStatus:
+          type: string
+        fieldLineage:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+    ResourceId:
+      type: string
+      description: Caller-defined stable ID used in API paths and references
+      example: employee
+      pattern: ^[A-Za-z][A-Za-z0-9_-]{0,159}$
+    RelationInstancePage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RelationInstance'
+        total:
+          type: integer
+          format: int64
+        nextCursor:
+          type:
+            - string
+            - 'null'
+    NodeType:
+      type: object
+      properties:
+        description:
+          type: string
+        type:
+          type: string
+        label:
+          type: string
+        category:
+          type: string
+        modes:
+          type: array
+          items:
+            type: string
+            enum:
+              - BATCH
+              - STREAMING
+        minInputs:
+          type: integer
+          format: int32
+        maxInputs:
+          type: integer
+          format: int32
+        source:
+          type: boolean
+        output:
+          type: boolean
+    PreviewRun:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        pipelineId:
+          type: string
+          format: uuid
+        nodeId:
+          type: string
+        flinkJobId:
+          type: string
+        status:
+          type: string
+        draftEtag:
+          type: integer
+          format: int64
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        schema:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldSchema'
+        diagnostic:
+          type: object
+          additionalProperties: {}
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+    RunDetail:
+      type: object
+      properties:
+        run:
+          $ref: '#/components/schemas/PipelineRun'
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/RunStage'
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/RunEvent'
+        metrics:
+          type: object
+          additionalProperties: {}
+        logs:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+    PipelineRun:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        pipelineId:
+          type: string
+          format: uuid
+        flinkJobId:
+          type: string
+        correlationId:
+          type: string
+        status:
+          type: string
+        pipelineName:
+          type: string
+        retryOf:
+          type: string
+          format: uuid
+        triggerType:
+          type: string
+        readCount:
+          type: integer
+          format: int64
+        writtenCount:
+          type: integer
+          format: int64
+        rejectedCount:
+          type: integer
+          format: int64
+        projectionStatus:
+          type: string
+        savepointPath:
+          type: string
+        diagnostic:
+          type: object
+          additionalProperties: {}
+        requestedByName:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    RunEvent:
+      type: object
+      properties:
+        status:
+          type: string
+        sequence:
+          type: integer
+          format: int64
+        eventType:
+          type: string
+        message:
+          type: string
+        safeDetails:
+          type: object
+          additionalProperties: {}
+        occurredAt:
+          type: string
+          format: date-time
+    SavepointRequest:
+      type: object
+      properties:
+        drain:
+          type: boolean
+    PipelinePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Pipeline'
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        counts:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        appliedFilters:
+          type: object
+          additionalProperties:
+            type: string
+    CreatePipelineRequest:
+      type: object
+      properties:
+        dataSourceId:
+          type: string
+          format: uuid
+        sourceAssetId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        template:
+          type: string
+        mode:
+          type: string
+          enum:
+            - BATCH
+            - STREAMING
+        ownerId:
+          type: string
+        ownerName:
+          type: string
+    Pipeline:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        dataSourceId:
+          type: string
+          format: uuid
+        sourceAssetId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        lifecycle:
+          type: string
+          enum:
+            - DRAFT
+            - IN_REVIEW
+            - PUBLISHED
+            - PAUSED
+            - ARCHIVED
+        template:
+          type: string
+        mode:
+          type: string
+          enum:
+            - BATCH
+            - STREAMING
+        runStatus:
+          type: string
+          enum:
+            - NEVER_RUN
+            - HEALTHY
+            - RUNNING
+            - LIVE
+            - DEGRADED
+            - FAILED
+        dataSourceName:
+          type: string
+        sourceAssetName:
+          type: string
+        targetSummary:
+          type: string
+        scheduleSummary:
+          type: string
+        draft:
+          $ref: '#/components/schemas/PipelineDraft'
+        ownerId:
+          type: string
+        ownerName:
+          type: string
+        lastRunAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    PipelineDraft:
+      type: object
+      properties:
+        graph:
+          $ref: '#/components/schemas/PipelineGraph'
+        runtime:
+          $ref: '#/components/schemas/RuntimeSettings'
+        schedule:
+          $ref: '#/components/schemas/ScheduleSettings'
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    UpdateDraftRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        graph:
+          $ref: '#/components/schemas/PipelineGraph'
+        runtime:
+          $ref: '#/components/schemas/RuntimeSettings'
+        schedule:
+          $ref: '#/components/schemas/ScheduleSettings'
+    MaterializeRequest:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+    OffsetResetRequest:
+      type: object
+      properties:
+        position:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        specificOffsets:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+        acknowledgeDuplicateOrLossRisk:
+          type: boolean
+    PipelineRunPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineRun'
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+    ValidationResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationIssue'
+        normalizedGraph:
+          $ref: '#/components/schemas/PipelineGraph'
+        impact:
+          type: object
+          additionalProperties: {}
+        contentHash:
+          type: string
+    PropertyView:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        apiName:
+          type: string
+        physicalKey:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+        valueType:
+          type: string
+        required:
+          type: boolean
+        primaryKey:
+          type: boolean
+        titleProperty:
+          type: boolean
+        searchable:
+          type: boolean
+        filterable:
+          type: boolean
+        sortable:
+          type: boolean
+        sensitive:
+          type: boolean
+        actionWritable:
+          type: boolean
+        sourceField:
+          type: string
+    RelationInstanceQueryReq:
+      type: object
+      additionalProperties: false
+      required:
+        - source
+      properties:
+        type:
+          $ref: '#/components/schemas/ResourceId'
+        source:
+          $ref: '#/components/schemas/InstanceKey'
+        direction:
+          type: string
+          enum:
+            - BOTH
+            - IN
+            - OUT
+          default: BOTH
+        pageSize:
+          type: integer
+          default: 25
+          minimum: 1
+          maximum: 100
+    SearchResult:
+      type: object
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+        kind:
+          type: string
+          enum:
+            - OBJECT_TYPE
+            - LINK_TYPE
+            - INTERFACE
+            - ACTION
+            - FUNCTION
+        lifecycle:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        ownerName:
+          type: string
+    SearchRequest:
+      type: object
+      properties:
+        query:
+          type: string
+        mode:
+          type: string
+        tab:
+          type: string
+        size:
+          type: integer
+          format: int32
+    SearchResponse:
+      type: object
+      properties:
+        objects:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObjectSummary'
+        objectTypes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObjectTypeDefinition'
+        visibleObjectCount:
+          type: integer
+          format: int64
+        indexUpdatedAt:
+          type: string
+          format: date-time
+    ModelingSummary:
+      type: object
+      properties:
+        health:
+          type: string
+        criticalIssues:
+          type: integer
+          format: int64
+        projectionFailures:
+          type: integer
+          format: int64
+        resourceCounts:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+        objectInstanceCounts:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+        relationInstanceCounts:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+        recentResources:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceView'
+    AggregationBucket:
+      type: object
+      properties:
+        value: {}
+        count:
+          type: integer
+          format: int64
+        metric:
+          type: number
+          format: double
+    AssetField:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        nullable:
+          type: boolean
+        inferredType:
+          type: string
+        originalType:
+          type: string
+        sensitive:
+          type: boolean
+        primaryKeyCandidate:
+          type: boolean
+        sampleValue:
+          type: string
+    Capability:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        apiName:
+          type: string
+        displayName:
+          type: string
+        kind:
+          type: string
+        executable:
+          type: boolean
+        previewRequired:
+          type: boolean
+    CredentialInput:
+      type: object
+      properties:
+        name:
+          type: string
+        mode:
+          type: string
+        existingSecretRef:
+          type: string
+          format: uuid
+        fileRefs:
+          type: object
+          additionalProperties:
+            type: string
+        values:
+          type: object
+          additionalProperties:
+            type: string
+    DashboardDataSource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        objectTypeId:
+          type: string
+          format: uuid
+        datasetId:
+          type: string
+        referenceId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        kind:
+          type: string
+        query:
+          type: object
+          additionalProperties: {}
+    DashboardFilterBinding:
+      type: object
+      properties:
+        filterId:
+          type: string
+          format: uuid
+        dataSourceId:
+          type: string
+          format: uuid
+        propertyId:
+          type: string
+          format: uuid
+        operator:
+          type: string
+    DashboardFilterVariable:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        scopeId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        valueType:
+          type: string
+        required:
+          type: boolean
+        controlType:
+          type: string
+        scope:
+          type: string
+        defaultValue: {}
+        allowEmpty:
+          type: boolean
+        sensitive:
+          type: boolean
+        applyMode:
+          type: string
+    DashboardPage:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        order:
+          type: integer
+          format: int32
+    DashboardValidationIssue:
+      type: object
+      properties:
+        severity:
+          type: string
+        code:
+          type: string
+        path:
+          type: string
+        message:
+          type: string
+    DashboardWidget:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        pageId:
+          type: string
+          format: uuid
+        dataSourceId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+        layout:
+          type: object
+          additionalProperties: {}
+        config:
+          type: object
+          additionalProperties: {}
+        interaction:
+          type: object
+          additionalProperties: {}
+    DashboardWidgetResult:
+      type: object
+      properties:
+        widgetId:
+          type: string
+          format: uuid
+        correlationId:
+          type: string
+        kind:
+          type: string
+        status:
+          type: string
+        data: {}
+        cacheHit:
+          type: boolean
+        suppressed:
+          type: boolean
+        watermark:
+          type: string
+          format: date-time
+        safeError:
+          type: string
+        queriedAt:
+          type: string
+          format: date-time
+    DatasetField:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - type
+        - nullable
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        type:
+          type: string
+          enum:
+            - BOOLEAN
+            - DATE
+            - DATETIME
+            - DECIMAL
+            - INTEGER
+            - JSON
+            - TEXT
+        nullable:
+          type: boolean
+        samples:
+          type: array
+          maxItems: 3
+          items: {}
+    DatasetSource:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - kind
+      properties:
+        id:
+          type:
+            - string
+            - 'null'
+        name:
+          type: string
+        kind:
+          type: string
+          enum:
+            - MANUAL
+            - PIPELINE
+    Diagnostic:
+      type: object
+      properties:
+        requestId:
+          type: string
+          format: uuid
+        stage:
+          type: string
+        reason:
+          type: string
+        suggestion:
+          type: string
+        technicalDetail:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+    Dimension:
+      type: object
+      properties:
+        field:
+          type: string
+        label:
+          type: string
+        timeGrain:
+          type: string
+    DiscoveredAsset:
+      type: object
+      properties:
+        name:
+          type: string
+        stableKey:
+          type: string
+        fullPath:
+          type: string
+        parentPath:
+          type: string
+        assetType:
+          type: string
+        sizeBytes:
+          type: integer
+          format: int64
+        estimatedRows:
+          type: integer
+          format: int64
+        partitionCount:
+          type: integer
+          format: int32
+        permissionStatus:
+          type: string
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscoveredField'
+    DiscoveredField:
+      type: object
+      properties:
+        name:
+          type: string
+        nullable:
+          type: boolean
+        inferredType:
+          type: string
+        originalType:
+          type: string
+        primaryKeyCandidate:
+          type: boolean
+        sampleValue:
+          type: string
+    FacetBucket:
+      type: object
+      properties:
+        value: {}
+        count:
+          type: integer
+          format: int64
+    Field:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        nullable:
+          type: boolean
+        samples:
+          type: array
+          items: {}
+    FieldSchema:
+      type: object
+      properties:
+        sourceNodeId:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        nullable:
+          type: boolean
+        sensitive:
+          type: boolean
+    Filter:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+        values:
+          type: array
+          items:
+            type: string
+        comparisonField:
+          type: string
+    InstanceFilter:
+      type: object
+      additionalProperties: false
+      required:
+        - property
+        - operator
+      properties:
+        property:
+          $ref: '#/components/schemas/ObjectInstancePropertyName'
+        operator:
+          type: string
+          enum:
+            - eq
+            - ne
+            - gt
+            - gte
+            - lt
+            - lte
+            - between
+            - in
+            - not_in
+            - exact
+            - starts_with
+            - is_empty
+            - is_not_empty
+        value: {}
+    InstanceKey:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - type
+      properties:
+        id:
+          type: string
+        type:
+          $ref: '#/components/schemas/ResourceId'
+    InstanceReference:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - title
+        - type
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        type:
+          $ref: '#/components/schemas/ResourceId'
+    InstanceSort:
+      type: object
+      additionalProperties: false
+      required:
+        - property
+        - direction
+      properties:
+        property:
+          $ref: '#/components/schemas/ObjectInstancePropertyName'
+        direction:
+          type: string
+          enum:
+            - asc
+            - desc
+    InterfaceObject:
+      type: object
+      properties:
+        objectId:
+          type: string
+        objectTypeId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        objectTypeApiName:
+          type: string
+        slots:
+          type: object
+          additionalProperties: {}
+    MappingView:
+      type: object
+      properties:
+        propertyId:
+          type: string
+          format: uuid
+        sinkNodeId:
+          type: string
+        propertyApiName:
+          type: string
+        propertyDisplayName:
+          type: string
+        sourceField:
+          type: string
+        transformPath:
+          type: array
+          items:
+            type: string
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        role:
+          type: string
+        content:
+          type: string
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolTrace'
+        createdAt:
+          type: string
+          format: date-time
+    Metric:
+      type: object
+      properties:
+        operation:
+          type: string
+        field:
+          type: string
+        distinctField:
+          type: string
+        label:
+          type: string
+    ObjectLink:
+      type: object
+      properties:
+        relationId:
+          type: string
+        linkTypeId:
+          type: string
+          format: uuid
+        targetObjectId:
+          type: string
+        targetObjectTypeId:
+          type: string
+          format: uuid
+        linkTypeName:
+          type: string
+        direction:
+          type: string
+        targetTitle:
+          type: string
+        edgeProperties:
+          type: object
+          additionalProperties: {}
+    ObjectSummary:
+      type: object
+      properties:
+        objectId:
+          type: string
+        objectTypeId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        properties:
+          type: object
+          additionalProperties: {}
+        objectTypeApiName:
+          type: string
+        redactedFields:
+          type: array
+          items:
+            type: string
+            format: uuid
+        quality:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    ObjectTypeDefinition:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        apiName:
+          type: string
+        physicalKey:
+          type: string
+        displayName:
+          type: string
+        properties:
+          type: array
+          items:
+            $ref: '#/components/schemas/PropertyDefinition'
+        maturity:
+          type: string
+    ParameterDraft:
+      type: object
+      properties:
+        apiName:
+          type: string
+        displayName:
+          type: string
+        valueType:
+          type: string
+        required:
+          type: boolean
+        sensitive:
+          type: boolean
+        defaultValue: {}
+    PipelineEdge:
+      type: object
+      properties:
+        id:
+          type: string
+        source:
+          type: string
+        target:
+          type: string
+    PipelineGraph:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineNode'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineEdge'
+    PipelineNode:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        position:
+          $ref: '#/components/schemas/Position'
+        config:
+          type: object
+          additionalProperties: {}
+        inputSchema:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldSchema'
+        outputSchema:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldSchema'
+        invalidReasons:
+          type: array
+          items:
+            type: string
+    Position:
+      type: object
+      properties:
+        x:
+          type: number
+          format: double
+        y:
+          type: number
+          format: double
+    PropertyDefinition:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        apiName:
+          type: string
+        physicalKey:
+          type: string
+        displayName:
+          type: string
+        valueType:
+          type: string
+        primaryKey:
+          type: boolean
+        titleProperty:
+          type: boolean
+        searchable:
+          type: boolean
+        filterable:
+          type: boolean
+        sortable:
+          type: boolean
+        sensitive:
+          type: boolean
+    PropertyDraft:
+      type: object
+      properties:
+        apiName:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+        valueType:
+          type: string
+        required:
+          type: boolean
+        primaryKey:
+          type: boolean
+        titleProperty:
+          type: boolean
+        searchable:
+          type: boolean
+        filterable:
+          type: boolean
+        sortable:
+          type: boolean
+        sensitive:
+          type: boolean
+        maskingPolicy:
+          type: string
+        analyzer:
+          type: string
+        sourceField:
+          type: string
+        enumValues:
+          type: array
+          items:
+            type: string
+        actionWritable:
+          type: boolean
+    RelationInstance:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - type
+        - properties
+        - source
+        - target
+      properties:
+        id:
+          type: string
+        type:
+          $ref: '#/components/schemas/ResourceId'
+        properties:
+          type: object
+          additionalProperties: true
+        source:
+          $ref: '#/components/schemas/InstanceReference'
+        target:
+          $ref: '#/components/schemas/InstanceReference'
+    RunStage:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        correlationId:
+          type: string
+        flinkJobId:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+        order:
+          type: integer
+          format: int32
+        eventPosition:
+          type: object
+          additionalProperties: {}
+        readCount:
+          type: integer
+          format: int64
+        writtenCount:
+          type: integer
+          format: int64
+        rejectedCount:
+          type: integer
+          format: int64
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+    RuntimeSettings:
+      type: object
+      properties:
+        parallelism:
+          type: integer
+          format: int32
+        checkpointIntervalMs:
+          type: integer
+          format: int64
+        restartAttempts:
+          type: integer
+          format: int32
+        offsetPolicy:
+          type: string
+        eventTimeField:
+          type: string
+        watermarkDelayMs:
+          type: integer
+          format: int64
+    ScheduleSettings:
+      type: object
+      properties:
+        type:
+          type: string
+        cronExpression:
+          type: string
+        concurrencyPolicy:
+          type: string
+        enabled:
+          type: boolean
+        runAt:
+          type: string
+          format: date-time
+    ServerSentEventStreamEvent: {}
+    SortClause:
+      type: object
+      properties:
+        propertyId:
+          type: string
+          format: uuid
+        direction:
+          type: string
+    TestStage:
+      type: object
+      properties:
+        status:
+          type: string
+        stage:
+          type: string
+        message:
+          type: string
+        durationMs:
+          type: integer
+          format: int64
+    ToolTrace:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        arguments:
+          type: object
+          additionalProperties: {}
+        result: {}
+        mutationPreview:
+          type: boolean
+    ValidationIssue:
+      type: object
+      properties:
+        resourceId:
+          type: string
+          format: uuid
+        code:
+          type: string
+        severity:
+          type: string
+        field:
+          type: string
+        message:
+          type: string
+        recoveryAction:
+          type: string
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+    DatasetId:
+      name: datasetId
+      in: path
+      description: Caller-defined stable Dataset ID
+      required: true
+      schema:
+        $ref: '#/components/schemas/ResourceId'
+    OntologyId:
+      name: ontologyId
+      in: path
+      description: Caller-defined stable Ontology ID
+      required: true
+      schema:
+        $ref: '#/components/schemas/ResourceId'
+    IfMatch:
+      name: If-Match
+      in: header
+      description: ETag returned by the latest read of the resource
+      required: true
+      schema:
+        type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      description: Stable key for safely replaying a create or bulk request
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 240
+    ObjectTypeId:
+      name: objectTypeId
+      in: path
+      description: Caller-defined stable Object Type ID
+      required: true
+      schema:
+        $ref: '#/components/schemas/ResourceId'
+    PageSize:
+      name: pageSize
+      in: query
+      schema:
+        type: integer
+        enum:
+          - 25
+          - 50
+          - 100
+        default: 50

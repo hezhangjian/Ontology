@@ -1,35 +1,135 @@
 name: ontology
 
+x-flink-common: &flink-common
+  image: flink:2.3.0-scala_2.12-java17
+  depends_on:
+    minio-bootstrap:
+      condition: service_completed_successfully
+    pulsar-bootstrap:
+      condition: service_completed_successfully
+  environment:
+    ENABLE_BUILT_IN_PLUGINS: flink-s3-fs-hadoop-2.3.0.jar
+    FLINK_WORKLOAD_KEY: ${FLINK_WORKLOAD_KEY:?FLINK_WORKLOAD_KEY is required}
+    MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+    MINIO_BUCKET: flink-workloads
+    MINIO_ENDPOINT: http://minio:9000
+    MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+    PULSAR_URL: pulsar://pulsar:6650
+    FLINK_PROPERTIES: |
+      jobmanager.rpc.address: flink-jobmanager
+      jobmanager.memory.process.size: 2048m
+      taskmanager.memory.framework.off-heap.size: 256m
+      taskmanager.memory.network.max: 256m
+      taskmanager.memory.network.min: 128m
+      taskmanager.memory.process.size: 3072m
+      taskmanager.memory.task.off-heap.size: 512m
+      taskmanager.numberOfTaskSlots: 4
+      execution.checkpointing.dir: s3://flink-checkpoints/checkpoints
+      execution.checkpointing.savepoint-dir: s3://flink-checkpoints/savepoints
+      s3.endpoint: http://minio:9000
+      s3.path.style.access: true
+      s3.access-key: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      s3.secret-key: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+    PULSAR_LISTENER_NAME: internal
+  restart: unless-stopped
+
 services:
+  backend:
+    profiles: [application]
+    build:
+      context: ..
+      dockerfile: docker/backend.Dockerfile
+    depends_on:
+      flink-jobmanager:
+        condition: service_started
+      hugegraph:
+        condition: service_healthy
+      minio-bootstrap:
+        condition: service_completed_successfully
+      opensearch:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      pulsar-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      APPLICATION_TOKEN_SECRET: ${APPLICATION_TOKEN_SECRET:?APPLICATION_TOKEN_SECRET is required}
+      CONNECTION_MASTER_KEY: ${CONNECTION_MASTER_KEY:?CONNECTION_MASTER_KEY is required}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      FLINK_JOB_JAR: /app/ontology-flink-job.jar
+      FLINK_MINIO_URL: http://minio:9000
+      FLINK_HOST: flink-jobmanager
+      FLINK_PORT: 8081
+      FLINK_WORKLOAD_KEY: ${FLINK_WORKLOAD_KEY:?FLINK_WORKLOAD_KEY is required}
+      HUGEGRAPH_HOST: hugegraph
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_URL: http://minio:9000
+      ONTOLOGY_URL: http://backend:4242
+      OPENSEARCH_HOST: opensearch
+      OPENSEARCH_PORT: 9200
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_URL: jdbc:postgresql://postgres:5432/ontology
+      PULSAR_LISTENER_NAME: internal
+      PULSAR_URL: pulsar://pulsar:6650
+    expose:
+      - "4242"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:4242/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+    restart: unless-stopped
+
+  frontend:
+    profiles: [application]
+    build:
+      context: ..
+      dockerfile: docker/frontend.Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-9080}:80"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+
   flink-jobmanager:
-    image: flink:2.3.0-scala_2.12-java17
+    <<: *flink-common
     command: jobmanager
     ports:
       - "8081:8081"
-    environment:
-      FLINK_PROPERTIES: |
-        jobmanager.rpc.address: flink-jobmanager
 
   flink-taskmanager:
-    image: flink:2.3.0-scala_2.12-java17
+    <<: *flink-common
     command: taskmanager
     depends_on:
-      - flink-jobmanager
-    environment:
-      FLINK_PROPERTIES: |
-        jobmanager.rpc.address: flink-jobmanager
-        taskmanager.numberOfTaskSlots: 4
+      flink-jobmanager:
+        condition: service_started
+      minio-bootstrap:
+        condition: service_completed_successfully
+      pulsar-bootstrap:
+        condition: service_completed_successfully
 
   hugegraph:
     image: hugegraph/hugegraph:1.7.0
     ports:
       - "8080:8080"
+      - "8182:8182"
+    volumes:
+      - ./data/hugegraph:/hugegraph/hugegraph-server/hugegraph-dist
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/versions >/dev/null || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 30s
+    restart: unless-stopped
 
   hugegraph-hubble:
     image: hugegraph/hubble:1.7.0
@@ -38,6 +138,7 @@ services:
         condition: service_healthy
     ports:
       - "8088:8088"
+    restart: unless-stopped
 
   hugegraph-hubble-bootstrap:
     image: hugegraph/hubble:1.7.0
@@ -65,8 +166,8 @@ services:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -89,19 +190,21 @@ services:
       - -ec
       - |
         mc alias set ontology http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
-        for bucket in flink-checkpoints flink-workloads; do
+        for bucket in flink-checkpoints flink-workloads import-staging warehouse; do
           mc mb --ignore-existing "ontology/$${bucket}"
+          mc anonymous set none "ontology/$${bucket}"
         done
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
     restart: "no"
 
   opensearch:
     image: opensearchproject/opensearch:2.19.3
     environment:
-      discovery.type: single-node
       bootstrap.memory_lock: "true"
+      discovery.type: single-node
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
       DISABLE_SECURITY_PLUGIN: "true"
       OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
     ports:
@@ -109,13 +212,20 @@ services:
       - "9600:9600"
     ulimits:
       memlock:
-        soft: -1
         hard: -1
+        soft: -1
       nofile:
-        soft: 65536
         hard: 65536
+        soft: 65536
     volumes:
       - ./data/opensearch:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
 
   opensearch-dashboards:
     image: opensearchproject/opensearch-dashboards:2.19.3
@@ -126,6 +236,7 @@ services:
       OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
     ports:
       - "5601:5601"
+    restart: unless-stopped
 
   postgres:
     image: postgres:17.10-alpine
@@ -142,6 +253,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   postgres-adminer:
     image: adminer:5.5.0-standalone
@@ -152,12 +264,27 @@ services:
       ADMINER_DEFAULT_SERVER: postgres
     ports:
       - "8082:8080"
+    restart: unless-stopped
 
   pulsar:
     image: apachepulsar/pulsar:4.2.3
-    command: bin/pulsar standalone
+    hostname: pulsar
+    command:
+      - /bin/bash
+      - -ec
+      - |
+        bin/apply-config-from-env.py conf/standalone.conf
+        printf '\nallowEphemeralPorts=true\nuseHostNameAsBookieID=true\n' >> conf/standalone.conf
+        exec bin/pulsar standalone --bookkeeper-port 3181 --no-functions-worker
+    environment:
+      PULSAR_MEM: -Xms512m -Xmx512m -XX:MaxDirectMemorySize=256m
+      PULSAR_PREFIX_brokerServicePort: ""
+      PULSAR_PREFIX_bindAddresses: internal:pulsar://0.0.0.0:6650,external:pulsar://0.0.0.0:16650
+      PULSAR_PREFIX_advertisedListeners: internal:pulsar://pulsar:6650,external:pulsar://${PULSAR_ADVERTISED_HOST:-localhost}:6650
+      PULSAR_PREFIX_internalListenerName: internal
     ports:
-      - "6650:6650"
+      - "3181:3181"
+      - "6650:16650"
       - "8083:8080"
     volumes:
       - ./data/pulsar:/pulsar/data
@@ -167,6 +294,7 @@ services:
       timeout: 5s
       retries: 12
       start_period: 30s
+    restart: unless-stopped
 
   pulsar-bootstrap:
     image: apachepulsar/pulsar:4.2.3
@@ -177,7 +305,49 @@ services:
       - /bin/bash
       - -ec
       - |
-        bin/pulsar-admin --admin-url http://pulsar:8080 tenants get ontology >/dev/null 2>&1 || bin/pulsar-admin --admin-url http://pulsar:8080 tenants create ontology --allowed-clusters standalone
+        api=http://pulsar:8080/admin/v2
+        json_header='Content-Type: application/json'
+        cluster_data=$$(printf \
+          '{"serviceUrl":"http://pulsar:8080","brokerServiceUrl":"pulsar://%s:6650"}' \
+          "$${PULSAR_ADVERTISED_HOST}")
+        if curl -fsS "$${api}/clusters/standalone" >/dev/null 2>&1; then
+          curl -fsS -X POST -H "$${json_header}" -d "$${cluster_data}" \
+            "$${api}/clusters/standalone"
+        else
+          curl -fsS -X PUT -H "$${json_header}" -d "$${cluster_data}" \
+            "$${api}/clusters/standalone"
+        fi
+        tenant_data='{"adminRoles":[],"allowedClusters":["standalone"]}'
+        if curl -fsS "$${api}/tenants/platform" >/dev/null 2>&1; then
+          curl -fsS -X POST -H "$${json_header}" -d "$${tenant_data}" \
+            "$${api}/tenants/platform"
+        else
+          curl -fsS -X PUT -H "$${json_header}" -d "$${tenant_data}" \
+            "$${api}/tenants/platform"
+        fi
+        if curl -fsS "$${api}/tenants/ontology" >/dev/null 2>&1; then
+          curl -fsS -X POST -H "$${json_header}" -d "$${tenant_data}" \
+            "$${api}/tenants/ontology"
+        else
+          curl -fsS -X PUT -H "$${json_header}" -d "$${tenant_data}" \
+            "$${api}/tenants/ontology"
+        fi
+        curl -fsS "$${api}/namespaces/ontology/object-instance" >/dev/null 2>&1 \
+          || curl -fsS -X PUT -H "$${json_header}" -d '{}' \
+            "$${api}/namespaces/ontology/object-instance"
+        for namespace in commands dlq index ingestion system; do
+          curl -fsS "$${api}/namespaces/platform/$${namespace}" >/dev/null 2>&1 \
+            || curl -fsS -X PUT -H "$${json_header}" -d '{}' \
+              "$${api}/namespaces/platform/$${namespace}"
+        done
+        for topic in commands/mutation-batches dlq/projection-events \
+          index/rebuild-events ingestion/dataset-events ingestion/pipeline-object-commands \
+          ingestion/relation-events system/pipeline-runtime-events; do
+          curl -fsS "$${api}/persistent/platform/$${topic}/stats" >/dev/null 2>&1 \
+            || curl -fsS -X PUT "$${api}/persistent/platform/$${topic}"
+        done
+    environment:
+      PULSAR_ADVERTISED_HOST: ${PULSAR_ADVERTISED_HOST:-localhost}
     restart: "no"
 
   skywalking-oap:
@@ -186,8 +356,8 @@ services:
       - opensearch
     environment:
       JAVA_OPTS: -Xms512m -Xmx512m
-      SW_CORE_RECORD_DATA_TTL: "7"
       SW_CORE_METRICS_DATA_TTL: "7"
+      SW_CORE_RECORD_DATA_TTL: "7"
       SW_NAMESPACE: skywalking
       SW_STORAGE: elasticsearch
       SW_STORAGE_ES_CLUSTER_NODES: opensearch:9200
@@ -195,6 +365,7 @@ services:
     ports:
       - "11800:11800"
       - "12800:12800"
+    restart: unless-stopped
 
   skywalking-ui:
     image: apache/skywalking-ui:10.4.0
@@ -204,6 +375,7 @@ services:
       SW_OAP_ADDRESS: http://skywalking-oap:12800
     ports:
       - "8084:8080"
+    restart: unless-stopped
 
 volumes:
   postgres-data:

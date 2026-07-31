@@ -1,0 +1,16 @@
+export interface DashboardSummary { id: string; name: string; description: string; lifecycle: string; pageCount: number; widgetCount: number; ownerName: string; visibility: string; refreshPolicy: string; healthStatus: string; favorite: boolean; etag: number; updatedAt: string; lastPublishedAt?: string }
+export interface DashboardPage { id: string; name: string; description: string; order: number }
+export interface DashboardDataSource { id: string; name: string; kind: 'DATASET' | 'FUNCTION' | 'OBJECT_SET'; objectTypeId?: string; datasetId?: string; referenceId?: string; query: Record<string, unknown> }
+export type DashboardAggregation = 'count' | 'sum' | 'avg' | 'min' | 'max' | 'approx_distinct' | 'sum_per_distinct';
+export interface DashboardMeasureConfig { id: string; label: string; aggregation: DashboardAggregation; field?: string; divisorField?: string }
+export interface DashboardWidgetFilterConfig { id: string; field?: string; operator: 'EQUALS' | 'FIELD_EQUALS' | 'IN' | 'NOT_IN'; values: string[]; comparisonField?: string }
+export interface DashboardChartConfig extends Record<string, unknown> { xField?: string; xTimeGrain?: 'NONE' | 'DAY' | 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR'; seriesField?: string; seriesTimeGrain?: 'NONE' | 'DAY' | 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR'; groupField?: string; measures?: DashboardMeasureConfig[]; filters?: DashboardWidgetFilterConfig[] }
+export interface DashboardWidget { id: string; pageId: string; dataSourceId?: string; type: string; title: string; description: string; layout: Record<string, { x: number; y: number; w: number; h: number }>; config: Record<string, unknown>; interaction: Record<string, unknown> }
+export interface DashboardFilter { id: string; name: string; valueType: string; controlType: string; scope: string; scopeId?: string; defaultValue?: unknown; required: boolean; allowEmpty: boolean; sensitive: boolean; applyMode: string }
+export interface DashboardDefinition { schemaVersion: number; pages: DashboardPage[]; dataSources: DashboardDataSource[]; widgets: DashboardWidget[]; filters: DashboardFilter[]; filterBindings: Array<{ filterId: string; dataSourceId: string; propertyId: string; operator: string }>; settings: Record<string, unknown> }
+export interface DashboardDraft { id: string; dashboardId: string; definition: DashboardDefinition; etag: number; status: string; updatedBy: string; updatedAt: string }
+export interface DashboardDetail { summary: DashboardSummary; currentDefinition?: DashboardDefinition; activeDraft?: DashboardDraft; accessRole: 'VIEWER' | 'EDITOR' | 'OWNER' }
+export interface DashboardPlan { id: string; dashboardId: string; versionId: string; planHash: string; estimatedCost: number; createdAt: string }
+export interface DashboardWidgetResult { widgetId: string; status: string; kind: string; data?: unknown; cacheHit: boolean; suppressed: boolean; queriedAt: string; watermark: string; correlationId: string; safeError?: string }
+export interface DashboardBatchResult { queryRunId: string; status: string; widgets: DashboardWidgetResult[]; cacheHits: number; watermark: string; correlationId: string }
+export interface DashboardValidation { valid: boolean; status: string; issues: Array<{ severity: string; code: string; path: string; message: string }>; estimatedCost: number; definitionHash: string }

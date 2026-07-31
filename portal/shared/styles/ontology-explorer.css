@@ -1,0 +1,406 @@
+/* Ontology and explorer workspaces */
+.ontology-workspace,
+.explorer-workspace {
+  min-height: calc(100vh - 132px);
+  display: grid;
+  grid-template-columns: 184px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  background: transparent;
+}
+
+.ontology-subnav,
+.explorer-subnav {
+  position: sticky;
+  top: 82px;
+  min-height: 540px;
+  padding: 8px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #e1e5eb;
+  border-radius: 8px;
+}
+
+.ontology-subnav-title {
+  padding: 10px 10px 12px;
+  color: #303a4b;
+  border-bottom: 1px solid #edf0f4;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ontology-subnav .app-menu,
+.explorer-subnav .app-menu {
+  padding-top: 7px;
+}
+
+.ontology-subnav .app-menu button,
+.explorer-subnav .app-menu button {
+  min-height: 38px;
+  margin: 2px 0;
+  padding: 8px 10px;
+  color: #536074;
+  background: transparent !important;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.ontology-subnav .app-menu button:hover,
+.explorer-subnav .app-menu button:hover {
+  color: #244bb8;
+  background: #f0f4fb !important;
+}
+
+.ontology-subnav .app-menu button.is-selected,
+.explorer-subnav .app-menu button.is-selected {
+  color: #244bb8;
+  background: #eaf0fc !important;
+  font-weight: 650;
+}
+
+.ontology-subnav .app-menu li ul,
+.explorer-subnav .app-menu li ul {
+  margin-left: 17px;
+  padding-left: 8px;
+  border-left: 1px solid #e2e7ee;
+}
+
+.ontology-subnav .app-menu li ul button,
+.explorer-subnav .app-menu li ul button {
+  min-height: 32px;
+  font-size: 12px;
+}
+
+.ontology-main,
+.explorer-main {
+  min-width: 0;
+  padding: 0;
+}
+
+.ontology-overview-page .page-title-row {
+  margin-bottom: 16px;
+}
+
+.overview-search {
+  margin-bottom: 14px;
+}
+
+.ontology-overview-grid {
+  grid-template-columns: minmax(360px, 0.9fr) minmax(420px, 1.1fr);
+  gap: 14px;
+}
+
+.overview-card {
+  min-height: 480px;
+}
+
+.overview-card > .surface-card-body {
+  min-height: 428px;
+}
+
+.graph-card > .surface-card-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.ontology-graph {
+  height: 340px;
+  flex: 0 0 auto;
+  border-color: #e3e8f0;
+  border-radius: 7px;
+  background: #fbfcfe;
+}
+
+.graph-card .text-paragraph {
+  margin: 12px 2px 0;
+  color: #707b8d;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.overview-empty-card .surface-card-body {
+  min-height: 390px;
+  display: grid;
+  place-items: center;
+}
+
+.overview-empty-card .empty-state {
+  text-align: center;
+}
+
+.explorer-page {
+  gap: 14px;
+}
+
+.explorer-hero {
+  min-height: 70px;
+  align-items: flex-start;
+}
+
+.explorer-hero h2 {
+  margin: 0 0 5px;
+  color: #1d2635;
+  font-size: 25px;
+}
+
+.explorer-hero .text-secondary,
+.explorer-hero > div > span {
+  color: #6c7687;
+  font-size: 13px;
+}
+
+.explorer-stats {
+  gap: 12px;
+}
+
+.explorer-home-grid {
+  gap: 12px;
+}
+
+.section-heading {
+  min-height: 44px;
+}
+
+.section-heading h4 {
+  margin: 0;
+  color: #2b3546;
+  font-size: 15px;
+}
+
+.search-results {
+  display: grid;
+  gap: 18px;
+}
+
+.search-result-section {
+  overflow: hidden;
+  border: 1px solid #dfe4ec;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.search-result-section > h4 {
+  margin: 0;
+  padding: 14px 18px;
+  border-bottom: 1px solid #e7eaf0;
+  font-size: 15px;
+}
+
+.search-result-count {
+  margin-left: 6px;
+  color: #7a8494;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.search-result-section .data-list {
+  padding-inline: 18px;
+}
+
+/* Object exploration is a dense data workspace, so keep chrome quiet and flat. */
+.object-explorer-page,
+.object-detail-page {
+  gap: 18px;
+}
+
+.object-explorer-page .explorer-toolbar {
+  align-items: flex-start;
+  padding: 2px 2px 0;
+}
+
+.object-explorer-page .explorer-toolbar > .cluster {
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+
+.object-explorer-page .explorer-toolbar > .cluster .action-button {
+  min-width: auto;
+  padding-inline: 13px;
+}
+
+.object-explorer-page .object-set-layout {
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 14px;
+}
+
+.object-explorer-page .filter-panel,
+.object-explorer-page .object-set-content,
+.object-detail-page .object-detail-header,
+.object-detail-page > .app-tabs {
+  border-color: #dfe4ec;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgb(31 42 59 / 4%);
+}
+
+.object-explorer-page .filter-panel {
+  padding: 14px;
+}
+
+.object-explorer-page .filter-panel .surface-card {
+  border: 0;
+  border-top: 1px solid #e8ebf0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.object-explorer-page .object-set-content {
+  padding: 0;
+  overflow: hidden;
+}
+
+.object-explorer-page .object-set-summary {
+  min-height: 68px;
+  padding: 10px 18px;
+  background: #fff;
+}
+
+.object-explorer-page .object-set-content > .app-tabs {
+  padding: 0 18px 18px;
+}
+
+.object-explorer-page .tabs__list-container,
+.object-detail-page .tabs__list-container {
+  width: 100%;
+  border-bottom: 1px solid #e5e9ef;
+  border-radius: 0;
+  background: transparent;
+}
+
+.object-explorer-page .app-tab-list,
+.object-detail-page .app-tab-list {
+  gap: 24px;
+  padding: 0;
+}
+
+.object-explorer-page .tabs__tab,
+.object-detail-page .tabs__tab {
+  min-width: auto;
+  height: 46px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent !important;
+}
+
+.object-explorer-page .tabs__tab[aria-selected="true"],
+.object-detail-page .tabs__tab[aria-selected="true"] {
+  color: #244bb8;
+  font-weight: 650;
+}
+
+.object-explorer-page .tabs__tab[aria-selected="true"]::after,
+.object-detail-page .tabs__tab[aria-selected="true"]::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: #3157d5;
+  content: "";
+}
+
+.object-explorer-page .app-tab-panel,
+.object-detail-page .app-tab-panel {
+  padding-top: 16px;
+}
+
+.object-explorer-page .data-table-wrap {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.object-explorer-page .form-checkbox .form-checkbox-control {
+  border: 1px solid #b8c1cf;
+  background: #fff;
+}
+
+.object-explorer-page .form-checkbox:not(:has(input:checked)):not(:has(input:indeterminate)) .checkbox__indicator {
+  opacity: 0;
+}
+
+.object-explorer-page .form-checkbox:has(input:checked) .form-checkbox-control,
+.object-explorer-page .form-checkbox:has(input:indeterminate) .form-checkbox-control {
+  border-color: #3157d5;
+  color: #fff;
+  background: #3157d5;
+}
+
+.object-explorer-page .action-button--link {
+  min-width: 0;
+  height: auto;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  color: #244bb8;
+  background: transparent !important;
+  box-shadow: none;
+  font-weight: 600;
+}
+
+.object-explorer-page .action-button--link:hover {
+  color: #173b9b;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.object-detail-page > .action-button--text {
+  width: fit-content;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: #536074;
+  background: transparent !important;
+}
+
+.object-detail-page .object-detail-header {
+  padding: 20px;
+}
+
+.object-detail-page > .app-tabs {
+  padding: 0 20px 20px;
+}
+
+.object-detail-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(260px, 0.8fr);
+  gap: 16px;
+}
+
+.object-detail-overview .surface-card {
+  height: fit-content;
+  border-color: #e2e6ed;
+  box-shadow: none;
+}
+
+.object-detail-page pre {
+  border: 1px solid #e2e6ed;
+  background: #fbfcfe;
+}
+
+@media (max-width: 1180px) {
+  .ontology-workspace,
+.explorer-workspace {
+    grid-template-columns: 164px minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .ontology-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-card {
+    min-height: 0;
+  }
+
+  .object-explorer-page .object-set-layout {
+    grid-template-columns: 200px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .object-explorer-page .object-set-layout,
+  .object-detail-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

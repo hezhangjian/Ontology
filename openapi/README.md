@@ -2,6 +2,12 @@
 
 `ontology.yaml` is the source of truth for REST API contracts.
 
+## YAML Style
+
+- New or modified contracts must not quote ordinary mapping keys or path keys.
+- Use single quotes for HTTP response status-code keys and `$ref` values.
+- Do not use double quotes unless YAML escaping is required.
+
 ## Naming
 
 ### Resources
