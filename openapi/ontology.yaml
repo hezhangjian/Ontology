@@ -654,23 +654,22 @@ components:
           type: string
           minLength: 1
           maxLength: 32
-        type:
+        description:
           type: string
-          enum:
-            - BOOLEAN
-            - DATE
-            - DATETIME
-            - DECIMAL
-            - INTEGER
-            - JSON
-            - TEXT
+          maxLength: 1024
+        type:
+          $ref: '#/components/schemas/PropertyType'
         nullable:
           type: boolean
     CreateObjectTypeReq:
       type: object
       additionalProperties: false
       required:
+        - id
         - name
+        - idField
+        - nameField
+        - properties
       properties:
         id:
           type: string
@@ -682,6 +681,20 @@ components:
         description:
           type: string
           maxLength: 1024
+        idField:
+          type: string
+          description: Property used as the Object Instance unique identifier.
+          maxLength: 32
+        nameField:
+          type: string
+          description: Property used as the Object Instance display name.
+          maxLength: 32
+        properties:
+          type: array
+          description: The idField and nameField values must reference property names in this array.
+          minItems: 1
+          items:
+            "$ref": "#/components/schemas/ObjectTypeProperty"
     UpdateObjectTypeReq:
       type: object
       additionalProperties: false
@@ -706,29 +719,63 @@ components:
           type: string
         description:
           type: string
+        idField:
+          type: string
+        nameField:
+          type: string
+        properties:
+          type: array
+          items:
+            "$ref": "#/components/schemas/ObjectTypeProperty"
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
+    ObjectTypeProperty:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - type
+        - required
+      properties:
+        name:
+          type: string
+          description: Unique property name within the Object Type.
+          minLength: 1
+          maxLength: 32
+        description:
+          type: string
+          maxLength: 1024
+        type:
+          $ref: '#/components/schemas/PropertyType'
+        required:
+          type: boolean
+    PropertyType:
+      type: string
+      enum:
+        - boolean
+        - short
+        - int
+        - long
+        - float
+        - double
+        - string
+        - timestamp
+        - date
+        - datetime
+        - json
     CreateObjectInstanceReq:
       type: object
       additionalProperties: false
       required:
-        - id
-        - title
         - properties
       properties:
-        id:
-          type: string
-          maxLength: 32
-        title:
-          type: string
-          minLength: 1
-          maxLength: 1024
         properties:
           type: object
+          description: Values keyed by Object Type property names; idField determines the ID and nameField determines the display name.
           additionalProperties: true
     ObjectInstance:
       type: object
@@ -769,12 +816,10 @@ components:
     UpdateObjectInstanceReq:
       type: object
       additionalProperties: false
-      minProperties: 1
+      required:
+        - properties
       properties:
-        title:
-          type: string
-          minLength: 1
-          maxLength: 1024
         properties:
           type: object
+          description: Values keyed by Object Type property names; idField cannot be changed.
           additionalProperties: true
