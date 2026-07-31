@@ -1,0 +1,4 @@
+import { Button } from '@/shared/components/actions';
+import { Space } from '@/shared/components/layout';
+const widgets = [['METRIC','指标卡'],['BAR','柱状图'],['STACKED_BAR','堆叠柱状图'],['LINE','折线图'],['AREA','面积图'],['PIE','饼图'],['DONUT','环形图'],['PIVOT','透视表'],['OBJECT_TABLE','明细表'],['MARKDOWN','富文本'],['SECTION','分节标题']];
+export default function WidgetPalette({ disabled, onAdd }: { disabled: boolean; onAdd: (type: string) => void }) { return <div><div className="editor-section-title">组件库</div><Space direction="vertical" style={{width:'100%'}}>{widgets.map(([type,label]) => <Button disabled={disabled && !['MARKDOWN','SECTION'].includes(type)} key={type} onClick={() => onAdd(type)}>{label}</Button>)}</Space></div>; }

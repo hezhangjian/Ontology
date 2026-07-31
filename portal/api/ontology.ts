@@ -9,10 +9,6 @@ type OntologyResponse = {
   name: string;
 };
 
-type OntologyPageResponse = {
-  items?: OntologyResponse[];
-};
-
 export type CreateOntologyInput = {
   description: string;
   id: string;
@@ -29,8 +25,8 @@ function toOntologyItem(ontology: OntologyResponse): OntologyItem {
 
 async function readError(response: Response) {
   try {
-    const body = (await response.json()) as {message?: string};
-    return body.message ?? `Request failed with status ${response.status}`;
+    const body = (await response.json()) as {detail?: string; message?: string};
+    return body.detail ?? body.message ?? `Request failed with status ${response.status}`;
   } catch {
     return `Request failed with status ${response.status}`;
   }
@@ -44,7 +40,7 @@ export async function fetchOntologies(): Promise<OntologyItem[]> {
   for (let attempt = 0; ; attempt += 1) {
     let response: Response;
     try {
-      response = await fetch(`${API_BASE_URL}/v1/ontologies?limit=100&offset=0`);
+      response = await fetch(`${API_BASE_URL}/v1/ontologies`);
     } catch (error) {
       if (attempt >= ONTOLOGY_LOAD_RETRY_DELAYS.length) {
         throw error;
@@ -55,8 +51,8 @@ export async function fetchOntologies(): Promise<OntologyItem[]> {
     }
 
     if (response.ok) {
-      const page = (await response.json()) as OntologyPageResponse;
-      return (page.items ?? []).map(toOntologyItem);
+      const ontologies = (await response.json()) as OntologyResponse[];
+      return ontologies.map(toOntologyItem);
     }
 
     if (response.status < 500 || attempt >= ONTOLOGY_LOAD_RETRY_DELAYS.length) {

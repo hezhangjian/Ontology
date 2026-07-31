@@ -1,11 +1,13 @@
-import React from "react";
-import ReactDOM from "react-dom/client";
-import "./i18n";
-import "./globals.css";
-import App from "./App";
+import { I18nProvider, Toast } from '@heroui/react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import { DialogHost } from './shared/components/overlays';
+import './shared/styles/global.css';
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <I18nProvider locale="zh-CN">
     <App />
-  </React.StrictMode>,
+    <DialogHost />
+    <Toast.Provider placement="top" />
+  </I18nProvider>,
 );

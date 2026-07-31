@@ -3,56 +3,48 @@ package com.hezhangjian.ontology.controller;
 import com.hezhangjian.ontology.api.OntologyApi;
 import com.hezhangjian.ontology.model.CreateOntologyReq;
 import com.hezhangjian.ontology.model.Ontology;
-import com.hezhangjian.ontology.model.OntologyPage;
 import com.hezhangjian.ontology.model.UpdateOntologyReq;
 import com.hezhangjian.ontology.service.OntologyService;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.RestController;
 
 @RequiredArgsConstructor
 @RestController
-@CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"})
 public class OntologyController implements OntologyApi {
     private final OntologyService ontologyService;
 
     @Override
     public ResponseEntity<Ontology> createOntology(CreateOntologyReq createOntologyReq) {
-        return ontologyService
-                .createOntology(createOntologyReq)
-                .map(ontology -> ResponseEntity.status(HttpStatus.CREATED).body(ontology))
-                .orElseGet(() -> ResponseEntity.status(HttpStatus.CONFLICT).build());
-    }
-
-    @Override
-    public ResponseEntity<Ontology> getOntology(String ontologyId) {
-        return ontologyService
-                .getOntology(ontologyId)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        Ontology ontology = ontologyService.create(createOntologyReq);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .eTag(ontologyService.etag(ontology))
+                .body(ontology);
     }
 
     @Override
     public ResponseEntity<Void> deleteOntology(String ontologyId) {
-        if (!ontologyService.deleteOntology(ontologyId)) {
-            return ResponseEntity.notFound().build();
-        }
-
+        ontologyService.delete(ontologyId);
         return ResponseEntity.noContent().build();
     }
 
     @Override
-    public ResponseEntity<OntologyPage> listOntologies(Integer limit, Integer offset) {
-        return ResponseEntity.ok(ontologyService.listOntologies(limit, offset));
+    public ResponseEntity<Ontology> getOntology(String ontologyId) {
+        Ontology ontology = ontologyService.get(ontologyId);
+        return ResponseEntity.ok().eTag(ontologyService.etag(ontology)).body(ontology);
     }
 
     @Override
-    public ResponseEntity<Ontology> updateOntology(String ontologyId, UpdateOntologyReq updateOntologyReq) {
-        return ontologyService
-                .updateOntology(ontologyId, updateOntologyReq)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+    public ResponseEntity<List<Ontology>> listOntologies() {
+        return ResponseEntity.ok(ontologyService.list());
+    }
+
+    @Override
+    public ResponseEntity<Ontology> updateOntology(
+            String ifMatch, String ontologyId, UpdateOntologyReq updateOntologyReq) {
+        Ontology ontology = ontologyService.update(ontologyId, updateOntologyReq, ifMatch);
+        return ResponseEntity.ok().eTag(ontologyService.etag(ontology)).body(ontology);
     }
 }

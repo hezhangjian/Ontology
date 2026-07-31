@@ -2,12 +2,18 @@
 
 `ontology.yaml` is the source of truth for REST API contracts.
 
+## YAML Style
+
+- New or modified contracts must not quote ordinary mapping keys or path keys.
+- Use single quotes for HTTP response status-code keys and `$ref` values.
+- Do not use double quotes unless YAML escaping is required.
+
 ## Naming
 
 ### Resources
 
 - Use singular resource names for OpenAPI tags, such as `Ontology`, `Term`, and `Category`.
-- Use canonical domain casing outside URLs, such as `DataSet` in tags, operation IDs, schemas, summaries, and descriptions.
+- Use canonical domain casing outside URLs, such as `Dataset` in tags, operation IDs, schemas, summaries, and descriptions.
 - Use plural nouns for collection paths, such as `/ontologies` and `/terms`.
 - Use `id` for a resource's own identifier field.
 - Use `xxxId` for path parameters and foreign-key/reference fields.
@@ -19,8 +25,8 @@
 
 ### CRUD
 
-- Use imperative verbs in operation summaries, such as `Create a DataSet`.
-- Use third-person singular verbs in operation descriptions, such as `Creates a DataSet`.
+- Use imperative verbs in operation summaries, such as `Create a Dataset`.
+- Use third-person singular verbs in operation descriptions, such as `Creates a Dataset`.
 - For simple CRUD APIs, name create request schemas as `CreateXxxReq`.
 - For simple CRUD APIs, name update request schemas as `UpdateXxxReq`.
 - For simple CRUD APIs, name resource schemas as `Xxx`.

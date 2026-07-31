@@ -12,6 +12,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      "/actuator": "http://localhost:4242",
       "/v1": "http://localhost:4242",
     },
   },

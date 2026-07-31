@@ -1,0 +1,210 @@
+/* Shared page surfaces */
+.surface-card {
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+/* Shared data grids use a white card rather than HeroUI's gray outer rail. */
+.data-table-wrap {
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #e5e9ef;
+  border-radius: 10px;
+}
+
+.data-table {
+  background: #fff;
+}
+
+.data-table thead,
+.data-table th {
+  background: #f8faff;
+}
+
+.data-table th {
+  color: #596579;
+  font-weight: 600;
+}
+
+.data-table tbody tr,
+.data-table td {
+  background: #fff;
+}
+
+.data-table tbody tr:hover td,
+.data-table tbody tr[data-hovered="true"] td {
+  background: #f5f8ff;
+}
+
+.data-table tbody tr[data-selected="true"] td {
+  background: #edf3ff;
+}
+
+/* Page tabs should read as navigation, not a gray segmented control. */
+.app-tabs .tabs__list-container {
+  width: 100%;
+  background: transparent;
+  border-bottom: 1px solid #e5e9ef;
+  border-radius: 0;
+}
+
+.app-tabs .app-tab-list {
+  gap: 24px;
+  padding: 0;
+}
+
+.app-tabs .tabs__tab {
+  width: auto;
+  min-width: auto;
+  height: 44px;
+  padding: 0;
+  color: #697386;
+  background: transparent !important;
+  border-radius: 0;
+}
+
+.app-tabs .tabs__tab[aria-selected="true"] {
+  color: #244bb8;
+  font-weight: 650;
+}
+
+.app-tabs .tabs__tab[aria-selected="true"]::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: #3157d5;
+  content: "";
+}
+
+.app-tabs .tabs__separator {
+  display: none;
+}
+
+.collection-page,
+.dataset-detail-page,
+.dashboard-list-page,
+.explorer-page,
+.ontology-overview-page {
+  max-width: 1460px;
+  margin: 0 auto;
+}
+
+.page-title-row {
+  min-height: 62px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.page-title-row > div:first-child {
+  min-width: 0;
+  max-width: 780px;
+}
+
+.page-title-row > .cluster {
+  flex: 0 0 auto;
+}
+
+.page-title-row .action-button {
+  white-space: nowrap;
+}
+
+.collection-toolbar {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: #fff;
+  border: 1px solid #e1e5eb;
+  border-radius: 8px;
+}
+
+.collection-toolbar > .search-field {
+  flex: 1 1 520px;
+  max-width: 520px;
+  width: auto;
+}
+
+.collection-toolbar > .cluster {
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.collection-toolbar > span:not(.search-field) {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 0 6px;
+  color: #7a8495;
+  font-size: 12px;
+}
+
+.page-empty-surface {
+  min-height: 390px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 46px;
+  color: #748094;
+  background:
+    linear-gradient(180deg, rgb(248 250 253 / 82%), #fff),
+    #fff;
+  border: 1px solid #e1e5eb;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.page-empty-surface h4 {
+  margin: 4px 0 0;
+  color: #2b3546;
+  font-size: 18px;
+}
+
+.page-empty-surface p {
+  max-width: 520px;
+  margin: 6px auto 15px;
+  color: #7a8495;
+  line-height: 1.65;
+}
+
+.empty-state-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 10px;
+  color: #4169e1;
+  background: #eaf0ff;
+  border: 1px solid #d9e3fb;
+  border-radius: 8px;
+  font-size: 23px;
+}
+
+.statistic {
+  display: grid;
+  gap: 10px;
+  min-height: 92px;
+  align-content: center;
+}
+
+.statistic > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #697386;
+  font-size: 12px;
+}
+
+.statistic > strong {
+  color: #263143;
+  font-size: 28px;
+  font-weight: 720;
+}

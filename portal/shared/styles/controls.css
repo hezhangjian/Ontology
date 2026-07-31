@@ -1,0 +1,445 @@
+/* Project-native controls */
+a,
+.link-button,
+[role="link"] {
+  color: #3157c8;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+a:hover,
+.link-button:hover,
+[role="link"]:hover {
+  color: #2347ad;
+  text-decoration: underline;
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+}
+
+.field-selection,
+.field-mapping {
+  display: grid;
+  gap: 9px;
+  margin-top: 14px;
+  padding: 10px;
+  background: #f9fafc;
+  border: 1px solid #dfe4eb;
+  border-radius: 7px;
+}
+
+.field-selection-header,
+.field-mapping > header {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.field-selection-header > div:first-child,
+.field-mapping > header {
+  min-width: 0;
+}
+
+.field-selection-header strong,
+.field-mapping > header strong {
+  color: #344054;
+  font-size: 12px;
+}
+
+.field-selection-header .text-secondary,
+.field-mapping > header .text-secondary {
+  display: block;
+  margin-top: 1px;
+  font-size: 11px;
+}
+
+.field-selection-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.field-selection-actions .action-button {
+  min-height: 27px;
+  padding: 3px 6px;
+  font-size: 11px;
+}
+
+.field-selection-list,
+.field-mapping-list {
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #e4e8ef;
+  border-radius: 6px;
+}
+
+.field-selection-row {
+  min-height: 45px;
+  display: flex;
+  align-items: center;
+  padding: 6px 9px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.field-selection-row:last-child,
+.field-mapping-row:last-child {
+  border-bottom: 0;
+}
+
+.field-selection-row:hover {
+  background: #f6f8fc;
+}
+
+.field-selection-row .form-checkbox {
+  width: 100%;
+}
+
+.field-selection-name {
+  min-width: 0;
+  display: grid;
+  flex: 1;
+}
+
+.field-selection-name strong {
+  overflow: hidden;
+  color: #344054;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.field-selection-name small {
+  color: #8993a3;
+  font-size: 10px;
+}
+
+.field-selection-empty {
+  padding: 22px 10px;
+  color: #8a94a5;
+  text-align: center;
+  font-size: 12px;
+}
+
+/* Multi-select menus can contain every field of a wide schema. Keep the
+   overlay within the viewport and scroll only its option list. */
+.form-select-popover {
+  max-height: min(420px, calc(100vh - 32px));
+}
+
+.form-select-popover [role="dialog"] {
+  max-height: inherit;
+}
+
+.form-select-popover [role="listbox"] {
+  max-height: min(280px, calc(100vh - 180px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.field-mapping {
+  margin-top: 10px;
+}
+
+.field-mapping > header {
+  display: block;
+}
+
+.field-mapping-list {
+  max-height: 300px;
+}
+
+.field-mapping-row {
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: minmax(90px, .85fr) minmax(120px, 1.15fr);
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.field-mapping-row > span {
+  overflow: hidden;
+  color: #596579;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+@media (max-width: 1100px) {
+  .pipeline-editor-workspace {
+    grid-template-columns: minmax(480px, 1fr) 300px;
+  }
+
+  .pipeline-node-library {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-sider {
+    display: none;
+  }
+
+  .app-header {
+    height: 56px;
+    padding: 0 10px;
+    gap: 8px;
+  }
+
+  .mobile-nav-button {
+    display: inline-flex;
+    flex: 0 0 auto;
+  }
+
+  .header-context {
+    flex: 1;
+    gap: 6px;
+    overflow: hidden;
+  }
+
+  .app-breadcrumb {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .app-breadcrumb span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .app-breadcrumb span:not(:last-child) {
+    display: none;
+  }
+
+  .environment-badge,
+.assistant-button {
+    display: none;
+  }
+
+  .header-actions {
+    flex: 0 0 auto;
+    gap: 2px !important;
+  }
+
+  .app-content {
+    padding: 16px 14px 28px;
+  }
+
+  .app-content:has(.pipeline-editor-page) {
+    overflow: auto;
+  }
+
+  .pipeline-editor-page {
+    min-height: calc(100vh - 56px);
+    height: auto;
+  }
+
+  .pipeline-editor-header {
+    position: sticky;
+    top: 0;
+    z-index: 8;
+    min-height: 0;
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 10px 12px;
+  }
+
+  .pipeline-editor-header > .cluster {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .pipeline-editor-workspace {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .pipeline-canvas-column {
+    min-height: 650px;
+    grid-template-rows: 410px 240px;
+  }
+
+  .pipeline-config-panel {
+    min-height: 520px;
+    overflow: visible;
+    border-top: 1px solid #e3e7ef;
+    border-left: 0;
+  }
+
+  .pipeline-canvas-toolbar {
+    max-width: calc(100vw - 24px);
+  }
+
+  .field-selection,
+.field-mapping {
+    padding: 9px;
+  }
+
+  .field-selection-header {
+    align-items: flex-start;
+  }
+
+  .field-mapping-row {
+    grid-template-columns: minmax(86px, .8fr) minmax(0, 1.2fr);
+  }
+
+  .ontology-workspace,
+.explorer-workspace {
+    min-height: calc(100vh - 100px);
+    display: block;
+  }
+
+  .ontology-subnav,
+.explorer-subnav {
+    position: static;
+    min-height: 0;
+    margin-bottom: 14px;
+    overflow-x: auto;
+  }
+
+  .ontology-subnav-title {
+    display: none;
+  }
+
+  .ontology-subnav .app-menu,
+.explorer-subnav .app-menu {
+    display: flex;
+    width: max-content;
+    padding: 0;
+  }
+
+  .ontology-subnav .app-menu > ul,
+.explorer-subnav .app-menu > ul {
+    display: flex;
+    gap: 4px;
+  }
+
+  .ontology-subnav .app-menu li,
+.explorer-subnav .app-menu li {
+    flex: 0 0 auto;
+  }
+
+  .ontology-subnav .app-menu li ul,
+.explorer-subnav .app-menu li ul {
+    display: none;
+  }
+
+  .ontology-subnav .app-menu button,
+.explorer-subnav .app-menu button {
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  .page-title-row,
+.explorer-hero,
+.explorer-toolbar,
+.object-detail-header,
+.section-heading,
+.object-set-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .page-title-row > .cluster,
+.explorer-toolbar > .cluster,
+.object-detail-header > .cluster {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .object-detail-header > * {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .object-detail-header .cluster {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .object-detail-page {
+    width: 100%;
+    max-width: 100%;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pipeline-run-grid,
+.pipeline-create-grid,
+.explorer-home-grid,
+.detail-grid,
+.object-set-layout,
+.ontology-overview-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .explorer-stats,
+.object-card-grid,
+.analysis-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-tabs .app-tab-list {
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+  }
+
+  .descriptions-list {
+    --description-columns: 1 !important;
+  }
+
+  .descriptions-list > div {
+    grid-template-columns: minmax(96px, 36%) minmax(0, 1fr);
+  }
+
+  .dashboard-editor-header {
+    height: auto;
+    min-height: 58px;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .dashboard-editor-body {
+    height: calc(100vh - 58px);
+    display: block !important;
+  }
+
+  .dashboard-editor-left,
+.dashboard-editor-right {
+    display: none;
+  }
+
+  .dashboard-editor-main {
+    height: 100%;
+    padding: 12px;
+  }
+
+  .dashboard-editor-canvas {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    padding: 12px;
+  }
+
+  .dashboard-editor-canvas > * {
+    grid-column: span 12 !important;
+  }
+}
+.action-button--link,
+.action-button--text {
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.action-button--link {
+  color: #244bb8;
+}

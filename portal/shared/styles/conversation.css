@@ -1,0 +1,152 @@
+/* Conversation workspace */
+.conversation-center {
+  height: calc(100vh - 116px);
+  margin: -10px -12px;
+  grid-template-columns: 248px minmax(0, 1fr);
+  border-color: #e1e5eb;
+  border-radius: 8px;
+}
+
+.conversation-sidebar {
+  padding: 14px 12px;
+  background: #fafbfd;
+}
+
+.conversation-sidebar-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 3px 10px;
+  color: #3a4557;
+  font-size: 13px;
+}
+
+.conversation-sidebar-heading span {
+  min-width: 22px;
+  padding: 2px 6px;
+  color: #697386;
+  background: #edf0f4;
+  border-radius: 10px;
+  text-align: center;
+  font-size: 11px;
+}
+
+.conversation-item {
+  margin-top: 5px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+.conversation-item.active {
+  color: #244bb8;
+  background: #edf2ff;
+  border-color: #dce5fb;
+}
+
+.conversation-heading {
+  min-height: 80px;
+  padding: 16px 22px 13px;
+}
+
+.conversation-heading h3 {
+  color: #1f2938;
+  font-size: 20px;
+}
+
+.conversation-heading p {
+  color: #6f7a8c;
+  font-size: 13px;
+}
+
+.conversation-welcome {
+  width: min(720px, calc(100% - 64px));
+  margin: auto;
+  padding: 30px 0 70px;
+  text-align: center;
+}
+
+.conversation-welcome-mark {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 15px;
+  color: #3157c8;
+  background: #edf2ff;
+  border: 1px solid #d9e3fb;
+  border-radius: 10px;
+  font-size: 25px;
+}
+
+.conversation-welcome h3 {
+  margin: 0;
+  color: #263143;
+  font-size: 21px;
+}
+
+.conversation-welcome p {
+  margin: 8px auto 22px;
+  color: #748094;
+  font-size: 13px;
+}
+
+.conversation-starters {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  text-align: left;
+}
+
+.conversation-starters button {
+  min-height: 104px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 15px;
+  color: #3d485a;
+  background: #fff;
+  border: 1px solid #dfe4eb;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.conversation-starters button:hover {
+  color: #244bb8;
+  background: #f7f9ff;
+  border-color: #b9c7eb;
+}
+
+.conversation-starters button > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: #4169e1;
+  font-size: 17px;
+}
+
+.conversation-starters button span {
+  display: grid;
+  gap: 6px;
+}
+
+.conversation-starters small {
+  color: #7c8799;
+  line-height: 1.45;
+}
+
+.conversation-message.assistant .conversation-avatar {
+  background: #4169e1;
+}
+
+.conversation-bubble {
+  border-radius: 4px 10px 10px;
+  box-shadow: none;
+}
+
+.conversation-message.user .conversation-bubble {
+  border-radius: 10px 4px 10px 10px;
+}
+
+.conversation-composer {
+  padding: 13px 20px;
+  background: #fbfcfd;
+}
