@@ -11,6 +11,7 @@
 - Use plural nouns for collection paths, such as `/ontologies` and `/terms`.
 - Use `id` for a resource's own identifier field.
 - Use `xxxId` for path parameters and foreign-key/reference fields.
+- Use camelCase for request and response field names, such as `idField` and `nameField`.
 - Use `maxLength: 32` for `id`, `xxxId`, and `name` string fields in request schemas and path parameters.
 - Use `maxLength: 1024` for `description` string fields in request schemas.
 - Do not include validation limits on output resource schemas.
