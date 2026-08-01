@@ -8,6 +8,9 @@
     "moduleResolution": "Bundler",
     "noEmit": true,
     "noImplicitAny": true,
+    "paths": {
+      "@/*": ["./portal/*"]
+    },
     "strict": true,
     "target": "ES2022",
     "types": ["vite/client"]
