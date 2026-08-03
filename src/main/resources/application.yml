@@ -40,6 +40,9 @@ ontology:
   opensearch:
     host: ${OPENSEARCH_HOST:localhost}
     port: ${OPENSEARCH_PORT:9200}
+  pulsar:
+    host: ${PULSAR_HOST:localhost}
+    port: ${PULSAR_PORT:6650}
 
 management:
   endpoints:
