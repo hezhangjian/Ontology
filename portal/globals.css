@@ -36,6 +36,7 @@ button {
 
 .sidebar {
   position: relative;
+  z-index: 10;
   width: 284px;
   min-height: 100vh;
   padding: 24px 18px;
@@ -47,6 +48,7 @@ button {
 .sidebar.is-collapsed {
   width: 72px;
   padding: 24px 12px;
+  cursor: ew-resize;
 }
 
 .sidebar-top {
@@ -117,6 +119,24 @@ button {
 .sidebar.is-collapsed .sidebar-toggle {
   top: 27px;
   right: 12px;
+}
+
+.collapsed-sidebar-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.collapsed-sidebar-open-icon {
+  display: none;
+}
+
+.sidebar.is-collapsed:hover .collapsed-sidebar-logo {
+  display: none;
+}
+
+.sidebar.is-collapsed:hover .collapsed-sidebar-open-icon {
+  display: block;
 }
 
 .sidebar-toggle:hover {
