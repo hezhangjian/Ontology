@@ -1,7 +1,11 @@
 import {
+  Box,
+  Boxes,
   Database,
   GitBranch,
+  Network,
   Table2,
+  Waypoints,
 } from 'lucide-react';
 import type {LucideIcon} from 'lucide-react';
 import {useTranslation} from 'react-i18next';
@@ -31,6 +35,15 @@ export function AppNavigation({collapsed}: AppNavigationProps) {
         {href: '/data/connections', icon: Database, label: t('navigation.dataConnections')},
         {href: '/data/pipelines', icon: GitBranch, label: t('navigation.pipelines')},
         {href: '/data/datasets', icon: Table2, label: t('navigation.datasets')},
+      ],
+    },
+    {
+      label: t('navigation.ontologyModeling'),
+      entries: [
+        {href: '/ontology/object-types', icon: Box, label: t('navigation.objectTypes')},
+        {href: '/ontology/object-instances', icon: Boxes, label: t('navigation.objectInstances')},
+        {href: '/ontology/relation-types', icon: Network, label: t('navigation.relationTypes')},
+        {href: '/ontology/relation-instances', icon: Waypoints, label: t('navigation.relationInstances')},
       ],
     },
   ];
