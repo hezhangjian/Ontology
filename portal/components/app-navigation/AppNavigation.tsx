@@ -57,7 +57,7 @@ export function AppNavigation({collapsed}: AppNavigationProps) {
           </strong>
           <div className="navigation-items">
             {group.entries.map((entry) => (
-              <NavigationItem entry={entry} key={entry.href ?? entry.label} />
+              <NavigationItem collapsed={collapsed} entry={entry} key={entry.href ?? entry.label} />
             ))}
           </div>
         </section>
@@ -66,18 +66,19 @@ export function AppNavigation({collapsed}: AppNavigationProps) {
   );
 }
 
-function NavigationItem({entry}: {entry: NavigationEntry}) {
+function NavigationItem({collapsed, entry}: {collapsed: boolean; entry: NavigationEntry}) {
   const Icon = entry.icon;
   const external = entry.href?.startsWith('http');
   const active = entry.href ? isCurrentPath(entry.href) : false;
   return (
     <a
+      aria-label={collapsed ? entry.label : undefined}
       aria-current={active ? 'page' : undefined}
       className={active ? 'navigation-link is-active' : 'navigation-link'}
+      data-tooltip={entry.label}
       href={entry.href}
       rel={external ? 'noreferrer' : undefined}
       target={external ? '_blank' : undefined}
-      title={entry.label}
     >
       {Icon && <Icon aria-hidden="true" className="navigation-icon" size={18} />}
       <span className="navigation-label">{entry.label}</span>

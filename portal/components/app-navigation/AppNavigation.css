@@ -82,6 +82,7 @@
 
 .sidebar.is-collapsed .app-navigation {
   height: calc(100vh - 188px);
+  overflow: visible;
 }
 
 .sidebar.is-collapsed .navigation-label {
@@ -95,4 +96,34 @@
 .sidebar.is-collapsed .navigation-link {
   justify-content: center;
   padding-inline: 0;
+}
+
+.sidebar.is-collapsed .navigation-link::after {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 20px);
+  z-index: 30;
+  padding: 9px 14px;
+  border: 1px solid #363636;
+  border-radius: 10px;
+  color: #ffffff;
+  background: #202020;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+  content: attr(data-tooltip);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 20px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%) translateX(-4px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+  white-space: nowrap;
+}
+
+.sidebar.is-collapsed .navigation-link:hover::after,
+.sidebar.is-collapsed .navigation-link:focus-visible::after {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
 }
