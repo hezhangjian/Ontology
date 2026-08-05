@@ -54,12 +54,13 @@ button {
   min-height: 116px;
   align-content: start;
   gap: 14px;
+  grid-template-rows: 34px 38px 1px;
   padding-top: 8px;
 }
 
 .sidebar.is-collapsed .sidebar-top {
   justify-items: center;
-  padding-top: 66px;
+  padding-top: 8px;
 }
 
 .sidebar-brand {
@@ -86,8 +87,13 @@ button {
 }
 
 .sidebar-divider {
+  grid-row: 3;
   height: 1px;
   background: #e2e5ea;
+}
+
+.sidebar.is-collapsed .sidebar-divider {
+  width: 100%;
 }
 
 .sidebar-toggle {
