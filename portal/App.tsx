@@ -26,8 +26,8 @@ function App() {
               <h1 className="sidebar-title">Ontology</h1>
             </div>
           )}
-          <OntologySwitcher collapsed={collapsed} onExpand={() => setCollapsed(false)} />
-          {!collapsed && <div className="sidebar-divider" />}
+          {!collapsed && <OntologySwitcher collapsed={collapsed} onExpand={() => setCollapsed(false)} />}
+          <div className="sidebar-divider" />
         </div>
       </aside>
       <main className="app-content">
