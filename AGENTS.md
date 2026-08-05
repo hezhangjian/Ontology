@@ -20,6 +20,8 @@ When adding or updating REST API contracts, use `openapi/`.
 ## Code Style
 
 - All code comments must be written in English.
+- In Java classes, do not add a blank line before the first field declared directly under the class; add a blank line
+  before each subsequent field.
 - Commit messages must follow [Conventional Commits](https://www.conventionalcommits.org/) specification:
     - Format: `<type>(<scope>): <description>`
     - Common types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `build`
