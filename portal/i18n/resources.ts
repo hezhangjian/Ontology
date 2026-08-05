@@ -39,6 +39,16 @@ export const enUS = {
     switcherLabel: 'Switch ontology',
     unselected: 'Select Ontology',
   },
+  objectTypes: {
+    breadcrumbLabel: 'Breadcrumb',
+    create: 'New Object Type',
+    graphView: 'Graph view',
+    listView: 'List view',
+    searchLabel: 'Search object types',
+    searchPlaceholder: 'Search object types...',
+    title: 'Object Types',
+    viewLabel: 'Object type view',
+  },
 };
 
 export const zhCN: LocaleResource<typeof enUS> = {
@@ -77,6 +87,16 @@ export const zhCN: LocaleResource<typeof enUS> = {
     new: '新建本体',
     switcherLabel: '切换本体',
     unselected: '选择本体',
+  },
+  objectTypes: {
+    breadcrumbLabel: '面包屑导航',
+    create: '新建对象类型',
+    graphView: '关系图视图',
+    listView: '列表视图',
+    searchLabel: '搜索对象类型',
+    searchPlaceholder: '搜索对象类型...',
+    title: '对象类型',
+    viewLabel: '对象类型视图',
   },
 };
 

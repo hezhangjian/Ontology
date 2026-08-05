@@ -26,7 +26,8 @@ button {
 
 #root,
 .app-shell {
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
 }
 
 .app-shell {
@@ -38,7 +39,7 @@ button {
   position: relative;
   z-index: 10;
   width: 284px;
-  min-height: 100vh;
+  height: 100vh;
   padding: 24px 18px;
   background: #f7f7f8;
   border-right: 1px solid #e1e7f0;
@@ -145,8 +146,11 @@ button {
 }
 
 .app-content {
+  display: flex;
   flex: 1;
   min-width: 0;
+  min-height: 0;
+  flex-direction: column;
   background: #ffffff;
 }
 

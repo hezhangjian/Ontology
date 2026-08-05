@@ -1,8 +1,9 @@
 import {useState, type MouseEvent} from 'react';
 import {PanelLeftClose, PanelLeftOpen} from 'lucide-react';
 import {useTranslation} from 'react-i18next';
-import {LanguageToggle} from './components/language-toggle/LanguageToggle';
 import {AppNavigation} from './components/app-navigation/AppNavigation';
+import {LanguageToggle} from './components/language-toggle/LanguageToggle';
+import {ObjectTypePage} from './components/object-type-page/ObjectTypePage';
 import {OntologySwitcher} from './components/ontology-switcher/OntologySwitcher';
 
 const SIDEBAR_COLLAPSED_KEY = 'sidebar.collapsed';
@@ -10,6 +11,7 @@ const SIDEBAR_COLLAPSED_KEY = 'sidebar.collapsed';
 function App() {
   const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true');
   const {t} = useTranslation();
+  const objectTypePage = window.location.pathname === '/ontology/object-types';
 
   const updateCollapsed = (value: boolean) => {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(value));
@@ -51,9 +53,13 @@ function App() {
         <AppNavigation collapsed={collapsed} />
       </aside>
       <main className="app-content">
-        <header className="app-header">
-          <LanguageToggle />
-        </header>
+        {objectTypePage ? (
+          <ObjectTypePage />
+        ) : (
+          <header className="app-header">
+            <LanguageToggle />
+          </header>
+        )}
       </main>
     </div>
   );
