@@ -2,6 +2,7 @@ import {useState} from 'react';
 import {PanelLeftClose, PanelLeftOpen} from 'lucide-react';
 import {useTranslation} from 'react-i18next';
 import {LanguageToggle} from './components/language-toggle/LanguageToggle';
+import {AppNavigation} from './components/app-navigation/AppNavigation';
 import {OntologySwitcher} from './components/ontology-switcher/OntologySwitcher';
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
           {!collapsed && <OntologySwitcher collapsed={collapsed} onExpand={() => setCollapsed(false)} />}
           <div className="sidebar-divider" />
         </div>
+        <AppNavigation collapsed={collapsed} />
       </aside>
       <main className="app-content">
         <header className="app-header">

@@ -10,7 +10,12 @@ export const enUS = {
   },
   navigation: {
     collapseSidebar: 'Collapse sidebar',
+    data: 'Data Access',
+    dataConnections: 'Data Sources',
+    datasets: 'Datasets',
     expandSidebar: 'Expand sidebar',
+    pipelines: 'Data Pipelines',
+    primary: 'Primary navigation',
   },
   ontology: {
     cancel: 'Cancel',
@@ -39,7 +44,12 @@ export const zhCN: LocaleResource<typeof enUS> = {
   },
   navigation: {
     collapseSidebar: '收起侧边栏',
+    data: '数据接入',
+    dataConnections: '数据源',
+    datasets: '数据集',
     expandSidebar: '展开侧边栏',
+    pipelines: '数据管道',
+    primary: '主导航',
   },
   ontology: {
     cancel: '取消',
