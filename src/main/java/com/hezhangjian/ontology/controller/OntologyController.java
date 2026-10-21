@@ -9,10 +9,12 @@ import com.hezhangjian.ontology.service.OntologyService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.RestController;
 
 @RequiredArgsConstructor
 @RestController
+@CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"})
 public class OntologyController implements OntologyApi {
     private final OntologyService ontologyService;
 

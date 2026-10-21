@@ -75,6 +75,16 @@
   overflow: auto;
 }
 
+.ontology-menu-message {
+  padding: 10px 9px;
+  color: #667085;
+  font-size: 13px;
+}
+
+.ontology-menu-message.is-error {
+  color: #d92d20;
+}
+
 .ontology-option,
 .ontology-create-button {
   display: flex;
@@ -256,6 +266,11 @@
   border: 1px solid #0b63ce;
   color: #ffffff;
   background: #0b63ce;
+}
+
+.primary-action:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .secondary-action {
