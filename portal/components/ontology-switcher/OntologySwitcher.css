@@ -82,7 +82,20 @@
 }
 
 .ontology-menu-message.is-error {
+  display: grid;
+  gap: 8px;
   color: #d92d20;
+}
+
+.ontology-retry-button {
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  color: #0b63ce;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 680;
 }
 
 .ontology-option,

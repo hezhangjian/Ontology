@@ -20,6 +20,7 @@ export function OntologySwitcher({collapsed, onExpand}: OntologySwitcherProps) {
   const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const {t} = useTranslation();
   const selectedOntology = selectedOntologyId ? ontologies.find((item) => item.id === selectedOntologyId) : undefined;
 
@@ -27,6 +28,8 @@ export function OntologySwitcher({collapsed, onExpand}: OntologySwitcherProps) {
     let disposed = false;
 
     const load = async () => {
+      setLoading(true);
+      setLoadError('');
       try {
         const items = await fetchOntologies();
         if (disposed) {
@@ -53,7 +56,7 @@ export function OntologySwitcher({collapsed, onExpand}: OntologySwitcherProps) {
     return () => {
       disposed = true;
     };
-  }, [t]);
+  }, [loadAttempt, t]);
 
   const chooseOntology = (item: OntologyItem) => {
     setSelectedOntologyId(item.id);
@@ -123,7 +126,18 @@ export function OntologySwitcher({collapsed, onExpand}: OntologySwitcherProps) {
         {ontologyDropdownOpen && !collapsed && (
           <div className="ontology-menu">
             {loading && <div className="ontology-menu-message">{t('ontology.loading')}</div>}
-            {!loading && loadError && <div className="ontology-menu-message is-error">{loadError}</div>}
+            {!loading && loadError && (
+              <div className="ontology-menu-message is-error">
+                <span>{loadError}</span>
+                <button
+                  className="ontology-retry-button"
+                  onClick={() => setLoadAttempt((value) => value + 1)}
+                  type="button"
+                >
+                  {t('ontology.retry')}
+                </button>
+              </div>
+            )}
             {!loading && !loadError && ontologies.length > 0 && (
               <div className="ontology-menu-list">
                 {ontologies.map((item) => (
