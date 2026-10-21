@@ -6,13 +6,26 @@ It provides trusted business context for applications, models, and AI agents—c
 
 ## Quick start
 
-Start the local stack:
+### Simple ontology development
+
+Use pnpm to start the portal and backend with hot reload:
+
+```bash
+pnpm install
+pnpm dev:all
+```
+
+The portal is available at `http://localhost:5173`, and the backend is available at `http://localhost:4242`.
+
+### Full local stack
+
+Use Docker Compose when you need all local infrastructure components:
 
 ```bash
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-Stop the local stack:
+Stop the full local stack:
 
 ```bash
 docker compose -f docker/docker-compose.yml down
