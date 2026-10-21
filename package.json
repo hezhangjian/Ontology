@@ -7,9 +7,7 @@
     "dev": "vite",
     "dev:frontend": "vite",
     "dev:backend": "mvn spring-boot:run",
-    "dev:backend:postgres": "mvn spring-boot:run -Dspring-boot.run.profiles=postgres",
     "dev:all": "concurrently --kill-others-on-fail --names frontend,backend --prefix-colors cyan,magenta \"pnpm run dev:frontend\" \"pnpm run dev:backend\"",
-    "dev:all:postgres": "concurrently --kill-others-on-fail --names frontend,backend --prefix-colors cyan,magenta \"pnpm run dev:frontend\" \"pnpm run dev:backend:postgres\"",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
