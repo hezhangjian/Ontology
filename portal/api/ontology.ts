@@ -1,6 +1,6 @@
 import type {OntologyItem} from '@/types/ontology';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4242';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 const ONTOLOGY_LOAD_RETRY_DELAYS = [500, 1000, 2000, 4000, 8000, 10000];
 
 type OntologyResponse = {

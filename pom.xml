@@ -204,5 +204,21 @@
                 </dependency>
             </dependencies>
         </profile>
+        <profile>
+            <id>portal</id>
+            <build>
+                <finalName>ontology</finalName>
+                <resources>
+                    <resource>
+                        <directory>src/main/resources</directory>
+                    </resource>
+                    <resource>
+                        <directory>dist</directory>
+                        <targetPath>static</targetPath>
+                        <filtering>false</filtering>
+                    </resource>
+                </resources>
+            </build>
+        </profile>
     </profiles>
 </project>

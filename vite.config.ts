@@ -10,4 +10,9 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./portal", import.meta.url)),
     },
   },
+  server: {
+    proxy: {
+      "/v1": "http://localhost:4242",
+    },
+  },
 });
