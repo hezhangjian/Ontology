@@ -6,6 +6,7 @@
 
 ### Resources
 
+- Prefix every REST API path with `/api/v1`, such as `/api/v1/ontologies`.
 - Use singular resource names for OpenAPI tags, such as `Ontology`, `Term`, and `Category`.
 - Use canonical domain casing outside URLs, such as `DataSet` in tags, operation IDs, schemas, summaries, and descriptions.
 - Use plural nouns for collection paths, such as `/ontologies` and `/terms`.

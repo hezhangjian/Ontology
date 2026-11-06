@@ -44,7 +44,7 @@ export async function fetchOntologies(): Promise<OntologyItem[]> {
   for (let attempt = 0; ; attempt += 1) {
     let response: Response;
     try {
-      response = await fetch(`${API_BASE_URL}/v1/ontologies?limit=100&offset=0`);
+      response = await fetch(`${API_BASE_URL}/api/v1/ontologies?limit=100&offset=0`);
     } catch (error) {
       if (attempt >= ONTOLOGY_LOAD_RETRY_DELAYS.length) {
         throw error;
@@ -68,7 +68,7 @@ export async function fetchOntologies(): Promise<OntologyItem[]> {
 }
 
 export async function createOntology(input: CreateOntologyInput): Promise<OntologyItem> {
-  const response = await fetch(`${API_BASE_URL}/v1/ontologies`, {
+  const response = await fetch(`${API_BASE_URL}/api/v1/ontologies`, {
     body: JSON.stringify(input),
     headers: {'Content-Type': 'application/json'},
     method: 'POST',

@@ -16,7 +16,8 @@ pnpm serve
 ```
 
 `pnpm serve` builds the portal, packages it into `target/ontology.jar`, and runs the Spring Boot server on `0.0.0.0:4242`.
-Open `http://localhost:4242` locally or `http://<server-ip>:4242` from another machine. The portal and `/v1` API share the same origin.
+Open `http://localhost:4242` locally or `http://<server-ip>:4242` from another machine. The portal and `/api/v1` API share the same origin.
+Management endpoints are under `/api/actuator`, including `/api/actuator/health` and `/api/actuator/info`.
 Press `Ctrl+C` to stop the server.
 
 To run the existing build without rebuilding:
@@ -38,7 +39,7 @@ pnpm dev:all
 ```
 
 The portal is available at `http://localhost:5173`, and the backend is available at `http://localhost:4242`.
-Vite proxies `/v1` requests to the backend during development. Set `VITE_API_BASE_URL` only when using a separate API origin.
+Vite proxies `/api` requests to the backend during development. Set `VITE_API_BASE_URL` only when using a separate API origin.
 
 ### Full local stack
 
